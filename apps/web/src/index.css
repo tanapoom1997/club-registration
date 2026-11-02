@@ -1,0 +1,55 @@
+@import 'tailwindcss';
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-border: var(--border);
+  --color-success: var(--success);
+  --color-success-foreground: var(--success-foreground);
+  --color-warning: var(--warning);
+  --color-warning-foreground: var(--warning-foreground);
+  --radius-lg: 0.75rem;
+}
+
+:root {
+  --background: oklch(0.97 0 0);
+  --foreground: oklch(0.2 0 0);
+  --card: oklch(1 0 0);
+  --card-foreground: oklch(0.2 0 0);
+  --muted-foreground: oklch(0.48 0 0);
+  --border: oklch(0.91 0 0);
+  --success: oklch(0.93 0.06 155);
+  --success-foreground: oklch(0.36 0.09 155);
+  --warning: oklch(0.93 0.07 45);
+  --warning-foreground: oklch(0.42 0.13 45);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --background: oklch(0.17 0 0);
+    --foreground: oklch(0.96 0 0);
+    --card: oklch(0.22 0 0);
+    --card-foreground: oklch(0.96 0 0);
+    --muted-foreground: oklch(0.72 0 0);
+    --border: oklch(0.32 0 0);
+    --success: oklch(0.32 0.06 155);
+    --success-foreground: oklch(0.88 0.08 155);
+    --warning: oklch(0.34 0.07 45);
+    --warning-foreground: oklch(0.88 0.09 45);
+  }
+}
+
+body {
+  background-color: var(--background);
+  color: var(--foreground);
+  font-family:
+    system-ui,
+    -apple-system,
+    'Segoe UI',
+    'Noto Sans Thai',
+    'Sukhumvit Set',
+    sans-serif;
+}
