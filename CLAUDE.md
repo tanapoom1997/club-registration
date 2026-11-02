@@ -2,7 +2,7 @@
 
 ระบบลงทะเบียนชุมนุมโรงเรียน (นักเรียน ~2,500 คน, รอบละ ~450 concurrent) แผนเต็ม สถาปัตยกรรม data model และ roadmap อยู่ใน [README.md](README.md) อ่านก่อนเริ่มงานทุกครั้ง ไฟล์นี้เก็บเฉพาะกติกาการทำงานที่ต้องไม่หลุด
 
-**สถานะ:** ยังอยู่ช่วงวางแผน ยังไม่มีโค้ด เมื่อ scaffold เสร็จให้อัปเดตหัวข้อ Commands ให้ตรงกับของจริง
+**สถานะ:** Phase 1 scaffold เสร็จแล้ว มี monorepo, migration แรก (ครบทุกตาราง), `GET /api/health` และหน้าสถานะระบบ ยังไม่มี auth และ logic ลงทะเบียน
 
 ## กฎที่ห้ามละเมิด
 
@@ -26,7 +26,7 @@
 | ชั้น | ใช้ | หมายเหตุ |
 |---|---|---|
 | Runtime | Node.js 24 LTS | ใช้ ESM ล้วน (`"type": "module"`) |
-| ภาษา | TypeScript (`strict: true`) | target ES2023, module `NodeNext` |
+| ภาษา | TypeScript (`strict: true`) | target ES2023, module `NodeNext` (`apps/web` ใช้ `Bundler`) pin 6.0.x เพราะ `typescript-eslint` ยังไม่รองรับ 7 |
 | Package manager | pnpm workspaces | monorepo เดียว: `apps/api`, `apps/web`, `packages/shared` |
 | Backend | Fastify + `fastify-type-provider-zod` | validation และ type มาจาก Zod schema เดียว |
 | Validation | Zod | นิยามไว้ใน `packages/shared` ที่เดียว |
@@ -41,19 +41,33 @@
 
 **ไม่ใช้:** Next.js, Redis, ORM (Prisma/Drizzle), serverless, แยก repo FE/BE
 
-**เครื่องมือคุณภาพโค้ด (เสนอ รอยืนยันตอน scaffold):** ESLint (flat config) + Prettier, `tsc --noEmit` เป็น typecheck
+**เครื่องมือคุณภาพโค้ด:** ESLint (flat config) + Prettier, `tsc --noEmit` เป็น typecheck
 
 ## Commands
 
-> ยังไม่มี รายการนี้คือเป้าหมายตาม README ปรับให้ตรงของจริงเมื่อ scaffold
+ตั้งค่าครั้งแรก (ต้องมี Docker และ Node 24 ส่วน pnpm มาจาก Corepack)
 
 ```bash
+corepack enable
 pnpm install
-pnpm -r typecheck
-pnpm -r test            # Vitest + Testcontainers (ต้องมี Docker)
-pnpm --filter api dev
-pnpm --filter web dev
+cp .env.example .env
+docker compose up -d --wait
+pnpm --filter api migrate
 ```
+
+ใช้งานประจำ
+
+```bash
+pnpm --filter api dev   # http://localhost:3000
+pnpm --filter web dev   # http://localhost:5173 proxy /api ไปที่ api
+pnpm typecheck
+pnpm lint
+pnpm format
+pnpm test               # Vitest + Testcontainers (ต้องเปิด Docker)
+pnpm build
+```
+
+`packages/shared` ไม่ต้อง build ตอน dev และ test เพราะ export condition `@club-registration/source` ชี้ไปที่ `src/` (Vitest ของ api ใช้ alias แทน) ส่วน production ใช้ `dist/` จาก `pnpm build`
 
 ## การทำงาน
 

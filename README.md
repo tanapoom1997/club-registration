@@ -2,7 +2,7 @@
 
 ระบบลงทะเบียนชุมนุมของโรงเรียน สำหรับนักเรียน ~2,500 คน แบ่งรอบตามชั้น ม.1–ม.6 รอบละ ~400–450 คน
 
-> **สถานะ:** วางแผน (ยังไม่เริ่มเขียนโค้ด) เอกสารนี้คือแผนและข้อกำหนดของโปรเจกต์
+> **สถานะ:** เริ่ม Phase 1 แล้ว มี monorepo, migration แรก และ `GET /api/health` พร้อมหน้าสถานะระบบ ยังไม่มี auth และ logic ลงทะเบียน เอกสารนี้คือแผนและข้อกำหนดของโปรเจกต์
 >
 > **หมายเหตุ:** ตัวเลข performance ทั้งหมดเป็นการประเมินจากหลักการ ยังไม่ได้วัดจริง ต้อง load test ก่อนใช้งาน
 
@@ -319,4 +319,4 @@ EC2 (t4g.small) ──► Caddy (HTTPS อัตโนมัติ)
 
 ## ขั้นตอนถัดไป
 
-เริ่ม **Phase 1**: scaffold monorepo → migration (ครบทุกตาราง) → auth + role guard → endpoint ลง/ยกเลิก **พร้อม concurrency test** → Excel import/export → frontend → Ops
+ทำต่อใน **Phase 1**: auth + role guard → endpoint ลง/ยกเลิก **พร้อม concurrency test** → Excel import/export → frontend → Ops (scaffold monorepo และ migration แรกเสร็จแล้ว)

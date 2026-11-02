@@ -1,0 +1,4 @@
+dist/
+.claude/
+pnpm-lock.yaml
+*.md
