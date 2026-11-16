@@ -2,7 +2,7 @@
 
 ระบบลงทะเบียนชุมนุมโรงเรียน (นักเรียน ~2,500 คน, รอบละ ~450 concurrent) แผนเต็ม สถาปัตยกรรม data model และ roadmap อยู่ใน [README.md](README.md) อ่านก่อนเริ่มงานทุกครั้ง ไฟล์นี้เก็บเฉพาะกติกาการทำงานที่ต้องไม่หลุด
 
-**สถานะ:** Phase 1 ข้อ 1 (Auth + role guard) และข้อ 3 (admin จัดการรอบ: `apps/api/src/routes/admin-rounds.ts` + `services/rounds.ts`, หน้า `/admin/rounds` และดู/แก้ชุมนุมรายรอบ: `routes/admin-clubs.ts` + `services/clubs.ts`, หน้า `/admin/clubs`) เสร็จแล้ว ข้อ 2 (import Excel: dry run + ยืนยัน, `routes/admin-import.ts`, `import/`, `services/import-plan.ts`, `services/import-commit.ts`, หน้า `/admin/import`) เสร็จแล้ว รวมขั้นออกรหัสผ่านเริ่มต้น (`routes/admin-students.ts`, `services/initial-passwords.ts`, หน้า `/admin/initial-passwords`) ข้อ 7 export รายชื่อเสร็จเฉพาะ Excel (`routes/admin-export.ts`, `services/name-lists.ts`, `export/name-list-workbook.ts`, หน้า `/admin/export`) ส่วน PDF ยังไม่ทำ (A6b) ต่อจาก scaffold (monorepo, migration แรกครบทุกตาราง, `GET /api/health`) มี login/เปลี่ยนรหัส/logout, `create-admin` และหน้า FE ตาม role (เมนูอื่นยังเป็นโครงว่าง) ยังไม่มี logic ลงทะเบียน
+**สถานะ:** Phase 1 ข้อ 1 (Auth + role guard) และข้อ 3 (admin จัดการรอบ: `apps/api/src/routes/admin-rounds.ts` + `services/rounds.ts`, หน้า `/admin/rounds` และดู/แก้ชุมนุมรายรอบ: `routes/admin-clubs.ts` + `services/clubs.ts`, หน้า `/admin/clubs`) เสร็จแล้ว ข้อ 2 (import Excel: dry run + ยืนยัน, `routes/admin-import.ts`, `import/`, `services/import-plan.ts`, `services/import-commit.ts`, หน้า `/admin/import`) เสร็จแล้ว รวมขั้นออกรหัสผ่านเริ่มต้น (`routes/admin-students.ts`, `services/initial-passwords.ts`, หน้า `/admin/initial-passwords`) ข้อ 7 export รายชื่อเสร็จแล้วทั้ง Excel และ PDF (`routes/admin-export.ts`, `services/name-lists.ts`, `export/name-list-content.ts`, `export/name-list-workbook.ts`, `export/name-list-pdf.ts`, ฟอนต์ `apps/api/assets/fonts/`, หน้า `/admin/export`) ต่อจาก scaffold (monorepo, migration แรกครบทุกตาราง, `GET /api/health`) มี login/เปลี่ยนรหัส/logout, `create-admin` และหน้า FE ตาม role (เมนูอื่นยังเป็นโครงว่าง) ยังไม่มี logic ลงทะเบียน
 
 ## กฎที่ห้ามละเมิด
 
@@ -37,7 +37,7 @@
 | Frontend | Vite + React + Tailwind + shadcn/ui | SPA ไม่ใช้ SSR |
 | Data fetching | TanStack Query | polling คิว/สถานะ |
 | Excel | `exceljs` | import/export .xlsx |
-| PDF | ยังไม่เลือก | export รายชื่อ ต้อง spike ภาษาไทยก่อนแล้วถามก่อนเพิ่ม dependency (README รายการที่ยังเปิดอยู่ข้อ 6) |
+| PDF | `pdfkit` + ฟอนต์ Sarabun (SIL OFL 1.1) | export รายชื่อ ฟอนต์อยู่ที่ `apps/api/assets/fonts/` (มี `OFL.txt` คู่กัน) และต้องไปกับ `dist/` ตอน deploy ห้ามเปลี่ยนฟอนต์โดยไม่ลองชื่อที่มีสระบน/ล่างและวรรณยุกต์ก่อน (README หัวข้อ Export รายชื่อ) |
 | Test | Vitest + Testcontainers | Postgres จริง ไม่ mock |
 | Deploy | Docker image เดียว + Docker Compose + Caddy | เครื่องเดียวบน EC2 |
 

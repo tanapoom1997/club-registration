@@ -25,11 +25,14 @@ import {
   uniqueCode,
   uniqueTerm,
 } from './support/import-db.js';
+import { readPdf } from './support/pdf.js';
+import type { PdfPage } from './support/pdf.js';
 import { startMigratedPostgres, stopPostgres } from './support/postgres.js';
 
 type InjectResponse = Awaited<ReturnType<FastifyInstance['inject']>>;
 
 const XLSX_MIME = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
+const PDF_MIME = 'application/pdf';
 const UNKNOWN_ID = 2_000_000_000;
 
 // Tests that list a whole grade own one: every other test works in classrooms or clubs of its
@@ -37,6 +40,7 @@ const UNKNOWN_ID = 2_000_000_000;
 const SHARED_GRADE = 1;
 const WHOLE_GRADE_TEST_GRADE = 4;
 const CLASSROOM_COUNT_TEST_GRADE = 5;
+const PDF_TIMING_TEST_GRADE = 2;
 const EMPTY_GRADE = 6;
 // Students of a grade no whole-grade test lists.
 const OTHER_GRADE = 3;
@@ -102,6 +106,36 @@ const allTextOf = async (bytes: Buffer): Promise<string> => {
     });
   });
   return texts.join('\n');
+};
+
+// The PDF's pages as the text lines drawn on them, after checking it is a PDF at all.
+const readPdfPages = (bytes: Buffer): PdfPage[] => {
+  expect(bytes.subarray(0, 5).toString('latin1')).toBe('%PDF-');
+  return readPdf(bytes);
+};
+
+const FOOTER_TIME = /^ส่งออกเมื่อ \d{1,2} \S+ \d{4} \d{2}:\d{2} น\.$/;
+
+// Every page ends with the export time and "หน้า n/N".
+const expectFooters = (pages: readonly PdfPage[]) => {
+  pages.forEach(({ lines }, index) => {
+    expect(lines.slice(-2)).toEqual([
+      expect.stringMatching(FOOTER_TIME),
+      `หน้า ${index + 1}/${pages.length}`,
+    ]);
+  });
+};
+
+// The rows of a table: the lines between the table header and the footer, cell by cell.
+const tableRows = (lines: readonly string[], header: readonly string[]): string[][] => {
+  const start = lines.findIndex((line, index) =>
+    header.every((cell, offset) => lines[index + offset] === cell),
+  );
+  if (start < 0) throw new Error('No table header on the page');
+  const cells = lines.slice(start + header.length, -2);
+  return Array.from({ length: cells.length / header.length }, (_, row) =>
+    cells.slice(row * header.length, (row + 1) * header.length),
+  );
 };
 
 describe('admin name list export', () => {
@@ -381,7 +415,8 @@ describe('admin name list export', () => {
       );
     });
 
-    it('gives every classroom of the round grade a sheet, in classroom order', async () => {
+    // One test for both formats: it owns the grade, so no other test may add classrooms to it.
+    it('gives every classroom of the round grade a sheet or a PDF page, in classroom order', async () => {
       const roundId = await newRound(WHOLE_GRADE_TEST_GRADE);
       await Promise.all(
         ['10', '2', '3/1'].map(
@@ -391,13 +426,30 @@ describe('admin name list export', () => {
       );
       await createStudent(pool, { grade: OTHER_GRADE, classroom: '1' });
 
-      const response = await exportOk(roundId, { view: 'classroom', format: 'xlsx' });
+      const [xlsx, pdf] = await Promise.all([
+        exportOk(roundId, { view: 'classroom', format: 'xlsx' }),
+        exportOk(roundId, { view: 'classroom', format: 'pdf' }),
+      ]);
 
-      const sheets = await readClassroomSheets(response.rawPayload);
+      const sheets = await readClassroomSheets(xlsx.rawPayload);
       expect(sheets.map(({ name }) => name)).toEqual(['ม.4-2', 'ม.4-3-1', 'ม.4-10']);
       expect(sheets.map(({ rows }) => rows.length)).toEqual([1, 1, 1]);
-      expect(response.headers['content-disposition']).toBe(
+      expect(xlsx.headers['content-disposition']).toBe(
         `attachment; filename="classroom-list-round-${roundId}-grade-4.xlsx"`,
+      );
+      // A small classroom fits on one page, and every classroom starts a page of its own.
+      const pages = readPdfPages(pdf.rawPayload);
+      expect(pages.map(({ lines }) => lines[0])).toEqual([
+        'ชั้น/ห้อง ม.4/2',
+        'ชั้น/ห้อง ม.4/3/1',
+        'ชั้น/ห้อง ม.4/10',
+      ]);
+      expect(
+        pages.map(({ lines }) => tableRows(lines, Object.values(CLASSROOM_LIST_COLUMNS)).length),
+      ).toEqual([1, 1, 1]);
+      expectFooters(pages);
+      expect(pdf.headers['content-disposition']).toBe(
+        `attachment; filename="classroom-list-round-${roundId}-grade-4.pdf"`,
       );
     });
 
@@ -482,6 +534,8 @@ describe('admin name list export', () => {
 
       await exportOk(roundId, { view: 'club', format: 'xlsx' });
       await exportOk(roundId, { view: 'classroom', classroom, format: 'xlsx' });
+      await exportOk(roundId, { view: 'club', format: 'pdf' });
+      await exportOk(roundId, { view: 'classroom', classroom, format: 'pdf' });
 
       expect(await snapshotDatabase(pool)).toEqual(before);
     });
@@ -540,12 +594,272 @@ describe('admin name list export', () => {
     });
   });
 
+  describe('PDF', () => {
+    it('lays out one club as an A4 page with the same headings and columns as the Excel list', async () => {
+      const roundId = await newRound();
+      const code = uniqueCode();
+      const clubId = await createClub(pool, roundId, code, {
+        name: 'ชุมนุมดนตรีไทยสมมติ',
+        capacity: 20,
+      });
+      await addAdvisor(clubId, 'ครูสมมติ ปิ่นแก้ว');
+      await addAdvisor(clubId, 'ครูสมมติ น้ำใจ');
+      const classroom = uniqueClassroom();
+      // Upper and lower vowels, stacked tone marks, ascender and descender consonants.
+      const [second, first] = await Promise.all([
+        createStudent(pool, { classroom, seatNo: 9, fullName: 'เด็กชายปุ๊ก ฐิติปัญญ์สมมติ' }),
+        createStudent(pool, { classroom, seatNo: 2, fullName: 'เด็กหญิงฝ้าย ญุ่นฟื้นฟูสมมติ' }),
+      ]);
+      await register(pool, roundId, second.id, clubId);
+      await register(pool, roundId, first.id, clubId);
+
+      const response = await exportOk(roundId, { view: 'club', clubId, format: 'pdf' });
+
+      expect(response.headers['content-type']).toBe(PDF_MIME);
+      expect(response.headers['cache-control']).toBe('no-store');
+      expect(response.headers['content-disposition']).toBe(
+        `attachment; filename="club-list-round-${roundId}-grade-1-${code}.pdf"`,
+      );
+      const [page, ...others] = readPdfPages(response.rawPayload);
+      expect(others).toEqual([]);
+      expect(page!.lines.slice(0, 4)).toEqual([
+        `ชุมนุม ${code} ชุมนุมดนตรีไทยสมมติ`,
+        'ครูที่ปรึกษา: ครูสมมติ ปิ่นแก้ว, ครูสมมติ น้ำใจ',
+        'จำนวนลง/จำนวนรับ: 2/20',
+        expect.stringMatching(/^รอบ t-[0-9a-f]+ ม\.1 · ข้อมูล ณ /),
+      ]);
+      expect(tableRows(page!.lines, Object.values(CLUB_LIST_COLUMNS))).toEqual([
+        ['1', first.loginId, 'เด็กหญิงฝ้าย ญุ่นฟื้นฟูสมมติ', `ม.1/${classroom}`, '2'],
+        ['2', second.loginId, 'เด็กชายปุ๊ก ฐิติปัญญ์สมมติ', `ม.1/${classroom}`, '9'],
+      ]);
+      expectFooters([page!]);
+      // The glyphs drawn say the same as the text a viewer copies, wherever the glyph map can tell
+      // (it cannot for sara am).
+      expect(page!.glyphLines).toHaveLength(page!.lines.length);
+      page!.lines
+        .map((line, index) => [line, page!.glyphLines[index]] as const)
+        .filter(([line]) => !line.includes('ำ'))
+        .forEach(([line, drawn]) => {
+          expect(drawn).toBe(line);
+        });
+      // Advisor names only, as in the Excel list.
+      const text = page!.lines.join('\n');
+      Object.values(ADVISOR_CONTACT).forEach((contact) => {
+        expect(text).not.toContain(contact);
+      });
+    });
+
+    it('starts a new page for every club of the round, an empty club showing its header', async () => {
+      const roundId = await newRound();
+      const [codeA, codeB] = ['A', 'B'].map((prefix) => `${prefix}${uniqueCode()}`);
+      const clubB = await createClub(pool, roundId, codeB!, { capacity: 25 });
+      await createClub(pool, roundId, codeA!, { capacity: 15 });
+      const student = await createStudent(pool, { classroom: uniqueClassroom() });
+      await register(pool, roundId, student.id, clubB);
+
+      const response = await exportOk(roundId, { view: 'club', format: 'pdf' });
+
+      const pages = readPdfPages(response.rawPayload);
+      expect(pages.map(({ lines }) => lines.slice(0, 3))).toEqual([
+        [`ชุมนุม ${codeA} ชุมนุมสมมติ`, 'ครูที่ปรึกษา: -', 'จำนวนลง/จำนวนรับ: 0/15'],
+        [`ชุมนุม ${codeB} ชุมนุมสมมติ`, 'ครูที่ปรึกษา: -', 'จำนวนลง/จำนวนรับ: 1/25'],
+      ]);
+      expect(
+        pages.map(({ lines }) =>
+          tableRows(lines, Object.values(CLUB_LIST_COLUMNS)).map((row) => row[1]),
+        ),
+      ).toEqual([[], [student.loginId]]);
+      expectFooters(pages);
+      expect(response.headers['content-disposition']).toBe(
+        `attachment; filename="club-list-round-${roundId}-grade-1.pdf"`,
+      );
+    });
+
+    it('lists every student of a classroom, marking who has not registered', async () => {
+      const roundId = await newRound();
+      const code = uniqueCode();
+      const clubId = await createClub(pool, roundId, code, { name: 'ชุมนุมน้ำใสสมมติ' });
+      const classroom = `3/${uniqueClassroom()}`;
+      const [registered, missing] = await Promise.all([
+        createStudent(pool, { classroom, seatNo: 1, fullName: 'เด็กหญิงสมมติ ลงแล้ว' }),
+        createStudent(pool, { classroom, seatNo: 2, fullName: 'เด็กชายสมมติ ยังไม่เลือก' }),
+      ]);
+      await register(pool, roundId, registered.id, clubId);
+
+      const response = await exportOk(roundId, { view: 'classroom', classroom, format: 'pdf' });
+
+      const [page, ...others] = readPdfPages(response.rawPayload);
+      expect(others).toEqual([]);
+      expect(page!.lines.slice(0, 2)).toEqual([
+        `ชั้น/ห้อง ม.1/${classroom}`,
+        'ลงแล้ว/ทั้งห้อง: 1/2',
+      ]);
+      expect(tableRows(page!.lines, Object.values(CLASSROOM_LIST_COLUMNS))).toEqual([
+        ['1', registered.loginId, 'เด็กหญิงสมมติ ลงแล้ว', `${code} ชุมนุมน้ำใสสมมติ`],
+        ['2', missing.loginId, 'เด็กชายสมมติ ยังไม่เลือก', NOT_REGISTERED_LABEL],
+      ]);
+      expect(response.headers['content-disposition']).toBe(
+        `attachment; filename="classroom-list-round-${roundId}-grade-1-room-${classroom.replace('/', '-')}.pdf"`,
+      );
+    });
+
+    it('continues a long list onto more pages, repeating the table header on each', async () => {
+      const roundId = await newRound();
+      const classroom = uniqueClassroom();
+      const students = await Promise.all(
+        Array.from(
+          { length: 90 },
+          async (_, index) =>
+            await createStudent(pool, {
+              classroom,
+              seatNo: index + 1,
+              fullName: `นักเรียนสมมติ ลำดับ${index + 1}`,
+            }),
+        ),
+      );
+
+      const response = await exportOk(roundId, { view: 'classroom', classroom, format: 'pdf' });
+
+      const pages = readPdfPages(response.rawPayload);
+      expect(pages.length).toBeGreaterThanOrEqual(3);
+      const rows = pages.map(({ lines }) =>
+        tableRows(lines, Object.values(CLASSROOM_LIST_COLUMNS)),
+      );
+      // Every student exactly once, in seat order, across the pages.
+      expect(rows.flat().map((row) => row[1])).toEqual(students.map(({ loginId }) => loginId));
+      expect(rows.every((pageRows) => pageRows.length > 0)).toBe(true);
+      pages.slice(1).forEach(({ lines }) => {
+        expect(lines[0]).toBe(`ชั้น/ห้อง ม.1/${classroom} (ต่อ)`);
+      });
+      expectFooters(pages);
+    });
+
+    it('cuts text too wide for its cell with an ellipsis and keeps every value as plain text', async () => {
+      const roundId = await newRound();
+      const code = `-${uniqueCode()}`;
+      const longName = 'ชุมนุมสมมติ'.repeat(12);
+      const clubId = await createClub(pool, roundId, code, { name: longName });
+      const classroom = uniqueClassroom();
+      const markup = '=1+2 <b>สมมติ</b>';
+      const student = await createStudent(pool, { classroom, fullName: markup });
+      await register(pool, roundId, student.id, clubId);
+
+      const response = await exportOk(roundId, { view: 'classroom', classroom, format: 'pdf' });
+
+      const [page] = readPdfPages(response.rawPayload);
+      const [row] = tableRows(page!.lines, Object.values(CLASSROOM_LIST_COLUMNS));
+      // Nothing to escape in a PDF: no formula runs and no markup is read.
+      expect(row![2]).toBe(markup);
+      const club = row![3]!;
+      expect(club.endsWith('…')).toBe(true);
+      expect(`${code} ${longName}`.startsWith(club.slice(0, -1))).toBe(true);
+      expect(club.length).toBeLessThan(code.length + longName.length);
+    });
+
+    it('logs the format with the scope and counts, and never a name or student ID', async () => {
+      const roundId = await newRound();
+      const clubId = await createClub(pool, roundId, uniqueCode());
+      await addAdvisor(clubId, 'ครูสมมติ ห้ามลงบันทึก');
+      const classroom = uniqueClassroom();
+      const student = await createStudent(pool, { classroom, fullName: 'เด็กชายสมมติ บันทึก' });
+      await register(pool, roundId, student.id, clubId);
+
+      await exportOk(roundId, { view: 'club', clubId, format: 'pdf' });
+      await exportOk(roundId, { view: 'classroom', classroom, format: 'pdf' });
+
+      const log = logLines.join('');
+      [
+        'ครูสมมติ ห้ามลงบันทึก',
+        ...Object.values(ADVISOR_CONTACT),
+        student.loginId,
+        'เด็กชายสมมติ บันทึก',
+      ].forEach((personal) => {
+        expect(log).not.toContain(personal);
+      });
+      const entries = logLines
+        .map((line) => JSON.parse(line) as Record<string, unknown>)
+        .filter(({ msg }) => msg === 'name list exported');
+      expect(entries).toEqual([
+        expect.objectContaining({ view: 'club', format: 'pdf', clubId, studentCount: 1 }),
+        expect.objectContaining({ view: 'classroom', format: 'pdf', classroom, studentCount: 1 }),
+      ]);
+    });
+
+    it('answers 404 like the Excel export for an unknown club or an empty round', async () => {
+      const roundId = await newRound();
+
+      const [club, whole] = await Promise.all([
+        exportList(roundId, { view: 'club', clubId: UNKNOWN_ID, format: 'pdf' }),
+        exportList(roundId, { view: 'club', format: 'pdf' }),
+      ]);
+
+      expect([club.statusCode, errorCodeOf(club)]).toEqual([404, 'not_found']);
+      expect([whole.statusCode, errorCodeOf(whole)]).toEqual([404, 'nothing_to_export']);
+    });
+
+    it('exports a realistic round of 450 students in 12 classrooms and reports time and size', async () => {
+      const grade = PDF_TIMING_TEST_GRADE;
+      const roundId = await newRound(grade);
+      const clubIds = await Promise.all(
+        Array.from(
+          { length: 15 },
+          async () => await createClub(pool, roundId, uniqueCode(), { capacity: 30 }),
+        ),
+      );
+      const perRoom = [38, 38, 38, 38, 38, 38, 37, 37, 37, 37, 37, 37];
+      const students = (
+        await Promise.all(
+          perRoom.map(
+            async (count, room) =>
+              await Promise.all(
+                Array.from(
+                  { length: count },
+                  async (_, seat) =>
+                    await createStudent(pool, {
+                      grade,
+                      classroom: String(room + 1),
+                      seatNo: seat + 1,
+                      fullName: `เด็กหญิงปิ่นมณี ศักดิ์สิทธิ์สมมติ${room}-${seat}`,
+                    }),
+                ),
+              ),
+          ),
+        )
+      ).flat();
+      // Two of every three students have a club.
+      await Promise.all(
+        students
+          .filter((_, index) => index % 3 !== 0)
+          .map(
+            async ({ id }, index) =>
+              await register(pool, roundId, id, clubIds[index % clubIds.length]!),
+          ),
+      );
+
+      const startedAt = performance.now();
+      const response = await exportOk(roundId, { view: 'classroom', format: 'pdf' });
+      const elapsedMs = performance.now() - startedAt;
+
+      const pages = readPdfPages(response.rawPayload);
+      // Each classroom of up to 38 fits on one page.
+      expect(pages).toHaveLength(12);
+      expect(
+        pages.flatMap(({ lines }) => tableRows(lines, Object.values(CLASSROOM_LIST_COLUMNS))),
+      ).toHaveLength(450);
+      // Printed so the number in the README/PR comes from a real run, not an estimate.
+      console.info(
+        `exported 450 students in 12 classrooms as PDF: request ${Math.round(elapsedMs)} ms, ` +
+          `${response.rawPayload.length} bytes, ${pages.length} pages`,
+      );
+    }, 180_000);
+  });
+
   describe('request validation and access', () => {
     it.each([
       ['no view', { format: 'xlsx' }],
       ['an unknown view', { view: 'teacher', format: 'xlsx' }],
       ['no format', { view: 'club' }],
-      ['a format that is not offered yet', { view: 'club', format: 'pdf' }],
+      ['an unknown format', { view: 'club', format: 'docx' }],
       ['a clubId with the classroom view', { view: 'classroom', clubId: 1, format: 'xlsx' }],
       ['a classroom with the club view', { view: 'club', classroom: '1', format: 'xlsx' }],
       ['a clubId that is not a number', { view: 'club', clubId: 'abc', format: 'xlsx' }],

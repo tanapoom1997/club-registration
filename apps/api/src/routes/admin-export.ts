@@ -3,16 +3,36 @@ import {
   roundClassroomsResponseSchema,
   roundExportParamsSchema,
 } from '@club-registration/shared';
-import type { ExportView } from '@club-registration/shared';
+import type { ExportFormat, ExportView } from '@club-registration/shared';
 import type { FastifyPluginAsyncZod } from 'fastify-type-provider-zod';
 import type pg from 'pg';
 import { requireAuthUser } from '../auth/session.js';
 import type { AuthGuard } from '../auth/session.js';
+import { buildClassroomListPdf, buildClubListPdf } from '../export/name-list-pdf.js';
 import { buildClassroomListWorkbook, buildClubListWorkbook } from '../export/name-list-workbook.js';
 import { listRoundClassrooms, readClassroomLists, readClubLists } from '../services/name-lists.js';
-import type { ExportRound } from '../services/name-lists.js';
+import type { ClassroomList, ClubList, ExportRound } from '../services/name-lists.js';
 
-const XLSX_MIME = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
+type ListBuilder<T> = (
+  round: ExportRound,
+  lists: readonly T[],
+  exportedAt: Date,
+) => Promise<Buffer>;
+
+// Every format gets the same lists from the same snapshot; only the layout differs.
+const FORMATS: Readonly<
+  Record<
+    ExportFormat,
+    { mime: string; club: ListBuilder<ClubList>; classroom: ListBuilder<ClassroomList> }
+  >
+> = Object.freeze({
+  xlsx: {
+    mime: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    club: buildClubListWorkbook,
+    classroom: buildClassroomListWorkbook,
+  },
+  pdf: { mime: 'application/pdf', club: buildClubListPdf, classroom: buildClassroomListPdf },
+});
 
 // Club codes and classrooms are mostly ASCII ("A100", "3/1"): those keep their letters, digits,
 // '.', '_' and '-', with anything else as '-'. One with any other character (e.g. a Thai letter)
@@ -23,8 +43,13 @@ const fileSafe = (text: string): string =>
     : Buffer.from(text).toString('hex');
 
 // Identifiers only (round, grade, club code, classroom): never a student's or teacher's name.
-const attachmentName = (view: ExportView, round: ExportRound, scope: string | undefined): string =>
-  `${view}-list-round-${round.id}-grade-${round.grade}${scope === undefined ? '' : `-${scope}`}.xlsx`;
+const attachmentName = (
+  view: ExportView,
+  format: ExportFormat,
+  round: ExportRound,
+  scope: string | undefined,
+): string =>
+  `${view}-list-round-${round.id}-grade-${round.grade}${scope === undefined ? '' : `-${scope}`}.${format}`;
 
 // Read-only: nothing here writes, so there is no idempotency_key and no registration_events row.
 // The files and the classroom list carry students' names, so logs get counts and scope only.
@@ -55,16 +80,19 @@ export const adminExportRoutes =
         const { roundId } = request.params;
         const query = request.query;
         const exportedAt = new Date();
+        const format = FORMATS[query.format];
 
         let file: Buffer;
         let filename: string;
+        // Lists in the file: sheets in Excel, sections starting on a new page in PDF.
         let sheetCount: number;
         let studentCount: number;
         if (query.view === 'club') {
           const { round, clubs } = await readClubLists(pool, roundId, query.clubId);
-          file = await buildClubListWorkbook(round, clubs, exportedAt);
+          file = await format.club(round, clubs, exportedAt);
           filename = attachmentName(
             'club',
+            query.format,
             round,
             query.clubId === undefined || !clubs[0] ? undefined : fileSafe(clubs[0].clubCode),
           );
@@ -72,9 +100,10 @@ export const adminExportRoutes =
           studentCount = clubs.reduce((total, { students }) => total + students.length, 0);
         } else {
           const { round, classrooms } = await readClassroomLists(pool, roundId, query.classroom);
-          file = await buildClassroomListWorkbook(round, classrooms, exportedAt);
+          file = await format.classroom(round, classrooms, exportedAt);
           filename = attachmentName(
             'classroom',
+            query.format,
             round,
             query.classroom === undefined ? undefined : `room-${fileSafe(query.classroom)}`,
           );
@@ -98,7 +127,7 @@ export const adminExportRoutes =
         );
 
         return await reply
-          .header('content-type', XLSX_MIME)
+          .header('content-type', format.mime)
           .header('content-disposition', `attachment; filename="${filename}"`)
           // Students' names: no browser or proxy cache may keep a copy.
           .header('cache-control', 'no-store')

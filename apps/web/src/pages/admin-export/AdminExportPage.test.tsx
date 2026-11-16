@@ -60,10 +60,10 @@ const CLASSROOMS: RoundClassroomsResponse = {
 
 const EXPORT_PREFIX = '/api/admin/rounds/1/export?';
 
-const fileResponse = (filename: string) =>
+const fileResponse = (filename: string, contentType = XLSX_MIME) =>
   new Response(new Blob([new Uint8Array([0x50, 0x4b, 0x03, 0x04])]), {
     headers: {
-      'content-type': XLSX_MIME,
+      'content-type': contentType,
       'content-disposition': `attachment; filename="${filename}"`,
     },
   });
@@ -166,6 +166,80 @@ describe('admin export page', () => {
     expect(exportCalls(fetchMock)).toEqual([
       `${EXPORT_PREFIX}view=classroom&classroom=3%2F1&format=xlsx`,
     ]);
+  });
+
+  it('offers Excel and PDF, Excel chosen first', async () => {
+    mockApi(baseApi);
+    await openPageWithRound();
+
+    const excel = screen.getByRole('radio', { name: /Excel \(\.xlsx\)/ });
+    const pdf = screen.getByRole('radio', { name: /PDF/ });
+    expect((excel as HTMLInputElement).checked).toBe(true);
+    expect((pdf as HTMLInputElement).checked).toBe(false);
+  });
+
+  it('downloads the chosen classroom as a PDF named by the server', async () => {
+    const fetchMock = mockApi({
+      ...baseApi,
+      [`GET ${EXPORT_PREFIX}view=classroom&classroom=2&format=pdf`]: () =>
+        fileResponse('classroom-list-round-1-grade-1-room-2.pdf', 'application/pdf'),
+    });
+    await openPageWithRound();
+
+    fireEvent.click(screen.getByRole('radio', { name: /รายห้อง/ }));
+    fireEvent.change(await screen.findByLabelText('ขอบเขต'), { target: { value: '2' } });
+    fireEvent.click(screen.getByRole('radio', { name: /PDF/ }));
+    fireEvent.click(downloadButton());
+
+    expect((await screen.findByRole('status')).textContent).toBe(
+      'ดาวน์โหลดไฟล์ classroom-list-round-1-grade-1-room-2.pdf แล้ว',
+    );
+    expect(downloads).toEqual(['classroom-list-round-1-grade-1-room-2.pdf']);
+    expect(exportCalls(fetchMock)).toEqual([
+      `${EXPORT_PREFIX}view=classroom&classroom=2&format=pdf`,
+    ]);
+  });
+
+  it('describes a whole-round PDF as a new page per club', async () => {
+    const fetchMock = mockApi({
+      ...baseApi,
+      [`GET ${EXPORT_PREFIX}view=club&format=pdf`]: () =>
+        new Response(null, {
+          headers: { 'content-type': 'application/pdf', 'content-disposition': 'attachment' },
+        }),
+    });
+    await openPageWithRound();
+
+    fireEvent.click(screen.getByRole('radio', { name: /PDF/ }));
+    const scope = screen.getByLabelText<HTMLSelectElement>('ขอบเขต');
+    expect(scope.options[0]?.textContent).toBe('ทั้งรอบ (2 ชุมนุม, หน้าใหม่ต่อชุมนุม)');
+    fireEvent.click(downloadButton());
+
+    // A file the server did not name still downloads, as a .pdf.
+    await waitFor(() => {
+      expect(downloads).toEqual(['name-list.pdf']);
+    });
+    expect(exportCalls(fetchMock)).toEqual([`${EXPORT_PREFIX}view=club&format=pdf`]);
+  });
+
+  it('shows a Thai error for a refused PDF export', async () => {
+    mockApi({
+      ...baseApi,
+      [`GET ${EXPORT_PREFIX}view=club&format=pdf`]: () =>
+        Response.json(
+          { code: 'nothing_to_export', message: 'The round has no clubs' },
+          { status: 404 },
+        ),
+    });
+    await openPageWithRound();
+
+    fireEvent.click(screen.getByRole('radio', { name: /PDF/ }));
+    fireEvent.click(downloadButton());
+
+    expect((await screen.findByRole('alert')).textContent).toBe(
+      'ยังไม่มีข้อมูลให้ส่งออก (รอบนี้ยังไม่มีชุมนุม หรือชั้นนี้ยังไม่มีนักเรียน)',
+    );
+    expect(downloads).toEqual([]);
   });
 
   it('shows a Thai error and saves nothing when the export is refused', async () => {
