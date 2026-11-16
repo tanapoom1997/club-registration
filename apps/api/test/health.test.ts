@@ -4,7 +4,7 @@ import type { Pool } from 'pg';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { createPool } from '../src/db.js';
 import { buildTestApp } from './support/app.js';
-import { startMigratedPostgres } from './support/postgres.js';
+import { startMigratedPostgres, stopPostgres } from './support/postgres.js';
 
 describe('GET /api/health', () => {
   let container: StartedPostgreSqlContainer;
@@ -16,8 +16,7 @@ describe('GET /api/health', () => {
   });
 
   afterAll(async () => {
-    await pool.end();
-    await container.stop();
+    await stopPostgres(pool, container);
   });
 
   it('reports ok when the database answers', async () => {

@@ -22,7 +22,7 @@ import type { IssueScope } from '../src/services/initial-passwords.js';
 import { TEST_JWT_SECRET, createTestUser } from './support/app.js';
 import type { TestUser } from './support/app.js';
 import { uniqueStudentId } from './support/import-db.js';
-import { startMigratedPostgres } from './support/postgres.js';
+import { startMigratedPostgres, stopPostgres } from './support/postgres.js';
 
 type InjectResponse = Awaited<ReturnType<FastifyInstance['inject']>>;
 
@@ -200,8 +200,7 @@ describe('admin initial passwords', () => {
   });
 
   afterAll(async () => {
-    await pool.end();
-    await container.stop();
+    await stopPostgres(pool, container);
   });
 
   beforeEach(async () => {

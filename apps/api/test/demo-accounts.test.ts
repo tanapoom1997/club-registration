@@ -4,7 +4,7 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { createPool } from '../src/db.js';
 import { DEMO_ACCOUNTS, seedDemoAccounts } from '../src/dev/demo-accounts.js';
 import { buildTestApp } from './support/app.js';
-import { startMigratedPostgres } from './support/postgres.js';
+import { startMigratedPostgres, stopPostgres } from './support/postgres.js';
 
 describe('seedDemoAccounts', () => {
   let container: StartedPostgreSqlContainer;
@@ -31,8 +31,7 @@ describe('seedDemoAccounts', () => {
   });
 
   afterAll(async () => {
-    await pool.end();
-    await container.stop();
+    await stopPostgres(pool, container);
   });
 
   // Each test starts from a database without demo accounts, so order never matters.
