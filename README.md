@@ -2,7 +2,7 @@
 
 ระบบลงทะเบียนชุมนุมของโรงเรียน สำหรับนักเรียน ~2,500 คน แบ่งรอบตามชั้น ม.1–ม.6 รอบละ ~400–450 คน
 
-> **สถานะ:** Phase 1 ทำ Auth + role guard เสร็จแล้ว (login, บังคับเปลี่ยนรหัสครั้งแรก, logout, `create-admin`, หน้า FE ตาม role) admin จัดการรอบลงทะเบียนได้แล้ว (`/api/admin/rounds` + หน้า `/admin/rounds`) นำเข้า Excel ได้แล้วทั้งขั้นตรวจ (dry run) และขั้นยืนยัน (`/api/admin/import/preview`, `/api/admin/import/commit` + หน้า `/admin/import`) ออกรหัสผ่านเริ่มต้นให้นักเรียนเป็นไฟล์ Excel ได้แล้ว (`/api/admin/students/password-status`, `/api/admin/students/initial-passwords` + หน้า `/admin/initial-passwords`) และดู/แก้ชุมนุมรายรอบได้แล้ว (`/api/admin/rounds/:roundId/clubs`, `/api/admin/clubs/:id` + หน้า `/admin/clubs`) ต่อจาก monorepo, migration แรก และ `GET /api/health` ยังไม่มี logic ลงทะเบียน เอกสารนี้คือแผนและข้อกำหนดของโปรเจกต์
+> **สถานะ:** Phase 1 ทำ Auth + role guard เสร็จแล้ว (login, บังคับเปลี่ยนรหัสครั้งแรก, logout, `create-admin`, หน้า FE ตาม role) admin จัดการรอบลงทะเบียนได้แล้ว (`/api/admin/rounds` + หน้า `/admin/rounds`) นำเข้า Excel ได้แล้วทั้งขั้นตรวจ (dry run) และขั้นยืนยัน (`/api/admin/import/preview`, `/api/admin/import/commit` + หน้า `/admin/import`) ออกรหัสผ่านเริ่มต้นให้นักเรียนเป็นไฟล์ Excel ได้แล้ว (`/api/admin/students/password-status`, `/api/admin/students/initial-passwords` + หน้า `/admin/initial-passwords`) ดู/แก้ชุมนุมรายรอบได้แล้ว (`/api/admin/rounds/:roundId/clubs`, `/api/admin/clubs/:id` + หน้า `/admin/clubs`) และส่งออกรายชื่อรายชุมนุม/รายห้องเป็น Excel ได้แล้ว (`/api/admin/rounds/:roundId/export` + หน้า `/admin/export`, PDF ยังไม่ทำ) ต่อจาก monorepo, migration แรก และ `GET /api/health` ยังไม่มี logic ลงทะเบียน เอกสารนี้คือแผนและข้อกำหนดของโปรเจกต์
 >
 > **หมายเหตุ:** ตัวเลข performance ทั้งหมดเป็นการประเมินจากหลักการ ยังไม่ได้วัดจริง ต้อง load test ก่อนใช้งาน
 
@@ -150,7 +150,7 @@ COMMIT;
 4. **นักเรียน:** ดูรายการชุมนุมในชั้นตัวเอง (ครู, ที่เหลือ), ลง, ยกเลิก, ดูผลของฉัน
 5. **กติกาที่ DB:** 1 คน 1 ชุมนุม, ห้ามเกิน capacity, เฉพาะชั้นตัวเอง, เฉพาะช่วงเปิดรอบ
 6. **Idempotency + event log**
-7. **Admin export:** รายชื่อแบบ **รายชุมนุม** และ **รายห้อง** เลือกได้ทั้ง **Excel** และ **PDF** (รายละเอียดดูหัวข้อ [Export รายชื่อ](#export-รายชื่อ))
+7. **Admin export:** รายชื่อแบบ **รายชุมนุม** และ **รายห้อง** เลือกได้ทั้ง **Excel** และ **PDF** (รายละเอียดดูหัวข้อ [Export รายชื่อ](#export-รายชื่อ)) ส่วน **Excel เสร็จแล้ว** (A6a) **PDF ยังไม่ทำ** (A6b รอ spike ไลบรารี ดูรายการที่ยังเปิดอยู่ข้อ 6)
 8. **Ops:** Dockerfile, `docker-compose.yml`, Caddy HTTPS, `/api/health`, migration script แยก, graceful shutdown, backup `pg_dump` ไป S3, runbook (deploy/backup/restore/เปิด-ปิดเครื่อง)
 9. **Test:** concurrency test + invariant `clubs.registered` = จำนวน registration จริง
 
@@ -266,6 +266,9 @@ Admin เลือก **รอบ** → เลือก **มุมมอง** (
 - **Excel:** escape ค่าที่ขึ้นต้นด้วย `=`, `+`, `-`, `@` (และ tab/CR) เหมือนข้อมูลอื่น ใช้ `escapeCellText` จาก `apps/api/src/export/escape-cell.ts` ตัวเดียวกับไฟล์รหัสผ่านเริ่มต้น
 - ชื่อไฟล์ใช้แค่รหัสรอบ/ชุมนุม/ห้อง ไม่ใส่ชื่อนักเรียนหรือครู
 - เป็น endpoint อ่าน ไม่มี side effect และต้องเป็น role `admin` เท่านั้น
+- **API (Excel เสร็จแล้ว):** `GET /api/admin/rounds/:roundId/export?view=club|classroom&format=xlsx` เพิ่ม `clubId=<id>` (รายชุมนุม) หรือ `classroom=<ห้อง>` (รายห้อง) เพื่อเลือกชุมนุม/ห้องเดียว ไม่ใส่ = ทั้งรอบ query เป็น strict (ใส่ `clubId` คู่กับ `view=classroom` หรือพารามิเตอร์ที่ไม่รู้จัก = `400`) `format` มีแค่ `xlsx` ตอนนี้ PDF จะเพิ่มเป็นค่าใหม่ของ enum เดิม อ่านทั้งหมดใน read-only snapshot เดียว ตัวเลขบนหัวชีตจึงตรงกับแถวข้างล่างเสมอ (จำนวนลงนับจากแถวในชีต) รอบ/ชุมนุมที่ไม่มี (หรือชุมนุมของรอบอื่น) และห้องที่ไม่มีนักเรียนในชั้นของรอบ = `404 not_found` ทั้งรอบแต่ไม่มีชุมนุม/ไม่มีนักเรียนในชั้นเลย = `404 nothing_to_export` (Excel ต้องมีอย่างน้อย 1 ชีต) ชุมนุมเดียวที่ยังไม่มีคนลงได้ชีตที่มีแต่หัวตาราง หน้า `/admin/export` ใช้ `GET /api/admin/rounds/:roundId/classrooms` (ห้องของชั้นนั้นพร้อมจำนวนลงแล้ว/ทั้งห้อง) เป็นตัวเลือกห้อง
+- **รูปแบบชีต:** หัวชีตเป็นบรรทัดข้อความ (รหัส/ชื่อชุมนุม, ครูที่ปรึกษา, จำนวนลง/จำนวนรับ หรือ ชั้น/ห้อง, ลงแล้ว/ทั้งห้อง ตามด้วยรอบและเวลาที่ export เป็นเวลาไทย) เว้น 1 บรรทัดแล้วเป็นตาราง ชื่อชีต = รหัสชุมนุม หรือ `ม.<ชั้น>-<ห้อง>` A4 แนวตั้ง กว้างพอดี 1 หน้า หัวตารางพิมพ์ซ้ำทุกหน้า ท้ายหน้ามีเลขหน้า รายห้องเขียน **ยังไม่ลง** ในช่องชุมนุมของคนที่ยังไม่ลง
+- **ชื่อไฟล์:** `club-list-round-<id>-grade-<ชั้น>[-<รหัสชุมนุม>].xlsx` / `classroom-list-round-<id>-grade-<ชั้น>[-room-<ห้อง>].xlsx` รหัส/ห้องที่เป็น ASCII เก็บแค่ตัวอักษร ตัวเลข `.` `_` `-` ที่มีอักษรอื่น (เช่น ไทย) ใช้ hex ของ UTF-8 แทน ตอบด้วย `Content-Disposition: attachment` และ `Cache-Control: no-store` log แค่ admin id, รอบ, มุมมอง, ขอบเขต และจำนวน
 - **ความเสี่ยง:** ไลบรารีสร้าง PDF ฝั่ง server บางตัววางสระบน/ล่างและวรรณยุกต์ภาษาไทยผิดตำแหน่ง ต้องลองกับชื่อสมมติที่มีสระบน/ล่างและวรรณยุกต์ก่อนเลือกไลบรารี (ดูรายการที่ยังเปิดอยู่ข้อ 6)
 
 ## Security
@@ -365,4 +368,4 @@ EC2 (t4g.small) ──► Caddy (HTTPS อัตโนมัติ)
 
 ## ขั้นตอนถัดไป
 
-ทำต่อใน **Phase 1** โดยทำฝั่ง admin ให้ครบก่อน: export → แล้วจึง endpoint ลง/ยกเลิก **พร้อม concurrency test** และหน้านักเรียน → Ops (scaffold, migration แรก, auth + role guard, จัดการรอบ, import Excel, รหัสผ่านเริ่มต้น และหน้าชุมนุม เสร็จแล้ว)
+ทำต่อใน **Phase 1** โดยทำฝั่ง admin ให้ครบก่อน: export PDF (A6b หลัง spike ไลบรารี) → แล้วจึง endpoint ลง/ยกเลิก **พร้อม concurrency test** และหน้านักเรียน → Ops (scaffold, migration แรก, auth + role guard, จัดการรอบ, import Excel, รหัสผ่านเริ่มต้น, หน้าชุมนุม และ export Excel เสร็จแล้ว)
