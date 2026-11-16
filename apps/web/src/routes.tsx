@@ -12,13 +12,18 @@ import { HomePage } from '@/pages/HomePage';
 import { LoginPage } from '@/pages/LoginPage';
 import { PlaceholderPage } from '@/pages/PlaceholderPage';
 import { AdminImportPage } from '@/pages/admin-import/AdminImportPage';
+import { AdminInitialPasswordsPage } from '@/pages/admin-initial-passwords/AdminInitialPasswordsPage';
 import { AdminRoundsPage } from '@/pages/admin-rounds/AdminRoundsPage';
 import { MENUS } from '@/navigation';
 
 // Menu entries whose feature has shipped; every other entry still renders its placeholder.
 const PAGES: Readonly<Record<Role, Readonly<Record<string, ReactElement>>>> = Object.freeze({
   student: {},
-  admin: { rounds: <AdminRoundsPage />, import: <AdminImportPage /> },
+  admin: {
+    rounds: <AdminRoundsPage />,
+    import: <AdminImportPage />,
+    'initial-passwords': <AdminInitialPasswordsPage />,
+  },
 });
 
 const roleRoutes: RouteObject[] = ROLES.map((role) => ({

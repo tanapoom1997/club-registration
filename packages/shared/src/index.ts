@@ -66,6 +66,7 @@ export {
   SEAT_NO_MAX,
   STUDENT_COLUMNS,
   advisorImportRowSchema,
+  classroomSchema,
   clubCodeSchema,
   clubImportRowSchema,
   importChangeCountsSchema,
@@ -91,3 +92,15 @@ export type {
   ImportSheet,
   StudentImportRow,
 } from './import.js';
+export {
+  INITIAL_PASSWORD_COLUMNS,
+  ISSUED_COUNT_HEADER,
+  classroomPasswordStatusSchema,
+  issueInitialPasswordsRequestSchema,
+  passwordStatusResponseSchema,
+} from './initial-passwords.js';
+export type {
+  ClassroomPasswordStatus,
+  IssueInitialPasswordsRequest,
+  PasswordStatusResponse,
+} from './initial-passwords.js';

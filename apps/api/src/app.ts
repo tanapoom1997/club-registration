@@ -15,6 +15,7 @@ import { createAuthGuard, JWT_ALGORITHM, SESSION_TTL_SECONDS } from './auth/sess
 import { AppError } from './errors.js';
 import { adminImportRoutes } from './routes/admin-import.js';
 import { adminRoundRoutes } from './routes/admin-rounds.js';
+import { adminStudentRoutes } from './routes/admin-students.js';
 import { authRoutes } from './routes/auth.js';
 import { healthRoutes } from './routes/health.js';
 
@@ -24,7 +25,8 @@ const BODY_LIMIT_BYTES = 64 * 1024;
 type AppOptions = {
   pool: pg.Pool;
   jwtSecret: string;
-  logger?: boolean | { level: string };
+  // stream lets tests capture log lines to prove no secret or personal data is written.
+  logger?: boolean | { level: string; stream?: { write: (line: string) => void } };
   trustProxy?: boolean;
 };
 
@@ -101,6 +103,7 @@ export const buildApp = async ({
   await app.register(authRoutes({ pool, guard }), { prefix: '/api' });
   await app.register(adminRoundRoutes({ pool, guard }), { prefix: '/api' });
   await app.register(adminImportRoutes({ pool, guard }), { prefix: '/api' });
+  await app.register(adminStudentRoutes({ pool, guard }), { prefix: '/api' });
 
   return app;
 };

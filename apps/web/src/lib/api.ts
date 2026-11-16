@@ -1,19 +1,23 @@
 import {
+  ISSUED_COUNT_HEADER,
   errorResponseSchema,
   healthResponseSchema,
   importCommitResponseSchema,
   importPreviewResponseSchema,
+  passwordStatusResponseSchema,
   roundListResponseSchema,
   roundResponseSchema,
   sessionResponseSchema,
 } from '@club-registration/shared';
 import type {
   ChangePasswordRequest,
+  ClassroomPasswordStatus,
   CreateRoundBatchRequest,
   CreateRoundRequest,
   HealthResponse,
   ImportCommitResponse,
   ImportPreviewResponse,
+  IssueInitialPasswordsRequest,
   LoginRequest,
   Round,
   SessionUser,
@@ -153,3 +157,27 @@ export const commitImport = async ({
     file,
     importCommitResponseSchema,
   );
+
+export const fetchPasswordStatus = async (): Promise<ClassroomPasswordStatus[]> =>
+  (await sendJson('/api/admin/students/password-status', 'GET', passwordStatusResponseSchema))
+    .classrooms;
+
+export type IssuedPasswordFile = { file: Blob; filename: string; issuedCount: number };
+
+const DEFAULT_PASSWORD_FILENAME = 'initial-passwords.xlsx';
+
+// The server names the file after the scope only; anything unexpected falls back to a fixed name.
+const attachmentFilename = (disposition: string | null): string =>
+  /filename="([A-Za-z0-9._-]+)"/.exec(disposition ?? '')?.[1] ?? DEFAULT_PASSWORD_FILENAME;
+
+// The answer is the .xlsx itself, the only copy of the new passwords anywhere.
+export const issueInitialPasswords = async (
+  request: IssueInitialPasswordsRequest,
+): Promise<IssuedPasswordFile> => {
+  const response = await send('/api/admin/students/initial-passwords', 'POST', request);
+  return {
+    file: await response.blob(),
+    filename: attachmentFilename(response.headers.get('content-disposition')),
+    issuedCount: Number(response.headers.get(ISSUED_COUNT_HEADER) ?? 0),
+  };
+};

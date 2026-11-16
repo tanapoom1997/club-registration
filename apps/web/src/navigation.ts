@@ -41,7 +41,7 @@ export const MENUS: Readonly<Record<Role, readonly MenuItem[]>> = Object.freeze(
     {
       path: 'initial-passwords',
       label: 'รหัสผ่านเริ่มต้น',
-      description: 'ดาวน์โหลดรหัสผ่านเริ่มต้นของนักเรียน (ได้ครั้งเดียว)',
+      description: 'สุ่มรหัสผ่านให้นักเรียนแล้วดาวน์โหลดเป็น Excel (ดาวน์โหลดซ้ำไม่ได้)',
     },
   ],
 });

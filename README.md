@@ -2,7 +2,7 @@
 
 ระบบลงทะเบียนชุมนุมของโรงเรียน สำหรับนักเรียน ~2,500 คน แบ่งรอบตามชั้น ม.1–ม.6 รอบละ ~400–450 คน
 
-> **สถานะ:** Phase 1 ทำ Auth + role guard เสร็จแล้ว (login, บังคับเปลี่ยนรหัสครั้งแรก, logout, `create-admin`, หน้า FE ตาม role) admin จัดการรอบลงทะเบียนได้แล้ว (`/api/admin/rounds` + หน้า `/admin/rounds`) และนำเข้า Excel ได้แล้วทั้งขั้นตรวจ (dry run) และขั้นยืนยัน (`/api/admin/import/preview`, `/api/admin/import/commit` + หน้า `/admin/import`) นักเรียนที่นำเข้าใหม่ยังเข้าสู่ระบบไม่ได้จนกว่าจะมีขั้นออกรหัสผ่านเริ่มต้น ต่อจาก monorepo, migration แรก และ `GET /api/health` ยังไม่มี logic ลงทะเบียน เอกสารนี้คือแผนและข้อกำหนดของโปรเจกต์
+> **สถานะ:** Phase 1 ทำ Auth + role guard เสร็จแล้ว (login, บังคับเปลี่ยนรหัสครั้งแรก, logout, `create-admin`, หน้า FE ตาม role) admin จัดการรอบลงทะเบียนได้แล้ว (`/api/admin/rounds` + หน้า `/admin/rounds`) นำเข้า Excel ได้แล้วทั้งขั้นตรวจ (dry run) และขั้นยืนยัน (`/api/admin/import/preview`, `/api/admin/import/commit` + หน้า `/admin/import`) และออกรหัสผ่านเริ่มต้นให้นักเรียนเป็นไฟล์ Excel ได้แล้ว (`/api/admin/students/password-status`, `/api/admin/students/initial-passwords` + หน้า `/admin/initial-passwords`) ต่อจาก monorepo, migration แรก และ `GET /api/health` ยังไม่มี logic ลงทะเบียน เอกสารนี้คือแผนและข้อกำหนดของโปรเจกต์
 >
 > **หมายเหตุ:** ตัวเลข performance ทั้งหมดเป็นการประเมินจากหลักการ ยังไม่ได้วัดจริง ต้อง load test ก่อนใช้งาน
 
@@ -102,7 +102,7 @@ club-registration/
 ## Data Model
 
 ```sql
-users               -- นักเรียนและ admin (role: student | admin), password_hash, must_change_password, session_version
+users               -- นักเรียนและ admin (role: student | admin), password_hash, must_change_password, session_version, password_issued_at
 student_profiles    -- grade (1-6), classroom, seat_no
 rounds              -- 1 รอบต่อชั้นต่อเทอม: term, grade, opens_at, closes_at, max_active
 clubs               -- club_code, name, description, capacity, registered, round_id
@@ -111,6 +111,7 @@ registrations       -- สถานะปัจจุบัน UNIQUE(round_id, 
 registration_events -- log append-only: register/cancel/change/admin_*/waitlist_*, actor_id, idempotency_key
 waitlist_entries    -- UNIQUE(round_id, student_id), เรียงตาม created_at
 queue_tickets       -- status: waiting | admitted | expired | done
+password_issuances  -- บันทึกการออกรหัสผ่านเริ่มต้น: admin_id, ขอบเขต (ชั้น/ห้อง), จำนวน, idempotency_key (ไม่เก็บรหัสผ่าน)
 ```
 
 **Constraint สำคัญ (enforce ที่ DB ไม่ใช่แค่ฝั่ง app)**
@@ -141,7 +142,7 @@ COMMIT;
 **เป้าหมาย:** admin เตรียมข้อมูล → นักเรียนลง/ยกเลิกถูกกติกา → admin ได้รายชื่อ
 
 1. ~~**Auth:** login รหัสนักเรียน + รหัสเริ่มต้นสุ่มรายคน, บังคับเปลี่ยนรหัสครั้งแรก, role `student`/`admin` (JWT, secret จาก env)~~ เสร็จแล้ว
-2. ~~**Admin import Excel:** students, clubs, advisors → dry run → ยืนยัน → upsert ใน transaction เดียว~~ เสร็จแล้ว (นักเรียนใหม่ยังไม่มีรหัสผ่าน รอขั้นออกรหัสผ่านเริ่มต้น)
+2. ~~**Admin import Excel:** students, clubs, advisors → dry run → ยืนยัน → upsert ใน transaction เดียว~~ เสร็จแล้ว รวมขั้นออกรหัสผ่านเริ่มต้นให้นักเรียนที่นำเข้า (ดูหัวข้อ [Security](#security))
 3. ~~**Admin จัดการรอบ:** สร้างรอบต่อชั้น กำหนด `opens_at`/`closes_at`~~ เสร็จแล้ว (สร้างทีละชั้นหรือครบ ม.1–ม.6, แก้เวลา/`max_active`, ลบรอบที่ยังไม่มีชุมนุม, สถานะคำนวณตอนอ่าน)
 4. **นักเรียน:** ดูรายการชุมนุมในชั้นตัวเอง (ครู, ที่เหลือ), ลง, ยกเลิก, ดูผลของฉัน
 5. **กติกาที่ DB:** 1 คน 1 ชุมนุม, ห้ามเกิน capacity, เฉพาะชั้นตัวเอง, เฉพาะช่วงเปิดรอบ
@@ -259,14 +260,18 @@ Admin เลือก **รอบ** → เลือก **มุมมอง** (
 - **ทั้งรอบ:** Excel = 1 sheet ต่อชุมนุม/ห้อง, PDF = ขึ้นหน้าใหม่ต่อชุมนุม/ห้อง
 - **ข้อมูลติดต่อครู** (เบอร์, อีเมล, LINE) ไม่ใส่ใน export รายห้อง ใส่แค่ชื่อครูในรายชุมนุม
 - **PDF:** ขนาด A4 แนวตั้ง ฝังฟอนต์ไทยที่ license อนุญาตให้แจกจ่าย (เช่น OFL) ท้ายหน้ามีวันเวลาที่ export (เวลาไทย) และเลขหน้า
-- **Excel:** escape ค่าที่ขึ้นต้นด้วย `=`, `+`, `-`, `@` เหมือนข้อมูลอื่น
+- **Excel:** escape ค่าที่ขึ้นต้นด้วย `=`, `+`, `-`, `@` (และ tab/CR) เหมือนข้อมูลอื่น ใช้ `escapeCellText` จาก `apps/api/src/export/escape-cell.ts` ตัวเดียวกับไฟล์รหัสผ่านเริ่มต้น
 - ชื่อไฟล์ใช้แค่รหัสรอบ/ชุมนุม/ห้อง ไม่ใส่ชื่อนักเรียนหรือครู
 - เป็น endpoint อ่าน ไม่มี side effect และต้องเป็น role `admin` เท่านั้น
 - **ความเสี่ยง:** ไลบรารีสร้าง PDF ฝั่ง server บางตัววางสระบน/ล่างและวรรณยุกต์ภาษาไทยผิดตำแหน่ง ต้องลองกับชื่อสมมติที่มีสระบน/ล่างและวรรณยุกต์ก่อนเลือกไลบรารี (ดูรายการที่ยังเปิดอยู่ข้อ 6)
 
 ## Security
 
-- **รหัสผ่านเริ่มต้น:** สุ่มรายคน, เก็บเฉพาะ hash, admin ดาวน์โหลดรายการได้ครั้งเดียว, บังคับเปลี่ยนตอน login แรก ห้ามใช้เลขบัตร/วันเกิด
+- **รหัสผ่านเริ่มต้น:** สุ่มรายคน (10 ตัว ไม่มีตัวที่อ่านสับสน) ห้ามใช้เลขบัตร/วันเกิด ไม่มีที่ไหนเก็บรหัสจริง: admin เลือกชั้น (ห้องเดียวหรือทั้งชั้น ครั้งละไม่เกิน 1 ชั้น) แล้วกดออกรหัส server สุ่มและ hash (argon2id) แล้วตอบเป็นไฟล์ .xlsx ทันที (1 ชีตต่อห้อง, `Cache-Control: no-store`, ชื่อไฟล์มีแค่ชั้น/ห้อง) ไฟล์นั้นคือสำเนาเดียว ทำหาย = ออกใหม่ ซึ่งทำให้รหัสเดิมใช้ไม่ได้ทันทีและ bump `session_version` ออกให้ได้เฉพาะนักเรียนที่ `must_change_password` ยังเป็นจริง นักเรียนที่ตั้งรหัสเองแล้วจะไม่ถูกเขียนทับ (การรีเซ็ตรหัสที่ลืมของนักเรียนที่ใช้งานแล้วยังไม่มี) บังคับเปลี่ยนตอน login แรก
+  - hash ก่อนเปิด transaction (จำกัดทำพร้อมกัน 2 งานทั้ง server ให้ login ยังได้ thread) แล้วใน transaction สั้นๆ lock แถวที่ยังมีสิทธิ์ด้วย `SELECT … FOR NO KEY UPDATE` เขียนเฉพาะแถวนั้น ไฟล์มีเฉพาะคนที่ถูกเขียนจริง นักเรียนที่เปลี่ยนรหัสระหว่างนั้นถูกข้าม admin สองคนออกขอบเขตเดียวกันพร้อมกัน → นักเรียนแต่ละคนมีรหัสที่ใช้ได้รหัสเดียว คือรหัสในไฟล์ของ request ที่ commit ทีหลัง
+  - `idempotencyKey` ถูกเก็บใน `password_issuances` คู่กับการออก ส่ง key เดิมซ้ำ = `409 idempotency_key_reused` (ไม่ออกซ้ำ เพราะการออกซ้ำทำให้ไฟล์ที่อาจพิมพ์ไปแล้วใช้ไม่ได้) หน้าเว็บสร้าง key ใหม่ทุกครั้งที่กดยืนยัน
+  - log เฉพาะ admin id, ขอบเขต, จำนวน และเวลา ไม่ log ชื่อ รหัสนักเรียน หรือรหัสผ่าน rate limit 20 ครั้ง/10 นาที ต่อ admin
+  - วัดจริงในเทสต์ (เครื่องพัฒนา 4 vCPU ไม่ใช่สเปค production, 4 รอบ): ออกรหัส 450 คนใช้ 6.6–7.1 วินาทีต่อ request เกือบทั้งหมดคือ hash ส่วน transaction + สร้างไฟล์ใช้ไม่ถึง 0.1 วินาที ต้องวัดซ้ำบนเครื่องจริง
 - **ตรวจสิทธิ์ที่ server ทุก endpoint** ไม่เชื่อ role/`student_id` จาก client ใช้ค่าจาก JWT เท่านั้น
 - **Rate limit** ที่ `/auth/login` และ endpoint เขียน
 - **Session:** JWT (HS256, อายุ 2 ชม.) อยู่ใน cookie `HttpOnly; Secure; SameSite=Strict; Path=/api` ไม่เก็บใน `localStorage` ทุก request เช็ค `users.session_version` กับค่าใน token → logout หรือเปลี่ยนรหัส = token เก่าทุกเครื่องใช้ไม่ได้ทันที (สำคัญกับคอมห้องแล็บที่ใช้ร่วมกัน) และถ้า role ใน DB เปลี่ยน token เดิมก็ใช้ไม่ได้
@@ -357,4 +362,4 @@ EC2 (t4g.small) ──► Caddy (HTTPS อัตโนมัติ)
 
 ## ขั้นตอนถัดไป
 
-ทำต่อใน **Phase 1** โดยทำฝั่ง admin ให้ครบก่อน: รหัสผ่านเริ่มต้น → หน้าชุมนุม → export → แล้วจึง endpoint ลง/ยกเลิก **พร้อม concurrency test** และหน้านักเรียน → Ops (scaffold, migration แรก, auth + role guard, จัดการรอบ และ import Excel เสร็จแล้ว)
+ทำต่อใน **Phase 1** โดยทำฝั่ง admin ให้ครบก่อน: หน้าชุมนุม → export → แล้วจึง endpoint ลง/ยกเลิก **พร้อม concurrency test** และหน้านักเรียน → Ops (scaffold, migration แรก, auth + role guard, จัดการรอบ, import Excel และรหัสผ่านเริ่มต้น เสร็จแล้ว)
