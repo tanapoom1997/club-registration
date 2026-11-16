@@ -2,7 +2,7 @@
 
 ระบบลงทะเบียนชุมนุมโรงเรียน (นักเรียน ~2,500 คน, รอบละ ~450 concurrent) แผนเต็ม สถาปัตยกรรม data model และ roadmap อยู่ใน [README.md](README.md) อ่านก่อนเริ่มงานทุกครั้ง ไฟล์นี้เก็บเฉพาะกติกาการทำงานที่ต้องไม่หลุด
 
-**สถานะ:** Phase 1 ข้อ 1 (Auth + role guard) และข้อ 3 (admin จัดการรอบ: `apps/api/src/routes/admin-rounds.ts` + `services/rounds.ts`, หน้า `/admin/rounds`) เสร็จแล้ว ต่อจาก scaffold (monorepo, migration แรกครบทุกตาราง, `GET /api/health`) มี login/เปลี่ยนรหัส/logout, `create-admin` และหน้า FE ตาม role (เมนูอื่นยังเป็นโครงว่าง) ยังไม่มี logic ลงทะเบียน
+**สถานะ:** Phase 1 ข้อ 1 (Auth + role guard) และข้อ 3 (admin จัดการรอบ: `apps/api/src/routes/admin-rounds.ts` + `services/rounds.ts`, หน้า `/admin/rounds`) เสร็จแล้ว ข้อ 2 (import Excel) ทำ dry run แล้ว (`routes/admin-import.ts`, `import/`, `services/import-plan.ts`, หน้า `/admin/import`) เหลือขั้นยืนยัน ต่อจาก scaffold (monorepo, migration แรกครบทุกตาราง, `GET /api/health`) มี login/เปลี่ยนรหัส/logout, `create-admin` และหน้า FE ตาม role (เมนูอื่นยังเป็นโครงว่าง) ยังไม่มี logic ลงทะเบียน
 
 ## กฎที่ห้ามละเมิด
 
@@ -63,6 +63,7 @@ docker compose up -d --wait   # หรือเปิด Postgres ของต�
 pnpm dev                # migrate → seed บัญชี demo → api (:3000) + web (:5173) ใน terminal เดียว
 pnpm --filter api seed-dev --reset   # สุ่มรหัสบัญชี demo ใหม่ (ลืมรหัส/ไฟล์หาย)
 pnpm --filter api create-admin <login_id>   # admin จริง แสดงรหัสครั้งเดียว บังคับเปลี่ยนตอน login แรก
+pnpm --filter api generate-template   # สร้าง templates/import-template.xlsx ใหม่หลังแก้คอลัมน์ใน packages/shared
 pnpm typecheck
 pnpm lint
 pnpm format
