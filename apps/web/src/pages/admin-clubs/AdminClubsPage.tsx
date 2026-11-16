@@ -6,7 +6,7 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
 import { fetchRoundClubs, fetchRounds } from '@/lib/api';
-import { ROUNDS_QUERY_KEY, STATUS_DISPLAY, gradeLabel } from '@/pages/admin-rounds/round-ui';
+import { ROUNDS_QUERY_KEY, STATUS_DISPLAY, roundOptionLabel } from '@/pages/admin-rounds/round-ui';
 import { ClubsTable } from './ClubsTable';
 import { EditClubForm } from './EditClubForm';
 import { CLUBS_POLL_INTERVAL_MS, CLUBS_QUERY_KEY } from './club-ui';
@@ -14,9 +14,6 @@ import { CLUBS_POLL_INTERVAL_MS, CLUBS_QUERY_KEY } from './club-ui';
 const NO_ROUND = '';
 // The rounds page lists every term under the same key, so both pages share one cached list.
 const ALL_TERMS = '';
-
-const roundLabel = ({ term, grade, status }: Round) =>
-  `${term} ${gradeLabel(grade)} (${STATUS_DISPLAY[status].label})`;
 
 const selectClassName =
   'w-full rounded-md border border-input bg-card px-3 py-2 text-base focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring';
@@ -111,7 +108,7 @@ export const AdminClubsPage = () => {
             <option value={NO_ROUND}>เลือกรอบ</option>
             {rounds.map((round) => (
               <option key={round.id} value={round.id}>
-                {roundLabel(round)}
+                {roundOptionLabel(round)}
               </option>
             ))}
           </select>

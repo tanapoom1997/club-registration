@@ -1,0 +1,291 @@
+import { EXPORT_FORMATS, EXPORT_VIEWS } from '@club-registration/shared';
+import type { ExportFormat, ExportQuery, ExportView } from '@club-registration/shared';
+import { skipToken, useMutation, useQuery } from '@tanstack/react-query';
+import { useState } from 'react';
+import type { FormEvent } from 'react';
+import { Link } from 'react-router';
+import { FormError } from '@/components/FormError';
+import { Button } from '@/components/ui/button';
+import { Label } from '@/components/ui/label';
+import {
+  ApiError,
+  downloadNameList,
+  fetchRoundClassrooms,
+  fetchRoundClubs,
+  fetchRounds,
+} from '@/lib/api';
+import { saveFile } from '@/lib/download';
+import { useSetSession } from '@/lib/session';
+import { CLUBS_QUERY_KEY } from '@/pages/admin-clubs/club-ui';
+import { ROUNDS_QUERY_KEY, gradeLabel, roundOptionLabel } from '@/pages/admin-rounds/round-ui';
+import { CLASSROOMS_QUERY_KEY, FORMAT_LABELS, VIEW_OPTIONS, exportErrorMessage } from './export-ui';
+
+const NO_ROUND = '';
+const WHOLE_ROUND = '';
+// The rounds page lists every term under the same key, so the pages share one cached list.
+const ALL_TERMS = '';
+
+type ScopeOption = { value: string; label: string };
+type ScopeChoice = { options: ScopeOption[]; wholeLabel: string; summary: string };
+
+const selectClassName =
+  'w-full rounded-md border border-input bg-card px-3 py-2 text-base focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring';
+
+const sum = (values: readonly number[]): number =>
+  values.reduce((total, value) => total + value, 0);
+
+const studentSummary = (registered: number, total: number, of: string): string =>
+  `ลงแล้ว ${registered} / ${of} ${total} คน (ยังไม่ลง ${total - registered} คน)`;
+
+export const AdminExportPage = () => {
+  const [roundId, setRoundId] = useState<number>();
+  const [view, setView] = useState<ExportView>('club');
+  const [scope, setScope] = useState(WHOLE_ROUND);
+  const [format, setFormat] = useState<ExportFormat>('xlsx');
+  const setSession = useSetSession();
+
+  const roundsQuery = useQuery({
+    queryKey: [...ROUNDS_QUERY_KEY, ALL_TERMS],
+    queryFn: async () => await fetchRounds(),
+  });
+  const clubsQuery = useQuery({
+    queryKey: [...CLUBS_QUERY_KEY, roundId],
+    queryFn:
+      roundId === undefined || view !== 'club'
+        ? skipToken
+        : async () => await fetchRoundClubs(roundId),
+  });
+  const classroomsQuery = useQuery({
+    queryKey: [...CLASSROOMS_QUERY_KEY, roundId],
+    queryFn:
+      roundId === undefined || view !== 'classroom'
+        ? skipToken
+        : async () => await fetchRoundClassrooms(roundId),
+  });
+  const mutation = useMutation({
+    mutationFn: async ({ id, query }: { id: number; query: ExportQuery }) =>
+      await downloadNameList(id, query),
+    onSuccess: ({ file, filename }) => {
+      saveFile(file, filename);
+    },
+    onError: (error) => {
+      if (error instanceof ApiError && error.status === 401) setSession(null);
+    },
+  });
+
+  // Any change to the choice starts over: a new scope list and no stale result on screen.
+  const choose = (apply: () => void) => {
+    apply();
+    setScope(WHOLE_ROUND);
+    mutation.reset();
+  };
+
+  const rounds = roundsQuery.data ?? [];
+  const scopeQuery = view === 'club' ? clubsQuery : classroomsQuery;
+
+  const scopeChoice = ((): ScopeChoice | undefined => {
+    if (view === 'club') {
+      const clubs = clubsQuery.data?.clubs;
+      if (!clubs) return undefined;
+      const chosen = clubs.find(({ id }) => String(id) === scope);
+      return {
+        options: clubs.map(({ id, clubCode, name }) => ({
+          value: String(id),
+          label: `${clubCode} ${name}`,
+        })),
+        wholeLabel: `ทั้งรอบ (${clubs.length} ชุมนุม, 1 ชีตต่อชุมนุม)`,
+        summary: chosen
+          ? `ลงแล้ว ${chosen.registered} / รับ ${chosen.capacity} คน`
+          : `ลงแล้ว ${sum(clubs.map(({ registered }) => registered))} / รับ ${sum(
+              clubs.map(({ capacity }) => capacity),
+            )} คน`,
+      };
+    }
+    const data = classroomsQuery.data;
+    if (!data) return undefined;
+    const grade = gradeLabel(data.round.grade);
+    const chosen = data.classrooms.find(({ classroom }) => classroom === scope);
+    return {
+      options: data.classrooms.map(({ classroom }) => ({
+        value: classroom,
+        label: `${grade}/${classroom}`,
+      })),
+      wholeLabel: `ทั้งรอบ (ทุกห้องของ ${grade}, 1 ชีตต่อห้อง)`,
+      summary: chosen
+        ? studentSummary(chosen.registeredCount, chosen.studentCount, 'ทั้งห้อง')
+        : studentSummary(
+            sum(data.classrooms.map(({ registeredCount }) => registeredCount)),
+            sum(data.classrooms.map(({ studentCount }) => studentCount)),
+            'ทั้งหมด',
+          ),
+    };
+  })();
+
+  const handleSubmit = (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    if (roundId === undefined) return;
+    const query: ExportQuery =
+      view === 'club'
+        ? { view, format, ...(scope === WHOLE_ROUND ? {} : { clubId: Number(scope) }) }
+        : { view, format, ...(scope === WHOLE_ROUND ? {} : { classroom: scope }) };
+    mutation.mutate({ id: roundId, query });
+  };
+
+  return (
+    <section className="space-y-6">
+      <div className="space-y-2">
+        <h1 className="text-xl font-semibold">ส่งออกรายชื่อ</h1>
+        <p className="text-sm text-muted-foreground">
+          เลือกรอบ มุมมอง และขอบเขต แล้วดาวน์โหลดเป็นไฟล์ Excel ไปส่งต่อให้ครู
+          ไฟล์มีชื่อนักเรียนแต่ไม่มีเบอร์โทร อีเมล หรือ LINE ของครู
+          กรุณาส่งผ่านช่องทางของโรงเรียนและอย่าโพสต์ในที่สาธารณะ
+        </p>
+      </div>
+
+      {roundsQuery.isPending ? (
+        <p className="text-muted-foreground">กำลังโหลด…</p>
+      ) : roundsQuery.isError ? (
+        <div className="flex items-center gap-3" role="alert">
+          <p>โหลดรายการรอบไม่สำเร็จ</p>
+          <Button variant="outline" onClick={() => void roundsQuery.refetch()}>
+            ลองใหม่
+          </Button>
+        </div>
+      ) : rounds.length === 0 ? (
+        <p className="text-muted-foreground">
+          ยังไม่มีรอบลงทะเบียน ให้{' '}
+          <Link className="text-primary underline" to="/admin/rounds">
+            สร้างรอบ
+          </Link>{' '}
+          ก่อน
+        </p>
+      ) : (
+        <form
+          aria-label="ส่งออกรายชื่อ"
+          className="max-w-xl space-y-5"
+          onSubmit={handleSubmit}
+          noValidate
+        >
+          <div className="space-y-1.5">
+            <Label htmlFor="export-round">รอบลงทะเบียน</Label>
+            <select
+              id="export-round"
+              className={selectClassName}
+              value={roundId ?? NO_ROUND}
+              onChange={(event) =>
+                choose(() =>
+                  setRoundId(
+                    event.target.value === NO_ROUND ? undefined : Number(event.target.value),
+                  ),
+                )
+              }
+            >
+              <option value={NO_ROUND}>เลือกรอบ</option>
+              {rounds.map((round) => (
+                <option key={round.id} value={round.id}>
+                  {roundOptionLabel(round)}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <fieldset className="space-y-2">
+            <legend className="text-sm font-medium">มุมมอง</legend>
+            {EXPORT_VIEWS.map((value) => (
+              <label key={value} className="flex items-start gap-2 text-sm">
+                <input
+                  type="radio"
+                  name="export-view"
+                  className="mt-1"
+                  value={value}
+                  checked={view === value}
+                  onChange={() => choose(() => setView(value))}
+                />
+                <span>
+                  <span className="font-medium">{VIEW_OPTIONS[value].label}</span>
+                  <span className="block text-muted-foreground">
+                    {VIEW_OPTIONS[value].description}
+                  </span>
+                </span>
+              </label>
+            ))}
+          </fieldset>
+
+          {roundId === undefined ? null : scopeQuery.isPending ? (
+            <p className="text-muted-foreground">กำลังโหลดตัวเลือก…</p>
+          ) : scopeQuery.isError || !scopeChoice ? (
+            <div className="flex items-center gap-3" role="alert">
+              <p>โหลดรายการ{view === 'club' ? 'ชุมนุม' : 'ห้อง'}ไม่สำเร็จ</p>
+              <Button type="button" variant="outline" onClick={() => void scopeQuery.refetch()}>
+                ลองใหม่
+              </Button>
+            </div>
+          ) : scopeChoice.options.length === 0 ? (
+            <p className="text-muted-foreground">
+              {view === 'club'
+                ? 'รอบนี้ยังไม่มีชุมนุม เพิ่มได้จากการนำเข้า Excel'
+                : 'ชั้นของรอบนี้ยังไม่มีนักเรียน เพิ่มได้จากการนำเข้า Excel'}
+            </p>
+          ) : (
+            <div className="space-y-1.5">
+              <Label htmlFor="export-scope">ขอบเขต</Label>
+              <select
+                id="export-scope"
+                className={selectClassName}
+                value={scope}
+                onChange={(event) => {
+                  setScope(event.target.value);
+                  mutation.reset();
+                }}
+              >
+                <option value={WHOLE_ROUND}>{scopeChoice.wholeLabel}</option>
+                {scopeChoice.options.map(({ value, label }) => (
+                  <option key={value} value={value}>
+                    {label}
+                  </option>
+                ))}
+              </select>
+              <p className="text-sm text-muted-foreground" aria-live="polite">
+                {scopeChoice.summary}
+              </p>
+            </div>
+          )}
+
+          <fieldset className="space-y-2">
+            <legend className="text-sm font-medium">รูปแบบ</legend>
+            {EXPORT_FORMATS.map((value) => (
+              <label key={value} className="flex items-center gap-2 text-sm">
+                <input
+                  type="radio"
+                  name="export-format"
+                  value={value}
+                  checked={format === value}
+                  onChange={() => {
+                    setFormat(value);
+                    mutation.reset();
+                  }}
+                />
+                <span>{FORMAT_LABELS[value]}</span>
+              </label>
+            ))}
+            <p className="text-sm text-muted-foreground">PDF ยังไม่พร้อมใช้งาน</p>
+          </fieldset>
+
+          <Button
+            type="submit"
+            disabled={!scopeChoice || scopeChoice.options.length === 0 || mutation.isPending}
+          >
+            {mutation.isPending ? 'กำลังสร้างไฟล์…' : 'ดาวน์โหลดรายชื่อ'}
+          </Button>
+
+          <FormError message={mutation.isError ? exportErrorMessage(mutation.error) : undefined} />
+          {mutation.isSuccess && (
+            <p className="rounded-md bg-success p-3 text-sm text-success-foreground" role="status">
+              ดาวน์โหลดไฟล์ {mutation.data.filename} แล้ว
+            </p>
+          )}
+        </form>
+      )}
+    </section>
+  );
+};
