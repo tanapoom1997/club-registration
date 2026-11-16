@@ -11,6 +11,7 @@ import { HealthPage } from '@/pages/HealthPage';
 import { HomePage } from '@/pages/HomePage';
 import { LoginPage } from '@/pages/LoginPage';
 import { PlaceholderPage } from '@/pages/PlaceholderPage';
+import { AdminClubsPage } from '@/pages/admin-clubs/AdminClubsPage';
 import { AdminImportPage } from '@/pages/admin-import/AdminImportPage';
 import { AdminInitialPasswordsPage } from '@/pages/admin-initial-passwords/AdminInitialPasswordsPage';
 import { AdminRoundsPage } from '@/pages/admin-rounds/AdminRoundsPage';
@@ -22,6 +23,7 @@ const PAGES: Readonly<Record<Role, Readonly<Record<string, ReactElement>>>> = Ob
   admin: {
     rounds: <AdminRoundsPage />,
     import: <AdminImportPage />,
+    clubs: <AdminClubsPage />,
     'initial-passwords': <AdminInitialPasswordsPage />,
   },
 });
