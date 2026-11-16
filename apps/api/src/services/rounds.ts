@@ -109,6 +109,16 @@ export const listRounds = async (
   return rows.map((row) => toRound(row, now));
 };
 
+export const findRound = async (
+  db: Queryable,
+  id: number,
+  now: Date,
+): Promise<Round | undefined> => {
+  const { rows } = await db.query<RoundRow>(selectWithTotals('rounds', 'WHERE r.id = $1'), [id]);
+  const row = rows[0];
+  return row ? toRound(row, now) : undefined;
+};
+
 // The UNIQUE (term, grade) constraint decides duplicates, so two admins racing cannot both win.
 export const createRound = async (
   db: Queryable,

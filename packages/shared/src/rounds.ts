@@ -41,9 +41,10 @@ type Window = { opensAt?: string | undefined; closesAt?: string | undefined };
 const closesAfterOpens = ({ opensAt, closesAt }: Window): boolean =>
   opensAt === undefined || closesAt === undefined || Date.parse(closesAt) > Date.parse(opensAt);
 
-export const roundIdParamsSchema = z.object({
-  id: z.coerce.number().int().positive().max(PG_INT_MAX),
-});
+// A row id taken from the URL path.
+export const dbIdSchema = z.coerce.number().int().positive().max(PG_INT_MAX);
+
+export const roundIdParamsSchema = z.object({ id: dbIdSchema });
 export type RoundIdParams = z.infer<typeof roundIdParamsSchema>;
 
 export const listRoundsQuerySchema = z.object({ term: termSchema.optional() });

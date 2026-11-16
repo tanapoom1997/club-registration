@@ -20,6 +20,7 @@ const HTTP_STATUS: Readonly<Record<ErrorCode, number>> = Object.freeze({
   [ERROR_CODES.importConflict]: 409,
   [ERROR_CODES.idempotencyKeyReused]: 409,
   [ERROR_CODES.nothingToIssue]: 409,
+  [ERROR_CODES.capacityBelowRegistered]: 409,
   [ERROR_CODES.rateLimited]: 429,
   [ERROR_CODES.internalError]: 500,
 });
@@ -45,6 +46,8 @@ const DEFAULT_MESSAGES: Readonly<Record<ErrorCode, string>> = Object.freeze({
   [ERROR_CODES.idempotencyKeyReused]:
     'This request was already carried out; send a new request to do it again',
   [ERROR_CODES.nothingToIssue]: 'No student in this scope can be issued a password',
+  [ERROR_CODES.capacityBelowRegistered]:
+    'Capacity cannot be lower than the number of students already registered',
   [ERROR_CODES.rateLimited]: 'Too many requests, try again later',
   [ERROR_CODES.internalError]: 'Internal server error',
 });
