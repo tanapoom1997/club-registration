@@ -4,7 +4,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { createAdmin } from '../src/auth/service.js';
 import { createPool } from '../src/db.js';
 import { buildTestApp, createTestUser } from './support/app.js';
-import { startMigratedPostgres } from './support/postgres.js';
+import { startMigratedPostgres, stopPostgres } from './support/postgres.js';
 
 describe('createAdmin', () => {
   let container: StartedPostgreSqlContainer;
@@ -29,8 +29,7 @@ describe('createAdmin', () => {
   });
 
   afterAll(async () => {
-    await pool.end();
-    await container.stop();
+    await stopPostgres(pool, container);
   });
 
   it('creates an admin that must change its password and stores only a hash', async () => {

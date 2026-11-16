@@ -20,6 +20,8 @@ export const ERROR_CODES = Object.freeze({
   importFileMismatch: 'import_file_mismatch',
   importInvalid: 'import_invalid',
   importConflict: 'import_conflict',
+  idempotencyKeyReused: 'idempotency_key_reused',
+  nothingToIssue: 'nothing_to_issue',
 } as const);
 
 export type ErrorCode = (typeof ERROR_CODES)[keyof typeof ERROR_CODES];

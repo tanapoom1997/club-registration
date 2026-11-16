@@ -38,7 +38,7 @@ import {
   studentRow,
 } from './support/import.js';
 import type { MultipartFile } from './support/import.js';
-import { startMigratedPostgres } from './support/postgres.js';
+import { startMigratedPostgres, stopPostgres } from './support/postgres.js';
 
 type InjectResponse = Awaited<ReturnType<FastifyInstance['inject']>>;
 
@@ -170,8 +170,7 @@ describe('admin import commit', () => {
   });
 
   afterAll(async () => {
-    await pool.end();
-    await container.stop();
+    await stopPostgres(pool, container);
   });
 
   beforeEach(async () => {

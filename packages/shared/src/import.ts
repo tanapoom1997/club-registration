@@ -101,6 +101,10 @@ export const clubCodeSchema = z
     'รหัสชุมนุมใช้ได้เฉพาะตัวอักษร ตัวเลข . _ / - (ไม่มีช่องว่าง)',
   );
 
+// Shared with the admin screens that pick a classroom, so a value accepted there matches what the
+// import stored.
+export const classroomSchema = requiredText('ห้อง', CLASSROOM_MAX_LENGTH);
+
 // Same normalisation as login, so the student signs in with exactly the key that was imported.
 const studentIdCell = z.string({ error: 'กรุณากรอกรหัสนักเรียน' }).pipe(loginIdSchema);
 
@@ -147,7 +151,7 @@ export const studentImportRowSchema = z.object({
   loginId: studentIdCell,
   fullName: requiredText('ชื่อ-สกุล', NAME_MAX_LENGTH),
   grade: gradeCell('ชั้น'),
-  classroom: requiredText('ห้อง', CLASSROOM_MAX_LENGTH),
+  classroom: classroomSchema,
   seatNo: wholeNumber('เลขที่', 1, SEAT_NO_MAX),
 });
 export type StudentImportRow = z.infer<typeof studentImportRowSchema>;

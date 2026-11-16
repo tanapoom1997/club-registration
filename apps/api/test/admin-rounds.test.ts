@@ -14,7 +14,7 @@ import { createPool } from '../src/db.js';
 import { roundStatusAt } from '../src/services/rounds.js';
 import { buildTestApp, createTestUser } from './support/app.js';
 import type { TestUser } from './support/app.js';
-import { startMigratedPostgres } from './support/postgres.js';
+import { startMigratedPostgres, stopPostgres } from './support/postgres.js';
 
 type InjectResponse = Awaited<ReturnType<FastifyInstance['inject']>>;
 
@@ -95,8 +95,7 @@ describe('admin rounds', () => {
   });
 
   afterAll(async () => {
-    await pool.end();
-    await container.stop();
+    await stopPostgres(pool, container);
   });
 
   beforeEach(async () => {

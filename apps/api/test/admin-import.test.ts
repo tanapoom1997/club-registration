@@ -42,7 +42,7 @@ import {
   uniqueStudentId,
   uniqueTerm,
 } from './support/import-db.js';
-import { startMigratedPostgres } from './support/postgres.js';
+import { startMigratedPostgres, stopPostgres } from './support/postgres.js';
 
 type InjectResponse = Awaited<ReturnType<FastifyInstance['inject']>>;
 
@@ -108,8 +108,7 @@ describe('admin import preview', () => {
   });
 
   afterAll(async () => {
-    await pool.end();
-    await container.stop();
+    await stopPostgres(pool, container);
   });
 
   beforeEach(async () => {

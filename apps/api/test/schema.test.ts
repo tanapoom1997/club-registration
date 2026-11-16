@@ -1,7 +1,7 @@
 import type { StartedPostgreSqlContainer } from '@testcontainers/postgresql';
 import pg from 'pg';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import { startMigratedPostgres } from './support/postgres.js';
+import { startMigratedPostgres, stopPostgres } from './support/postgres.js';
 
 const CHECK_VIOLATION = '23514';
 const UNIQUE_VIOLATION = '23505';
@@ -54,8 +54,7 @@ describe('initial schema constraints', () => {
   });
 
   afterAll(async () => {
-    await pool.end();
-    await container.stop();
+    await stopPostgres(pool, container);
   });
 
   it('rejects registered above capacity', async () => {

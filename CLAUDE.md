@@ -2,7 +2,7 @@
 
 ระบบลงทะเบียนชุมนุมโรงเรียน (นักเรียน ~2,500 คน, รอบละ ~450 concurrent) แผนเต็ม สถาปัตยกรรม data model และ roadmap อยู่ใน [README.md](README.md) อ่านก่อนเริ่มงานทุกครั้ง ไฟล์นี้เก็บเฉพาะกติกาการทำงานที่ต้องไม่หลุด
 
-**สถานะ:** Phase 1 ข้อ 1 (Auth + role guard) และข้อ 3 (admin จัดการรอบ: `apps/api/src/routes/admin-rounds.ts` + `services/rounds.ts`, หน้า `/admin/rounds`) เสร็จแล้ว ข้อ 2 (import Excel: dry run + ยืนยัน, `routes/admin-import.ts`, `import/`, `services/import-plan.ts`, `services/import-commit.ts`, หน้า `/admin/import`) เสร็จแล้ว นักเรียนที่นำเข้าใหม่ยัง login ไม่ได้จนกว่าจะมีขั้นออกรหัสผ่านเริ่มต้น ต่อจาก scaffold (monorepo, migration แรกครบทุกตาราง, `GET /api/health`) มี login/เปลี่ยนรหัส/logout, `create-admin` และหน้า FE ตาม role (เมนูอื่นยังเป็นโครงว่าง) ยังไม่มี logic ลงทะเบียน
+**สถานะ:** Phase 1 ข้อ 1 (Auth + role guard) และข้อ 3 (admin จัดการรอบ: `apps/api/src/routes/admin-rounds.ts` + `services/rounds.ts`, หน้า `/admin/rounds`) เสร็จแล้ว ข้อ 2 (import Excel: dry run + ยืนยัน, `routes/admin-import.ts`, `import/`, `services/import-plan.ts`, `services/import-commit.ts`, หน้า `/admin/import`) เสร็จแล้ว รวมขั้นออกรหัสผ่านเริ่มต้น (`routes/admin-students.ts`, `services/initial-passwords.ts`, หน้า `/admin/initial-passwords`) ต่อจาก scaffold (monorepo, migration แรกครบทุกตาราง, `GET /api/health`) มี login/เปลี่ยนรหัส/logout, `create-admin` และหน้า FE ตาม role (เมนูอื่นยังเป็นโครงว่าง) ยังไม่มี logic ลงทะเบียน
 
 ## กฎที่ห้ามละเมิด
 
@@ -13,7 +13,7 @@
 5. **ไม่เชื่อ role หรือ `student_id` จาก client** ใช้ค่าจาก JWT เท่านั้น
 6. **`apps/web` กับ `apps/api` ห้าม import กัน** คุยผ่าน HTTP และ `packages/shared` เท่านั้น
 7. **ทุก endpoint เขียนต้อง idempotent** รับ `idempotency_key` และเขียน `registration_events`
-8. **Export Excel ต้อง escape** ค่าที่ขึ้นต้นด้วย `=`, `+`, `-`, `@` และ export รายห้องต้องมีนักเรียนทุกคนในห้อง รวมคนที่ยังไม่ลง (สเปกเต็มดู README หัวข้อ Export รายชื่อ)
+8. **Export Excel ต้อง escape** ค่าที่ขึ้นต้นด้วย `=`, `+`, `-`, `@` (ใช้ `escapeCellText` ใน `apps/api/src/export/escape-cell.ts` ที่เดียว) และ export รายห้องต้องมีนักเรียนทุกคนในห้อง รวมคนที่ยังไม่ลง (สเปกเต็มดู README หัวข้อ Export รายชื่อ)
 9. **ห้ามใส่ข้อมูลจริงใน repo**: ไฟล์ .xlsx ของนักเรียน, `.env*`, `*.dump`, รหัสผ่าน, secret ข้อมูลทดสอบใช้ข้อมูลสมมติเท่านั้น (`templates/` เก็บได้เฉพาะไฟล์เปล่า)
 10. **ห้ามใส่ secret/PII ใน log**
 11. **ห้าม `dangerouslySetInnerHTML`** กับข้อความที่ admin กรอก
