@@ -1,5 +1,5 @@
 import { ERROR_CODES } from '@club-registration/shared';
-import type { RoundStatus } from '@club-registration/shared';
+import type { Round, RoundStatus } from '@club-registration/shared';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { ApiError } from '@/lib/api';
 import { useSetSession } from '@/lib/session';
@@ -16,6 +16,10 @@ export const STATUS_DISPLAY: Readonly<
   open: { label: 'เปิดอยู่', variant: 'success' },
   closed: { label: 'ปิดแล้ว', variant: 'neutral' },
 });
+
+// How a round is named in the round pickers of other admin pages.
+export const roundOptionLabel = ({ term, grade, status }: Round): string =>
+  `${term} ${gradeLabel(grade)} (${STATUS_DISPLAY[status].label})`;
 
 const ERROR_MESSAGES: Readonly<Record<string, string>> = Object.freeze({
   [ERROR_CODES.roundExists]: 'มีรอบของภาคเรียนและชั้นนี้อยู่แล้ว',

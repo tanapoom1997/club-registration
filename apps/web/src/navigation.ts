@@ -36,7 +36,7 @@ export const MENUS: Readonly<Record<Role, readonly MenuItem[]>> = Object.freeze(
     {
       path: 'export',
       label: 'ส่งออกรายชื่อ',
-      description: 'ดาวน์โหลดรายชื่อรายชุมนุมเป็น CSV/Excel',
+      description: 'ดาวน์โหลดรายชื่อรายชุมนุมหรือรายห้องเป็น Excel',
     },
     {
       path: 'initial-passwords',

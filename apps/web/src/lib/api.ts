@@ -6,6 +6,7 @@ import {
   importCommitResponseSchema,
   importPreviewResponseSchema,
   passwordStatusResponseSchema,
+  roundClassroomsResponseSchema,
   roundListResponseSchema,
   roundClubsResponseSchema,
   roundResponseSchema,
@@ -17,12 +18,14 @@ import type {
   ClassroomPasswordStatus,
   CreateRoundBatchRequest,
   CreateRoundRequest,
+  ExportQuery,
   HealthResponse,
   ImportCommitResponse,
   ImportPreviewResponse,
   IssueInitialPasswordsRequest,
   LoginRequest,
   Round,
+  RoundClassroomsResponse,
   RoundClubsResponse,
   SessionUser,
   UpdateClubRequest,
@@ -123,6 +126,9 @@ export const deleteRound = async (id: number): Promise<void> => {
 export const fetchRoundClubs = async (roundId: number): Promise<RoundClubsResponse> =>
   await sendJson(`/api/admin/rounds/${roundId}/clubs`, 'GET', roundClubsResponseSchema);
 
+export const fetchRoundClassrooms = async (roundId: number): Promise<RoundClassroomsResponse> =>
+  await sendJson(`/api/admin/rounds/${roundId}/classrooms`, 'GET', roundClassroomsResponseSchema);
+
 export const updateClub = async (id: number, request: UpdateClubRequest): Promise<AdminClub> =>
   (await sendJson(`/api/admin/clubs/${id}`, 'PATCH', adminClubResponseSchema, request)).club;
 
@@ -173,13 +179,15 @@ export const fetchPasswordStatus = async (): Promise<ClassroomPasswordStatus[]> 
   (await sendJson('/api/admin/students/password-status', 'GET', passwordStatusResponseSchema))
     .classrooms;
 
-export type IssuedPasswordFile = { file: Blob; filename: string; issuedCount: number };
+export type DownloadedFile = { file: Blob; filename: string };
+export type IssuedPasswordFile = DownloadedFile & { issuedCount: number };
 
 const DEFAULT_PASSWORD_FILENAME = 'initial-passwords.xlsx';
+const DEFAULT_EXPORT_FILENAME = 'name-list.xlsx';
 
-// The server names the file after the scope only; anything unexpected falls back to a fixed name.
-const attachmentFilename = (disposition: string | null): string =>
-  /filename="([A-Za-z0-9._-]+)"/.exec(disposition ?? '')?.[1] ?? DEFAULT_PASSWORD_FILENAME;
+// The server names a file after its scope only; anything unexpected falls back to a fixed name.
+const attachmentFilename = (disposition: string | null, fallback: string): string =>
+  /filename="([A-Za-z0-9._-]+)"/.exec(disposition ?? '')?.[1] ?? fallback;
 
 // The answer is the .xlsx itself, the only copy of the new passwords anywhere.
 export const issueInitialPasswords = async (
@@ -188,7 +196,38 @@ export const issueInitialPasswords = async (
   const response = await send('/api/admin/students/initial-passwords', 'POST', request);
   return {
     file: await response.blob(),
-    filename: attachmentFilename(response.headers.get('content-disposition')),
+    filename: attachmentFilename(
+      response.headers.get('content-disposition'),
+      DEFAULT_PASSWORD_FILENAME,
+    ),
     issuedCount: Number(response.headers.get(ISSUED_COUNT_HEADER) ?? 0),
+  };
+};
+
+// Fixed parameter order (view, scope, format) so the same choice always asks for the same URL.
+const exportSearch = (query: ExportQuery): string => {
+  const scope: [string, string][] =
+    query.view === 'club'
+      ? query.clubId === undefined
+        ? []
+        : [['clubId', String(query.clubId)]]
+      : query.classroom === undefined
+        ? []
+        : [['classroom', query.classroom]];
+  return new URLSearchParams([['view', query.view], ...scope, ['format', query.format]]).toString();
+};
+
+// A read: downloading the same list twice is harmless, so no idempotency key.
+export const downloadNameList = async (
+  roundId: number,
+  query: ExportQuery,
+): Promise<DownloadedFile> => {
+  const response = await send(`/api/admin/rounds/${roundId}/export?${exportSearch(query)}`, 'GET');
+  return {
+    file: await response.blob(),
+    filename: attachmentFilename(
+      response.headers.get('content-disposition'),
+      DEFAULT_EXPORT_FILENAME,
+    ),
   };
 };

@@ -12,6 +12,7 @@ import { HomePage } from '@/pages/HomePage';
 import { LoginPage } from '@/pages/LoginPage';
 import { PlaceholderPage } from '@/pages/PlaceholderPage';
 import { AdminClubsPage } from '@/pages/admin-clubs/AdminClubsPage';
+import { AdminExportPage } from '@/pages/admin-export/AdminExportPage';
 import { AdminImportPage } from '@/pages/admin-import/AdminImportPage';
 import { AdminInitialPasswordsPage } from '@/pages/admin-initial-passwords/AdminInitialPasswordsPage';
 import { AdminRoundsPage } from '@/pages/admin-rounds/AdminRoundsPage';
@@ -24,6 +25,7 @@ const PAGES: Readonly<Record<Role, Readonly<Record<string, ReactElement>>>> = Ob
     rounds: <AdminRoundsPage />,
     import: <AdminImportPage />,
     clubs: <AdminClubsPage />,
+    export: <AdminExportPage />,
     'initial-passwords': <AdminInitialPasswordsPage />,
   },
 });
