@@ -2,8 +2,8 @@ import type { StartedPostgreSqlContainer } from '@testcontainers/postgresql';
 import { errorResponseSchema, healthResponseSchema } from '@club-registration/shared';
 import type { Pool } from 'pg';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import { buildApp } from '../src/app.js';
 import { createPool } from '../src/db.js';
+import { buildTestApp } from './support/app.js';
 import { startMigratedPostgres } from './support/postgres.js';
 
 describe('GET /api/health', () => {
@@ -21,7 +21,7 @@ describe('GET /api/health', () => {
   });
 
   it('reports ok when the database answers', async () => {
-    const app = await buildApp({ pool });
+    const app = await buildTestApp(pool);
 
     const response = await app.inject({ method: 'GET', url: '/api/health' });
 
@@ -33,7 +33,7 @@ describe('GET /api/health', () => {
   it('reports 503 when the database cannot be reached', async () => {
     // Port 1 is reserved and never has Postgres listening, so the connection really fails.
     const unreachablePool = createPool('postgres://nobody:nothing@127.0.0.1:1/none');
-    const app = await buildApp({ pool: unreachablePool });
+    const app = await buildTestApp(unreachablePool);
 
     const response = await app.inject({ method: 'GET', url: '/api/health' });
 
@@ -47,7 +47,7 @@ describe('GET /api/health', () => {
   });
 
   it('answers unknown routes with the shared error shape', async () => {
-    const app = await buildApp({ pool });
+    const app = await buildTestApp(pool);
 
     const response = await app.inject({ method: 'GET', url: '/api/does-not-exist' });
 

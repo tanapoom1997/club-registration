@@ -6,6 +6,7 @@ const config = loadConfig();
 const pool = createPool(config.DATABASE_URL);
 const app = await buildApp({
   pool,
+  jwtSecret: config.JWT_SECRET,
   logger: { level: config.NODE_ENV === 'production' ? 'info' : 'debug' },
   trustProxy: config.TRUST_PROXY,
 });

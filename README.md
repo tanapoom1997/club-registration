@@ -2,7 +2,7 @@
 
 ระบบลงทะเบียนชุมนุมของโรงเรียน สำหรับนักเรียน ~2,500 คน แบ่งรอบตามชั้น ม.1–ม.6 รอบละ ~400–450 คน
 
-> **สถานะ:** เริ่ม Phase 1 แล้ว มี monorepo, migration แรก และ `GET /api/health` พร้อมหน้าสถานะระบบ ยังไม่มี auth และ logic ลงทะเบียน เอกสารนี้คือแผนและข้อกำหนดของโปรเจกต์
+> **สถานะ:** Phase 1 ทำ Auth + role guard เสร็จแล้ว (login, บังคับเปลี่ยนรหัสครั้งแรก, logout, `create-admin`, หน้า FE ตาม role) ต่อจาก monorepo, migration แรก และ `GET /api/health` ยังไม่มี logic ลงทะเบียน เอกสารนี้คือแผนและข้อกำหนดของโปรเจกต์
 >
 > **หมายเหตุ:** ตัวเลข performance ทั้งหมดเป็นการประเมินจากหลักการ ยังไม่ได้วัดจริง ต้อง load test ก่อนใช้งาน
 
@@ -54,11 +54,12 @@
 
 | ชั้น | เลือก | เหตุผลสั้นๆ |
 |---|---|---|
-| ภาษา/Runtime | TypeScript (strict), Node.js 24 LTS | type safety, กลับมาแก้ปีหน้าได้ง่าย |
+| ภาษา/Runtime | TypeScript (strict), Node.js 24 LTS (≥ 24.7) | type safety, กลับมาแก้ปีหน้าได้ง่าย |
 | Backend | Fastify + Zod (`fastify-type-provider-zod`) | เร็ว, validation + type จาก schema เดียว |
 | Database | PostgreSQL + `pg` + SQL ตรงๆ | logic หลักคือ transaction/advisory lock ORM ซ่อนจนอ่านยาก |
 | Migration | `node-pg-migrate` | เบา ไม่ผูกกับ ORM |
-| Frontend | Vite + React + Tailwind/shadcn/ui | SPA หลัง login ไม่ต้อง SSR |
+| Auth | `@fastify/jwt` + `@fastify/cookie`, argon2id จาก `node:crypto` | argon2id มีใน Node 24.7+ แล้ว ไม่ต้องพึ่ง native addon |
+| Frontend | Vite + React + Tailwind/shadcn/ui + `react-router` | SPA หลัง login ไม่ต้อง SSR |
 | Data fetching | TanStack Query | polling คิว/สถานะทำง่าย |
 | Excel | `exceljs` | อ่าน/เขียน .xlsx |
 | Test | Vitest + Testcontainers | concurrency test ต้องใช้ Postgres จริง ห้าม mock |
@@ -100,7 +101,7 @@ club-registration/
 ## Data Model
 
 ```sql
-users               -- นักเรียนและ admin (role: student | admin), password_hash, must_change_password
+users               -- นักเรียนและ admin (role: student | admin), password_hash, must_change_password, session_version
 student_profiles    -- grade (1-6), classroom, seat_no
 rounds              -- 1 รอบต่อชั้นต่อเทอม: term, grade, opens_at, closes_at, max_active
 clubs               -- club_code, name, description, capacity, registered, round_id
@@ -138,7 +139,7 @@ COMMIT;
 
 **เป้าหมาย:** admin เตรียมข้อมูล → นักเรียนลง/ยกเลิกถูกกติกา → admin ได้รายชื่อ
 
-1. **Auth:** login รหัสนักเรียน + รหัสเริ่มต้นสุ่มรายคน, บังคับเปลี่ยนรหัสครั้งแรก, role `student`/`admin` (JWT, secret จาก env)
+1. ~~**Auth:** login รหัสนักเรียน + รหัสเริ่มต้นสุ่มรายคน, บังคับเปลี่ยนรหัสครั้งแรก, role `student`/`admin` (JWT, secret จาก env)~~ เสร็จแล้ว
 2. **Admin import Excel:** students, clubs, advisors → dry run → ยืนยัน → upsert ใน transaction เดียว
 3. **Admin จัดการรอบ:** สร้างรอบต่อชั้น กำหนด `opens_at`/`closes_at`
 4. **นักเรียน:** ดูรายการชุมนุมในชั้นตัวเอง (ครู, ที่เหลือ), ลง, ยกเลิก, ดูผลของฉัน
@@ -239,6 +240,12 @@ Admin เพิ่ม/ลบ/ย้ายนักเรียนแทน บ�
 - **รหัสผ่านเริ่มต้น:** สุ่มรายคน, เก็บเฉพาะ hash, admin ดาวน์โหลดรายการได้ครั้งเดียว, บังคับเปลี่ยนตอน login แรก ห้ามใช้เลขบัตร/วันเกิด
 - **ตรวจสิทธิ์ที่ server ทุก endpoint** ไม่เชื่อ role/`student_id` จาก client ใช้ค่าจาก JWT เท่านั้น
 - **Rate limit** ที่ `/auth/login` และ endpoint เขียน
+- **Session:** JWT (HS256, อายุ 2 ชม.) อยู่ใน cookie `HttpOnly; Secure; SameSite=Strict; Path=/api` ไม่เก็บใน `localStorage` ทุก request เช็ค `users.session_version` กับค่าใน token → logout หรือเปลี่ยนรหัส = token เก่าทุกเครื่องใช้ไม่ได้ทันที (สำคัญกับคอมห้องแล็บที่ใช้ร่วมกัน) และถ้า role ใน DB เปลี่ยน token เดิมก็ใช้ไม่ได้
+- **บังคับเปลี่ยนรหัสครั้งแรก:** ถ้า `must_change_password` ทุก route ตอบ `403 password_change_required` ยกเว้น `/auth/me`, `/auth/change-password`, `/auth/logout`
+- **CSRF:** `SameSite=Strict` + endpoint เขียนรับเฉพาะ JSON (form ข้ามเว็บส่ง `application/json` ไม่ได้ถ้าไม่ผ่าน CORS preflight ซึ่งเราไม่เปิด)
+- **Rate limit login:** 10 ครั้ง/15 นาที ต่อ IP + รหัสผู้ใช้ (คนอื่นแกล้งล็อกบัญชีนักเรียนจากที่อื่นไม่ได้) และ 600 ครั้ง/นาที ต่อ IP ที่ตั้งสูงเพราะทั้งโรงเรียนอาจออก NAT IP เดียว **ต้องปรับตอน load test** store อยู่ใน memory ใช้ได้เพราะเป็นเครื่องเดียว และหลัง Caddy ต้องตั้ง `TRUST_PROXY=true` ไม่อย่างนั้นทุก request จะมี IP ของ Caddy และนับรวมเป็นก้อนเดียว
+- **Login ที่ไม่มีผู้ใช้** ยังคำนวณ argon2 หนึ่งรอบ เวลาตอบจึงไม่บอกว่ารหัสนักเรียนไหนมีอยู่จริง
+- **Admin คนแรก:** `pnpm --filter api create-admin <login_id>` สุ่มรหัส 16 ตัว แสดงครั้งเดียว เก็บแค่ hash และต้องเปลี่ยนตอน login แรก
 - **Secret:** `JWT_SECRET`, DB password อยู่ใน env / SSM Parameter Store ห้ามอยู่ใน repo หรือ image
 - **ข้อมูลติดต่อครู:** นักเรียน ~2,500 คนจะเห็น ควรให้ครูยินยอม ถ้ามีช่องทางกลางของโรงเรียนให้ใช้อันนั้น ทุกช่องเป็น optional
 - **Frontend:** ห้าม `dangerouslySetInnerHTML` กับ `description` ที่ admin กรอก
@@ -260,7 +267,7 @@ EC2 (t4g.small) ──► Caddy (HTTPS อัตโนมัติ)
 | Env | ความหมาย |
 |---|---|
 | `DATABASE_URL` | connection string |
-| `JWT_SECRET` | secret สำหรับ sign token |
+| `JWT_SECRET` | secret สำหรับ sign token (≥ 32 ตัวอักษร สร้างด้วย `openssl rand -base64 48`) ขาดหรือสั้นไป = server ไม่ start |
 | `PORT` | default 3000 |
 | `NODE_ENV` | `production` |
 | `TRUST_PROXY` | เมื่ออยู่หลัง proxy/LB |
@@ -319,4 +326,4 @@ EC2 (t4g.small) ──► Caddy (HTTPS อัตโนมัติ)
 
 ## ขั้นตอนถัดไป
 
-ทำต่อใน **Phase 1**: auth + role guard → endpoint ลง/ยกเลิก **พร้อม concurrency test** → Excel import/export → frontend → Ops (scaffold monorepo และ migration แรกเสร็จแล้ว)
+ทำต่อใน **Phase 1**: endpoint ลง/ยกเลิก **พร้อม concurrency test** → Excel import/export → frontend (เติมเมนูที่เป็นโครงว่าง) → Ops (scaffold, migration แรก และ auth + role guard เสร็จแล้ว)
