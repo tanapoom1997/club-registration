@@ -126,3 +126,24 @@ export type {
   RoundClubsResponse,
   UpdateClubRequest,
 } from './clubs.js';
+export {
+  CLASSROOM_LIST_COLUMNS,
+  CLUB_LIST_COLUMNS,
+  EXPORT_FORMATS,
+  EXPORT_VIEWS,
+  NOT_REGISTERED_LABEL,
+  exportFormatSchema,
+  exportQuerySchema,
+  exportViewSchema,
+  roundClassroomSchema,
+  roundClassroomsResponseSchema,
+  roundExportParamsSchema,
+} from './export.js';
+export type {
+  ExportFormat,
+  ExportQuery,
+  ExportView,
+  RoundClassroom,
+  RoundClassroomsResponse,
+  RoundExportParams,
+} from './export.js';

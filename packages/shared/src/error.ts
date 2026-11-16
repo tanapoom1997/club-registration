@@ -23,6 +23,7 @@ export const ERROR_CODES = Object.freeze({
   idempotencyKeyReused: 'idempotency_key_reused',
   nothingToIssue: 'nothing_to_issue',
   capacityBelowRegistered: 'capacity_below_registered',
+  nothingToExport: 'nothing_to_export',
 } as const);
 
 export type ErrorCode = (typeof ERROR_CODES)[keyof typeof ERROR_CODES];
