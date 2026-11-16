@@ -18,7 +18,12 @@ import { saveFile } from '@/lib/download';
 import { useSetSession } from '@/lib/session';
 import { CLUBS_QUERY_KEY } from '@/pages/admin-clubs/club-ui';
 import { ROUNDS_QUERY_KEY, gradeLabel, roundOptionLabel } from '@/pages/admin-rounds/round-ui';
-import { CLASSROOMS_QUERY_KEY, FORMAT_LABELS, VIEW_OPTIONS, exportErrorMessage } from './export-ui';
+import {
+  CLASSROOMS_QUERY_KEY,
+  FORMAT_OPTIONS,
+  VIEW_OPTIONS,
+  exportErrorMessage,
+} from './export-ui';
 
 const NO_ROUND = '';
 const WHOLE_ROUND = '';
@@ -33,6 +38,12 @@ const selectClassName =
 
 const sum = (values: readonly number[]): number =>
   values.reduce((total, value) => total + value, 0);
+
+// How a whole round is split up in the chosen format.
+const PER_LIST: Readonly<Record<ExportFormat, string>> = Object.freeze({
+  xlsx: '1 ชีตต่อ',
+  pdf: 'หน้าใหม่ต่อ',
+});
 
 const studentSummary = (registered: number, total: number, of: string): string =>
   `ลงแล้ว ${registered} / ${of} ${total} คน (ยังไม่ลง ${total - registered} คน)`;
@@ -93,7 +104,7 @@ export const AdminExportPage = () => {
           value: String(id),
           label: `${clubCode} ${name}`,
         })),
-        wholeLabel: `ทั้งรอบ (${clubs.length} ชุมนุม, 1 ชีตต่อชุมนุม)`,
+        wholeLabel: `ทั้งรอบ (${clubs.length} ชุมนุม, ${PER_LIST[format]}ชุมนุม)`,
         summary: chosen
           ? `ลงแล้ว ${chosen.registered} / รับ ${chosen.capacity} คน`
           : `ลงแล้ว ${sum(clubs.map(({ registered }) => registered))} / รับ ${sum(
@@ -110,7 +121,7 @@ export const AdminExportPage = () => {
         value: classroom,
         label: `${grade}/${classroom}`,
       })),
-      wholeLabel: `ทั้งรอบ (ทุกห้องของ ${grade}, 1 ชีตต่อห้อง)`,
+      wholeLabel: `ทั้งรอบ (ทุกห้องของ ${grade}, ${PER_LIST[format]}ห้อง)`,
       summary: chosen
         ? studentSummary(chosen.registeredCount, chosen.studentCount, 'ทั้งห้อง')
         : studentSummary(
@@ -136,7 +147,7 @@ export const AdminExportPage = () => {
       <div className="space-y-2">
         <h1 className="text-xl font-semibold">ส่งออกรายชื่อ</h1>
         <p className="text-sm text-muted-foreground">
-          เลือกรอบ มุมมอง และขอบเขต แล้วดาวน์โหลดเป็นไฟล์ Excel ไปส่งต่อให้ครู
+          เลือกรอบ มุมมอง ขอบเขต และรูปแบบ แล้วดาวน์โหลดเป็นไฟล์ Excel หรือ PDF ไปส่งต่อให้ครู
           ไฟล์มีชื่อนักเรียนแต่ไม่มีเบอร์โทร อีเมล หรือ LINE ของครู
           กรุณาส่งผ่านช่องทางของโรงเรียนและอย่าโพสต์ในที่สาธารณะ
         </p>
@@ -254,10 +265,11 @@ export const AdminExportPage = () => {
           <fieldset className="space-y-2">
             <legend className="text-sm font-medium">รูปแบบ</legend>
             {EXPORT_FORMATS.map((value) => (
-              <label key={value} className="flex items-center gap-2 text-sm">
+              <label key={value} className="flex items-start gap-2 text-sm">
                 <input
                   type="radio"
                   name="export-format"
+                  className="mt-1"
                   value={value}
                   checked={format === value}
                   onChange={() => {
@@ -265,10 +277,14 @@ export const AdminExportPage = () => {
                     mutation.reset();
                   }}
                 />
-                <span>{FORMAT_LABELS[value]}</span>
+                <span>
+                  <span className="font-medium">{FORMAT_OPTIONS[value].label}</span>
+                  <span className="block text-muted-foreground">
+                    {FORMAT_OPTIONS[value].description}
+                  </span>
+                </span>
               </label>
             ))}
-            <p className="text-sm text-muted-foreground">PDF ยังไม่พร้อมใช้งาน</p>
           </fieldset>
 
           <Button

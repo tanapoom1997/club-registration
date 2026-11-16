@@ -17,9 +17,17 @@ export const VIEW_OPTIONS: Readonly<Record<ExportView, { label: string; descript
     },
   });
 
-// PDF joins here once a library that lays out Thai correctly has been chosen.
-export const FORMAT_LABELS: Readonly<Record<ExportFormat, string>> = Object.freeze({
-  xlsx: 'Excel (.xlsx)',
+export const FORMAT_OPTIONS: Readonly<
+  Record<ExportFormat, { label: string; description: string }>
+> = Object.freeze({
+  xlsx: {
+    label: 'Excel (.xlsx)',
+    description: 'แก้ไขหรือจัดเรียงต่อได้ 1 ชีตต่อชุมนุม/ห้อง',
+  },
+  pdf: {
+    label: 'PDF',
+    description: 'พร้อมพิมพ์ A4 ขึ้นหน้าใหม่ต่อชุมนุม/ห้อง มีเลขหน้าและเวลาที่ส่งออก',
+  },
 });
 
 const ERROR_MESSAGES: Readonly<Record<string, string>> = Object.freeze({

@@ -183,7 +183,6 @@ export type DownloadedFile = { file: Blob; filename: string };
 export type IssuedPasswordFile = DownloadedFile & { issuedCount: number };
 
 const DEFAULT_PASSWORD_FILENAME = 'initial-passwords.xlsx';
-const DEFAULT_EXPORT_FILENAME = 'name-list.xlsx';
 
 // The server names a file after its scope only; anything unexpected falls back to a fixed name.
 const attachmentFilename = (disposition: string | null, fallback: string): string =>
@@ -227,7 +226,7 @@ export const downloadNameList = async (
     file: await response.blob(),
     filename: attachmentFilename(
       response.headers.get('content-disposition'),
-      DEFAULT_EXPORT_FILENAME,
+      `name-list.${query.format}`,
     ),
   };
 };

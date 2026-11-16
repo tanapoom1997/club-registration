@@ -2,7 +2,7 @@
 
 ระบบลงทะเบียนชุมนุมของโรงเรียน สำหรับนักเรียน ~2,500 คน แบ่งรอบตามชั้น ม.1–ม.6 รอบละ ~400–450 คน
 
-> **สถานะ:** Phase 1 ทำ Auth + role guard เสร็จแล้ว (login, บังคับเปลี่ยนรหัสครั้งแรก, logout, `create-admin`, หน้า FE ตาม role) admin จัดการรอบลงทะเบียนได้แล้ว (`/api/admin/rounds` + หน้า `/admin/rounds`) นำเข้า Excel ได้แล้วทั้งขั้นตรวจ (dry run) และขั้นยืนยัน (`/api/admin/import/preview`, `/api/admin/import/commit` + หน้า `/admin/import`) ออกรหัสผ่านเริ่มต้นให้นักเรียนเป็นไฟล์ Excel ได้แล้ว (`/api/admin/students/password-status`, `/api/admin/students/initial-passwords` + หน้า `/admin/initial-passwords`) ดู/แก้ชุมนุมรายรอบได้แล้ว (`/api/admin/rounds/:roundId/clubs`, `/api/admin/clubs/:id` + หน้า `/admin/clubs`) และส่งออกรายชื่อรายชุมนุม/รายห้องเป็น Excel ได้แล้ว (`/api/admin/rounds/:roundId/export` + หน้า `/admin/export`, PDF ยังไม่ทำ) ต่อจาก monorepo, migration แรก และ `GET /api/health` ยังไม่มี logic ลงทะเบียน เอกสารนี้คือแผนและข้อกำหนดของโปรเจกต์
+> **สถานะ:** Phase 1 ทำ Auth + role guard เสร็จแล้ว (login, บังคับเปลี่ยนรหัสครั้งแรก, logout, `create-admin`, หน้า FE ตาม role) admin จัดการรอบลงทะเบียนได้แล้ว (`/api/admin/rounds` + หน้า `/admin/rounds`) นำเข้า Excel ได้แล้วทั้งขั้นตรวจ (dry run) และขั้นยืนยัน (`/api/admin/import/preview`, `/api/admin/import/commit` + หน้า `/admin/import`) ออกรหัสผ่านเริ่มต้นให้นักเรียนเป็นไฟล์ Excel ได้แล้ว (`/api/admin/students/password-status`, `/api/admin/students/initial-passwords` + หน้า `/admin/initial-passwords`) ดู/แก้ชุมนุมรายรอบได้แล้ว (`/api/admin/rounds/:roundId/clubs`, `/api/admin/clubs/:id` + หน้า `/admin/clubs`) และส่งออกรายชื่อรายชุมนุม/รายห้องเป็น Excel และ PDF ได้แล้ว (`/api/admin/rounds/:roundId/export` + หน้า `/admin/export`) ต่อจาก monorepo, migration แรก และ `GET /api/health` ยังไม่มี logic ลงทะเบียน เอกสารนี้คือแผนและข้อกำหนดของโปรเจกต์
 >
 > **หมายเหตุ:** ตัวเลข performance ทั้งหมดเป็นการประเมินจากหลักการ ยังไม่ได้วัดจริง ต้อง load test ก่อนใช้งาน
 
@@ -62,7 +62,7 @@
 | Frontend | Vite + React + Tailwind/shadcn/ui + `react-router` | SPA หลัง login ไม่ต้อง SSR |
 | Data fetching | TanStack Query | polling คิว/สถานะทำง่าย |
 | Excel | `exceljs` | อ่าน/เขียน .xlsx |
-| PDF | ยังไม่เลือก | ต้องวางภาษาไทยถูกต้อง ดูรายการที่ยังเปิดอยู่ข้อ 6 |
+| PDF | `pdfkit` + ฟอนต์ Sarabun (SIL OFL 1.1) | สร้างฝั่ง server ไม่ต้องมี browser, spike แล้ววางสระบน/ล่างและวรรณยุกต์ไทยถูก (รายการที่ยังเปิดอยู่ข้อ 6) |
 | Test | Vitest + Testcontainers | concurrency test ต้องใช้ Postgres จริง ห้าม mock |
 | Repo | pnpm workspaces (monorepo เดียว) | แชร์ Zod/type, PR เดียวแก้ได้ทั้งระบบ |
 | Deploy | Docker image เดียว + Compose + Caddy บน EC2 | เครื่องเดียว ดูแลง่าย |
@@ -80,7 +80,7 @@
 ```
 club-registration/
 ├── apps/
-│   ├── api/        # Fastify + pg + migrations
+│   ├── api/        # Fastify + pg + migrations (+ assets/fonts ฟอนต์ PDF, OFL)
 │   └── web/        # Vite + React
 ├── packages/
 │   └── shared/     # Zod schema + type ที่ใช้ร่วมกัน
@@ -150,7 +150,7 @@ COMMIT;
 4. **นักเรียน:** ดูรายการชุมนุมในชั้นตัวเอง (ครู, ที่เหลือ), ลง, ยกเลิก, ดูผลของฉัน
 5. **กติกาที่ DB:** 1 คน 1 ชุมนุม, ห้ามเกิน capacity, เฉพาะชั้นตัวเอง, เฉพาะช่วงเปิดรอบ
 6. **Idempotency + event log**
-7. **Admin export:** รายชื่อแบบ **รายชุมนุม** และ **รายห้อง** เลือกได้ทั้ง **Excel** และ **PDF** (รายละเอียดดูหัวข้อ [Export รายชื่อ](#export-รายชื่อ)) ส่วน **Excel เสร็จแล้ว** (A6a) **PDF ยังไม่ทำ** (A6b รอ spike ไลบรารี ดูรายการที่ยังเปิดอยู่ข้อ 6)
+7. **Admin export:** รายชื่อแบบ **รายชุมนุม** และ **รายห้อง** เลือกได้ทั้ง **Excel** และ **PDF** (รายละเอียดดูหัวข้อ [Export รายชื่อ](#export-รายชื่อ)) ทั้ง Excel (A6a) และ PDF (A6b) **เสร็จแล้ว**
 8. **Ops:** Dockerfile, `docker-compose.yml`, Caddy HTTPS, `/api/health`, migration script แยก, graceful shutdown, backup `pg_dump` ไป S3, runbook (deploy/backup/restore/เปิด-ปิดเครื่อง)
 9. **Test:** concurrency test + invariant `clubs.registered` = จำนวน registration จริง
 
@@ -262,14 +262,19 @@ Admin เลือก **รอบ** → เลือก **มุมมอง** (
 - **รายห้องต้องมีนักเรียนทุกคนในห้อง** รวมคนที่ยังไม่ลง ไม่ใช่แค่คนที่มี registration
 - **ทั้งรอบ:** Excel = 1 sheet ต่อชุมนุม/ห้อง, PDF = ขึ้นหน้าใหม่ต่อชุมนุม/ห้อง
 - **ข้อมูลติดต่อครู** (เบอร์, อีเมล, LINE) ไม่ใส่ใน export รายห้อง ใส่แค่ชื่อครูในรายชุมนุม
-- **PDF:** ขนาด A4 แนวตั้ง ฝังฟอนต์ไทยที่ license อนุญาตให้แจกจ่าย (เช่น OFL) ท้ายหน้ามีวันเวลาที่ export (เวลาไทย) และเลขหน้า
+- **PDF:** ขนาด A4 แนวตั้ง ฝังฟอนต์ไทยที่ license อนุญาตให้แจกจ่าย (Sarabun, OFL) ท้ายหน้ามีวันเวลาที่ export (เวลาไทย) และเลขหน้า (รายละเอียดดู **รูปแบบ PDF** ข้างล่าง)
 - **Excel:** escape ค่าที่ขึ้นต้นด้วย `=`, `+`, `-`, `@` (และ tab/CR) เหมือนข้อมูลอื่น ใช้ `escapeCellText` จาก `apps/api/src/export/escape-cell.ts` ตัวเดียวกับไฟล์รหัสผ่านเริ่มต้น
 - ชื่อไฟล์ใช้แค่รหัสรอบ/ชุมนุม/ห้อง ไม่ใส่ชื่อนักเรียนหรือครู
 - เป็น endpoint อ่าน ไม่มี side effect และต้องเป็น role `admin` เท่านั้น
-- **API (Excel เสร็จแล้ว):** `GET /api/admin/rounds/:roundId/export?view=club|classroom&format=xlsx` เพิ่ม `clubId=<id>` (รายชุมนุม) หรือ `classroom=<ห้อง>` (รายห้อง) เพื่อเลือกชุมนุม/ห้องเดียว ไม่ใส่ = ทั้งรอบ query เป็น strict (ใส่ `clubId` คู่กับ `view=classroom` หรือพารามิเตอร์ที่ไม่รู้จัก = `400`) `format` มีแค่ `xlsx` ตอนนี้ PDF จะเพิ่มเป็นค่าใหม่ของ enum เดิม อ่านทั้งหมดใน read-only snapshot เดียว ตัวเลขบนหัวชีตจึงตรงกับแถวข้างล่างเสมอ (จำนวนลงนับจากแถวในชีต) รอบ/ชุมนุมที่ไม่มี (หรือชุมนุมของรอบอื่น) และห้องที่ไม่มีนักเรียนในชั้นของรอบ = `404 not_found` ทั้งรอบแต่ไม่มีชุมนุม/ไม่มีนักเรียนในชั้นเลย = `404 nothing_to_export` (Excel ต้องมีอย่างน้อย 1 ชีต) ชุมนุมเดียวที่ยังไม่มีคนลงได้ชีตที่มีแต่หัวตาราง หน้า `/admin/export` ใช้ `GET /api/admin/rounds/:roundId/classrooms` (ห้องของชั้นนั้นพร้อมจำนวนลงแล้ว/ทั้งห้อง) เป็นตัวเลือกห้อง
+- **API:** `GET /api/admin/rounds/:roundId/export?view=club|classroom&format=xlsx|pdf` เพิ่ม `clubId=<id>` (รายชุมนุม) หรือ `classroom=<ห้อง>` (รายห้อง) เพื่อเลือกชุมนุม/ห้องเดียว ไม่ใส่ = ทั้งรอบ query เป็น strict (ใส่ `clubId` คู่กับ `view=classroom` หรือพารามิเตอร์ที่ไม่รู้จัก = `400`) `format` เป็น enum (`xlsx`, `pdf`) ค่าอื่น = `400` ทั้งสองรูปแบบใช้ข้อมูลชุดเดียวกัน (service `name-lists.ts` และหัวเอกสาร/แถวจาก `export/name-list-content.ts`) ต่างกันแค่การวาง อ่านทั้งหมดใน read-only snapshot เดียว ตัวเลขบนหัวชีต/หัวหน้าจึงตรงกับแถวข้างล่างเสมอ (จำนวนลงนับจากแถวในชีต) รอบ/ชุมนุมที่ไม่มี (หรือชุมนุมของรอบอื่น) และห้องที่ไม่มีนักเรียนในชั้นของรอบ = `404 not_found` ทั้งรอบแต่ไม่มีชุมนุม/ไม่มีนักเรียนในชั้นเลย = `404 nothing_to_export` (Excel ต้องมีอย่างน้อย 1 ชีต) ชุมนุมเดียวที่ยังไม่มีคนลงได้ชีต/หน้าที่มีแต่หัวตาราง หน้า `/admin/export` ใช้ `GET /api/admin/rounds/:roundId/classrooms` (ห้องของชั้นนั้นพร้อมจำนวนลงแล้ว/ทั้งห้อง) เป็นตัวเลือกห้อง
 - **รูปแบบชีต:** หัวชีตเป็นบรรทัดข้อความ (รหัส/ชื่อชุมนุม, ครูที่ปรึกษา, จำนวนลง/จำนวนรับ หรือ ชั้น/ห้อง, ลงแล้ว/ทั้งห้อง ตามด้วยรอบและเวลาที่ export เป็นเวลาไทย) เว้น 1 บรรทัดแล้วเป็นตาราง ชื่อชีต = รหัสชุมนุม หรือ `ม.<ชั้น>-<ห้อง>` A4 แนวตั้ง กว้างพอดี 1 หน้า หัวตารางพิมพ์ซ้ำทุกหน้า ท้ายหน้ามีเลขหน้า รายห้องเขียน **ยังไม่ลง** ในช่องชุมนุมของคนที่ยังไม่ลง
-- **ชื่อไฟล์:** `club-list-round-<id>-grade-<ชั้น>[-<รหัสชุมนุม>].xlsx` / `classroom-list-round-<id>-grade-<ชั้น>[-room-<ห้อง>].xlsx` รหัส/ห้องที่เป็น ASCII เก็บแค่ตัวอักษร ตัวเลข `.` `_` `-` ที่มีอักษรอื่น (เช่น ไทย) ใช้ hex ของ UTF-8 แทน ตอบด้วย `Content-Disposition: attachment` และ `Cache-Control: no-store` log แค่ admin id, รอบ, มุมมอง, ขอบเขต และจำนวน
-- **ความเสี่ยง:** ไลบรารีสร้าง PDF ฝั่ง server บางตัววางสระบน/ล่างและวรรณยุกต์ภาษาไทยผิดตำแหน่ง ต้องลองกับชื่อสมมติที่มีสระบน/ล่างและวรรณยุกต์ก่อนเลือกไลบรารี (ดูรายการที่ยังเปิดอยู่ข้อ 6)
+- **ชื่อไฟล์:** `club-list-round-<id>-grade-<ชั้น>[-<รหัสชุมนุม>].<xlsx|pdf>` / `classroom-list-round-<id>-grade-<ชั้น>[-room-<ห้อง>].<xlsx|pdf>` รหัส/ห้องที่เป็น ASCII เก็บแค่ตัวอักษร ตัวเลข `.` `_` `-` ที่มีอักษรอื่น (เช่น ไทย) ใช้ hex ของ UTF-8 แทน ตอบด้วย `Content-Type` ตามรูปแบบ (`application/pdf` สำหรับ PDF), `Content-Disposition: attachment` และ `Cache-Control: no-store` log แค่ admin id, รอบ, มุมมอง, รูปแบบ, ขอบเขต และจำนวน
+- **รูปแบบ PDF** (`apps/api/src/export/name-list-pdf.ts`, สร้างทั้งไฟล์ใน memory แล้วตอบทีเดียวเหมือน Excel): หัวเอกสารและคอลัมน์ชุดเดียวกับ Excel ชื่อชุมนุม/ห้องตัวหนาเป็นบรรทัดแรก ตารางมีเส้นและหัวตารางพื้นเทา ตัวอักษร 11pt แถวละ 17pt (ห้อง 38–40 คนจบใน 1 หน้า) รายชื่อยาวต่อหน้าถัดไปโดยขึ้นบรรทัด "<ชื่อชุมนุม/ห้อง> (ต่อ)" และพิมพ์หัวตารางซ้ำ ท้ายทุกหน้ามี "ส่งออกเมื่อ <วันเวลาไทย> น." และ "หน้า n/N" (นับทั้งไฟล์)
+  - **ข้อความไม่ล้นช่อง:** `pdfkit` ตัดบรรทัดได้แค่ที่ช่องว่าง ซึ่งชื่อไทยไม่มี จึงไม่พึ่งการตัดบรรทัด ทุกช่องเป็นบรรทัดเดียว ถ้ากว้างเกินช่องจะตัดท้ายแล้วใส่ "…" ตัดที่ขอบ grapheme (พยัญชนะไม่แยกจากสระบน/ล่างหรือวรรณยุกต์) และไม่จบด้วยสระหน้า (เ แ โ ใ ไ) เลือกตัดแทนการย่อตัวอักษรเพราะทุกแถวสูงเท่ากันและอ่านง่ายกว่า ชื่อที่ถูกตัดยังดูเต็มได้ในไฟล์ Excel บรรทัดหัวเอกสาร (เช่นรายชื่อครูหลายคน) ตัดบรรทัดที่ช่องว่างได้ไม่เกิน 3 บรรทัด (ชื่อชุมนุม 2 บรรทัด) แล้วตัดด้วย "…" แบบเดียวกัน
+  - **ข้อความล้วน:** วาดเป็น glyph ไม่มีอะไรถูกตีความเป็น markup หรือสูตร (ไม่ต้อง escape แบบ Excel) ทุกข้อความอยู่ใน marked content `/Span` ที่มี `ActualText` เพื่อให้ copy/ค้นหาในโปรแกรมอ่าน PDF ได้ข้อความตรงตามที่เขียน (Sarabun วาด "ำ" เป็นนิคหิต + glyph สระอาที่ไม่มีรหัสอักษร ถ้าไม่มี `ActualText` ตัว "า" ทั้งไฟล์อาจ copy ออกมาหาย)
+  - **ฟอนต์:** `apps/api/assets/fonts/Sarabun-Regular.ttf` และ `Sarabun-Bold.ttf` (SIL Open Font License 1.1, ข้อความ license อยู่ที่ `apps/api/assets/fonts/OFL.txt` ต้องแจกไปพร้อมฟอนต์) ฝังเฉพาะ glyph ที่ใช้ (subset) โมดูลหาฟอนต์จากตำแหน่งของตัวเอง (`import.meta.url` → `../../assets/fonts/`) จึงใช้ได้ทั้ง `src/` ตอน dev/test และ `dist/` หลัง `pnpm build` อ่านไฟล์ตอนโหลดโมดูล ถ้าหาไม่เจอ server ไม่ start (fail fast) **Docker image ต้อง copy `apps/api/assets/` ไปข้าง `dist/` ด้วย**
+  - **วัดจริงในเทสต์** (เครื่องพัฒนา 4 vCPU ไม่ใช่สเปค production, 4 รอบ): รายห้องทั้งรอบ 450 คน 12 ห้อง ได้ 12 หน้า ~99 KB ใช้ 195–300 ms ต่อ request (รวมอ่าน DB) ต้องวัดซ้ำบนเครื่องจริง
+- **Spike PDF (ปิดรายการที่ยังเปิดอยู่ข้อ 6):** `pdfkit` 0.20.2 + Sarabun วางวรรณยุกต์ซ้อนบนสระบน, ป/ฝ/ฟ กับสระบน, ญ/ฐ กับสระล่าง และ "น้ำ" ถูกตำแหน่ง (ตรวจด้วยตาจากไฟล์ที่ render เป็นภาพ) จึงไม่ต้องถอยไปใช้หน้า print ของเบราว์เซอร์ ถ้าจะเปลี่ยนฟอนต์หรืออัปเกรด `pdfkit` ต้องลองกับชื่อสมมติแบบนี้ซ้ำ
 
 ## Security
 
@@ -363,9 +368,9 @@ EC2 (t4g.small) ──► Caddy (HTTPS อัตโนมัติ)
 | 3 | Domain สำหรับ HTTPS | รับจาก env, ใส่ขั้นตอน DNS ใน README |
 | 4 | Elastic IP vs อัปเดต DNS ตอน boot | อัปเดต DNS (ถ้ามี domain) |
 | 5 | Queue อยู่ Phase 3 ไหม | Phase 3 (ย้ายขึ้นได้ถ้ากังวลวันจริง) |
-| 6 | สร้าง PDF ด้วยอะไร | ทำ spike ก่อน: ลองไลบรารีสร้าง PDF ฝั่ง server + ฟอนต์ไทย OFL กับชื่อที่มีสระบน/ล่างและวรรณยุกต์ ถ้าวางผิดให้ถอยไปใช้หน้า print ของเบราว์เซอร์ (CSS `@media print`) แล้วให้ admin กด "บันทึกเป็น PDF" เพิ่ม dependency ต้องถามก่อนตามกฎ |
+| 6 | ~~สร้าง PDF ด้วยอะไร~~ | **ปิดแล้ว:** spike ผ่าน ใช้ `pdfkit` + ฟอนต์ Sarabun (OFL) ฝั่ง server (ดูหัวข้อ [Export รายชื่อ](#export-รายชื่อ)) |
 | 7 | Export รายห้องต้องแยกตามรอบไหม | แยกตามรอบ (1 รอบ = 1 ชั้นอยู่แล้ว) |
 
 ## ขั้นตอนถัดไป
 
-ทำต่อใน **Phase 1** โดยทำฝั่ง admin ให้ครบก่อน: export PDF (A6b หลัง spike ไลบรารี) → แล้วจึง endpoint ลง/ยกเลิก **พร้อม concurrency test** และหน้านักเรียน → Ops (scaffold, migration แรก, auth + role guard, จัดการรอบ, import Excel, รหัสผ่านเริ่มต้น, หน้าชุมนุม และ export Excel เสร็จแล้ว)
+ทำต่อใน **Phase 1**: endpoint ลง/ยกเลิก **พร้อม concurrency test** และหน้านักเรียน → Ops (scaffold, migration แรก, auth + role guard, จัดการรอบ, import Excel, รหัสผ่านเริ่มต้น, หน้าชุมนุม และ export Excel/PDF เสร็จแล้ว)
