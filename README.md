@@ -326,4 +326,4 @@ EC2 (t4g.small) ──► Caddy (HTTPS อัตโนมัติ)
 
 ## ขั้นตอนถัดไป
 
-ทำต่อใน **Phase 1**: endpoint ลง/ยกเลิก **พร้อม concurrency test** → Excel import/export → frontend (เติมเมนูที่เป็นโครงว่าง) → Ops (scaffold, migration แรก, auth + role guard และจัดการรอบเสร็จแล้ว)
+ทำต่อใน **Phase 1** โดยทำฝั่ง admin ให้ครบก่อน: Excel import (dry run → ยืนยัน) → รหัสผ่านเริ่มต้น → หน้าชุมนุม → export → แล้วจึง endpoint ลง/ยกเลิก **พร้อม concurrency test** และหน้านักเรียน → Ops (scaffold, migration แรก, auth + role guard และจัดการรอบเสร็จแล้ว)
