@@ -1,9 +1,7 @@
 import type { SessionUser } from '@club-registration/shared';
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
-import { createMemoryRouter, RouterProvider } from 'react-router';
+import { cleanup, fireEvent, screen, waitFor } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { routes } from './routes';
+import { mockApi, renderAt, unauthorized } from '@/test-support/render-app';
 
 const STUDENT: SessionUser = {
   id: 1,
@@ -11,36 +9,6 @@ const STUDENT: SessionUser = {
   fullName: 'นักเรียนสมมติ หนึ่ง',
   role: 'student',
   mustChangePassword: false,
-};
-
-type Handler = (init: RequestInit | undefined) => Response;
-
-// Routes requests by "METHOD /path" so each test states exactly what the API answers.
-const mockApi = (handlers: Record<string, Handler>) => {
-  // The app only ever calls fetch with a path string.
-  const fetchMock = vi.fn((input: string, init?: RequestInit) => {
-    const key = `${init?.method ?? 'GET'} ${input}`;
-    const handler = handlers[key];
-    return Promise.resolve(
-      handler ? handler(init) : Response.json({ code: 'not_found', message: key }, { status: 404 }),
-    );
-  });
-  vi.stubGlobal('fetch', fetchMock);
-  return fetchMock;
-};
-
-const unauthorized = () =>
-  Response.json({ code: 'unauthorized', message: 'Authentication required' }, { status: 401 });
-
-const renderAt = (path: string) => {
-  const router = createMemoryRouter(routes, { initialEntries: [path] });
-  const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-  render(
-    <QueryClientProvider client={queryClient}>
-      <RouterProvider router={router} />
-    </QueryClientProvider>,
-  );
-  return router;
 };
 
 const fillLogin = (loginId: string, password: string) => {

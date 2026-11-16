@@ -21,3 +21,33 @@ export { ERROR_CODES, errorResponseSchema } from './error.js';
 export type { ErrorCode, ErrorResponse } from './error.js';
 export { healthResponseSchema } from './health.js';
 export type { HealthResponse } from './health.js';
+export {
+  DEFAULT_MAX_ACTIVE,
+  GRADES,
+  MAX_ACTIVE_LIMIT,
+  ROUND_STATUSES,
+  TERM_MAX_LENGTH,
+  createRoundBatchRequestSchema,
+  createRoundRequestSchema,
+  gradeSchema,
+  listRoundsQuerySchema,
+  maxActiveSchema,
+  roundIdParamsSchema,
+  roundListResponseSchema,
+  roundResponseSchema,
+  roundSchema,
+  roundStatusSchema,
+  termSchema,
+  updateRoundRequestSchema,
+} from './rounds.js';
+export type {
+  CreateRoundBatchRequest,
+  CreateRoundRequest,
+  ListRoundsQuery,
+  Round,
+  RoundIdParams,
+  RoundListResponse,
+  RoundResponse,
+  RoundStatus,
+  UpdateRoundRequest,
+} from './rounds.js';

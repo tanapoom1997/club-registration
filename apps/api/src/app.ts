@@ -13,6 +13,7 @@ import {
 import type pg from 'pg';
 import { createAuthGuard, JWT_ALGORITHM, SESSION_TTL_SECONDS } from './auth/session.js';
 import { AppError } from './errors.js';
+import { adminRoundRoutes } from './routes/admin-rounds.js';
 import { authRoutes } from './routes/auth.js';
 import { healthRoutes } from './routes/health.js';
 
@@ -97,6 +98,7 @@ export const buildApp = async ({
   const guard = createAuthGuard(pool);
   await app.register(healthRoutes(pool), { prefix: '/api' });
   await app.register(authRoutes({ pool, guard }), { prefix: '/api' });
+  await app.register(adminRoundRoutes({ pool, guard }), { prefix: '/api' });
 
   return app;
 };

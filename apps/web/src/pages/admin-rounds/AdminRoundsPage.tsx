@@ -1,0 +1,197 @@
+import type { Round } from '@club-registration/shared';
+import { useQuery } from '@tanstack/react-query';
+import { useState } from 'react';
+import type { FormEvent } from 'react';
+import { FormError } from '@/components/FormError';
+import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { deleteRound, fetchRounds } from '@/lib/api';
+import { formatThaiDateTime } from '@/lib/thai-time';
+import { ConfirmPanel } from './ConfirmPanel';
+import { CreateRoundBatchForm, CreateRoundForm } from './CreateRoundForms';
+import { EditRoundForm } from './EditRoundForm';
+import {
+  ROUNDS_QUERY_KEY,
+  STATUS_DISPLAY,
+  gradeLabel,
+  roundErrorMessage,
+  useRoundMutation,
+} from './round-ui';
+
+const roundName = ({ term, grade }: Round) => `${term} ${gradeLabel(grade)}`;
+
+type RoundsTableProps = {
+  rounds: readonly Round[];
+  onEdit: (round: Round) => void;
+  onDelete: (round: Round) => void;
+};
+
+const RoundsTable = ({ rounds, onEdit, onDelete }: RoundsTableProps) => (
+  <div className="overflow-x-auto rounded-lg border border-border bg-card">
+    <table className="w-full text-left text-sm" aria-label="รายการรอบลงทะเบียน">
+      <thead className="border-b border-border text-muted-foreground">
+        <tr>
+          <th className="p-3 font-medium">ภาคเรียน</th>
+          <th className="p-3 font-medium">ชั้น</th>
+          <th className="p-3 font-medium">เปิด</th>
+          <th className="p-3 font-medium">ปิด</th>
+          <th className="p-3 font-medium">สถานะ</th>
+          <th className="p-3 text-right font-medium">ชุมนุม</th>
+          <th className="p-3 text-right font-medium">ลงแล้ว / รับ</th>
+          <th className="p-3 text-right font-medium">เข้าพร้อมกัน</th>
+          <th className="p-3">
+            <span className="sr-only">จัดการ</span>
+          </th>
+        </tr>
+      </thead>
+      <tbody className="divide-y divide-border">
+        {rounds.map((round) => {
+          const status = STATUS_DISPLAY[round.status];
+          return (
+            <tr key={round.id}>
+              <td className="p-3">{round.term}</td>
+              <td className="p-3">{gradeLabel(round.grade)}</td>
+              <td className="p-3 whitespace-nowrap">{formatThaiDateTime(round.opensAt)}</td>
+              <td className="p-3 whitespace-nowrap">{formatThaiDateTime(round.closesAt)}</td>
+              <td className="p-3">
+                <Badge variant={status.variant}>{status.label}</Badge>
+              </td>
+              <td className="p-3 text-right">{round.clubCount}</td>
+              <td className="p-3 text-right whitespace-nowrap">
+                {round.totalRegistered} / {round.totalCapacity}
+              </td>
+              <td className="p-3 text-right">{round.maxActive}</td>
+              <td className="p-3">
+                <div className="flex justify-end gap-1">
+                  <Button
+                    variant="outline"
+                    className="px-3 py-1"
+                    aria-label={`แก้ไขรอบ ${roundName(round)}`}
+                    onClick={() => onEdit(round)}
+                  >
+                    แก้ไข
+                  </Button>
+                  {/* Hidden once clubs exist; the API refuses such a delete regardless. */}
+                  {round.clubCount === 0 && (
+                    <Button
+                      variant="ghost"
+                      className="px-3 py-1 text-destructive"
+                      aria-label={`ลบรอบ ${roundName(round)}`}
+                      onClick={() => onDelete(round)}
+                    >
+                      ลบ
+                    </Button>
+                  )}
+                </div>
+              </td>
+            </tr>
+          );
+        })}
+      </tbody>
+    </table>
+  </div>
+);
+
+export const AdminRoundsPage = () => {
+  const [termInput, setTermInput] = useState('');
+  const [termFilter, setTermFilter] = useState('');
+  // An id, not a snapshot, so the editor sees the latest status after every refetch.
+  const [editingId, setEditingId] = useState<number>();
+  const [deleting, setDeleting] = useState<Round>();
+
+  const roundsQuery = useQuery({
+    queryKey: [...ROUNDS_QUERY_KEY, termFilter],
+    queryFn: async () => await fetchRounds(termFilter === '' ? undefined : termFilter),
+  });
+  const deleteMutation = useRoundMutation(async (round: Round) => await deleteRound(round.id));
+
+  const handleFilter = (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    setTermFilter(termInput.trim());
+  };
+
+  const confirmDelete = (round: Round) => {
+    deleteMutation.mutate(round, {
+      onSettled: () => setDeleting(undefined),
+      onSuccess: () => {
+        if (editingId === round.id) setEditingId(undefined);
+      },
+    });
+  };
+
+  const startDelete = (round: Round) => {
+    deleteMutation.reset();
+    setDeleting(round);
+  };
+
+  const rounds = roundsQuery.data ?? [];
+  const editing = rounds.find(({ id }) => id === editingId);
+
+  return (
+    <section className="space-y-6">
+      <div className="space-y-1">
+        <h1 className="text-xl font-semibold">รอบลงทะเบียน</h1>
+        <p className="text-sm text-muted-foreground">
+          1 รอบต่อชั้นต่อภาคเรียน เวลาทั้งหมดเป็นเวลาประเทศไทย สถานะคำนวณจากเวลาของเซิร์ฟเวอร์
+        </p>
+      </div>
+
+      <form className="flex flex-wrap items-end gap-2" onSubmit={handleFilter}>
+        <div className="space-y-1.5">
+          <Label htmlFor="term-filter">กรองตามภาคเรียน</Label>
+          <Input
+            id="term-filter"
+            placeholder="ทุกภาคเรียน"
+            value={termInput}
+            onChange={(event) => setTermInput(event.target.value)}
+          />
+        </div>
+        <Button type="submit" variant="outline">
+          แสดง
+        </Button>
+      </form>
+
+      {deleting && (
+        <ConfirmPanel
+          message={`ลบรอบ ${roundName(deleting)} ใช่หรือไม่`}
+          confirmLabel="ยืนยันลบ"
+          pending={deleteMutation.isPending}
+          onConfirm={() => confirmDelete(deleting)}
+          onCancel={() => setDeleting(undefined)}
+        />
+      )}
+      <FormError
+        message={deleteMutation.isError ? roundErrorMessage(deleteMutation.error) : undefined}
+      />
+
+      {roundsQuery.isPending ? (
+        <p className="text-muted-foreground">กำลังโหลด…</p>
+      ) : roundsQuery.isError ? (
+        <div className="flex items-center gap-3" role="alert">
+          <p>โหลดรายการรอบไม่สำเร็จ</p>
+          <Button variant="outline" onClick={() => void roundsQuery.refetch()}>
+            ลองใหม่
+          </Button>
+        </div>
+      ) : rounds.length === 0 ? (
+        <p className="text-muted-foreground">
+          {termFilter === '' ? 'ยังไม่มีรอบลงทะเบียน' : `ไม่มีรอบของภาคเรียน ${termFilter}`}
+        </p>
+      ) : (
+        <RoundsTable rounds={rounds} onEdit={({ id }) => setEditingId(id)} onDelete={startDelete} />
+      )}
+
+      {editing && (
+        // Keyed so choosing another round starts a fresh form instead of keeping old input.
+        <EditRoundForm key={editing.id} round={editing} onDone={() => setEditingId(undefined)} />
+      )}
+
+      <div className="grid gap-4 md:grid-cols-2">
+        <CreateRoundForm />
+        <CreateRoundBatchForm />
+      </div>
+    </section>
+  );
+};

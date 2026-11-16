@@ -1,13 +1,19 @@
 import {
   errorResponseSchema,
   healthResponseSchema,
+  roundListResponseSchema,
+  roundResponseSchema,
   sessionResponseSchema,
 } from '@club-registration/shared';
 import type {
   ChangePasswordRequest,
+  CreateRoundBatchRequest,
+  CreateRoundRequest,
   HealthResponse,
   LoginRequest,
+  Round,
   SessionUser,
+  UpdateRoundRequest,
 } from '@club-registration/shared';
 
 const UNAUTHORIZED = 401;
@@ -81,4 +87,22 @@ export const changePassword = async (request: ChangePasswordRequest): Promise<Se
 
 export const logout = async (): Promise<void> => {
   await send('/api/auth/logout', 'POST');
+};
+
+export const fetchRounds = async (term?: string): Promise<Round[]> => {
+  const query = term ? `?${new URLSearchParams({ term }).toString()}` : '';
+  return (await sendJson(`/api/admin/rounds${query}`, 'GET', roundListResponseSchema)).rounds;
+};
+
+export const createRound = async (request: CreateRoundRequest): Promise<Round> =>
+  (await sendJson('/api/admin/rounds', 'POST', roundResponseSchema, request)).round;
+
+export const createRoundBatch = async (request: CreateRoundBatchRequest): Promise<Round[]> =>
+  (await sendJson('/api/admin/rounds/batch', 'POST', roundListResponseSchema, request)).rounds;
+
+export const updateRound = async (id: number, request: UpdateRoundRequest): Promise<Round> =>
+  (await sendJson(`/api/admin/rounds/${id}`, 'PATCH', roundResponseSchema, request)).round;
+
+export const deleteRound = async (id: number): Promise<void> => {
+  await send(`/api/admin/rounds/${id}`, 'DELETE');
 };

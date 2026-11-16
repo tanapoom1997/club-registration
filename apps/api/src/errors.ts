@@ -10,6 +10,8 @@ const HTTP_STATUS: Readonly<Record<ErrorCode, number>> = Object.freeze({
   [ERROR_CODES.forbidden]: 403,
   [ERROR_CODES.passwordChangeRequired]: 403,
   [ERROR_CODES.notFound]: 404,
+  [ERROR_CODES.roundExists]: 409,
+  [ERROR_CODES.roundNotEmpty]: 409,
   [ERROR_CODES.rateLimited]: 429,
   [ERROR_CODES.internalError]: 500,
 });
@@ -23,6 +25,8 @@ const DEFAULT_MESSAGES: Readonly<Record<ErrorCode, string>> = Object.freeze({
   [ERROR_CODES.forbidden]: 'Not allowed',
   [ERROR_CODES.passwordChangeRequired]: 'Password must be changed first',
   [ERROR_CODES.notFound]: 'Not found',
+  [ERROR_CODES.roundExists]: 'A round for this term and grade already exists',
+  [ERROR_CODES.roundNotEmpty]: 'Round still has clubs or other data attached',
   [ERROR_CODES.rateLimited]: 'Too many requests, try again later',
   [ERROR_CODES.internalError]: 'Internal server error',
 });
