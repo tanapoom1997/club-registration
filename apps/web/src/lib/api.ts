@@ -1,15 +1,18 @@
 import {
   ISSUED_COUNT_HEADER,
+  adminClubResponseSchema,
   errorResponseSchema,
   healthResponseSchema,
   importCommitResponseSchema,
   importPreviewResponseSchema,
   passwordStatusResponseSchema,
   roundListResponseSchema,
+  roundClubsResponseSchema,
   roundResponseSchema,
   sessionResponseSchema,
 } from '@club-registration/shared';
 import type {
+  AdminClub,
   ChangePasswordRequest,
   ClassroomPasswordStatus,
   CreateRoundBatchRequest,
@@ -20,7 +23,9 @@ import type {
   IssueInitialPasswordsRequest,
   LoginRequest,
   Round,
+  RoundClubsResponse,
   SessionUser,
+  UpdateClubRequest,
   UpdateRoundRequest,
 } from '@club-registration/shared';
 
@@ -114,6 +119,12 @@ export const updateRound = async (id: number, request: UpdateRoundRequest): Prom
 export const deleteRound = async (id: number): Promise<void> => {
   await send(`/api/admin/rounds/${id}`, 'DELETE');
 };
+
+export const fetchRoundClubs = async (roundId: number): Promise<RoundClubsResponse> =>
+  await sendJson(`/api/admin/rounds/${roundId}/clubs`, 'GET', roundClubsResponseSchema);
+
+export const updateClub = async (id: number, request: UpdateClubRequest): Promise<AdminClub> =>
+  (await sendJson(`/api/admin/clubs/${id}`, 'PATCH', adminClubResponseSchema, request)).club;
 
 export const IMPORT_TEMPLATE_URL = '/api/admin/import/template';
 

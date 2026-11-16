@@ -136,7 +136,11 @@ const lineIdCell = z
   .max(LINE_ID_MAX_LENGTH, `LINE ID ยาวได้ไม่เกิน ${LINE_ID_MAX_LENGTH} ตัวอักษร`)
   .regex(/^@?[A-Za-z0-9._-]+$/, 'LINE ID ใช้ได้เฉพาะ a-z 0-9 . _ - (มี @ นำหน้าได้)');
 
-const descriptionCell = z
+// Club name and description are shared with the admin club editor, so a value accepted there
+// matches what the import stores.
+export const clubNameSchema = requiredText('ชื่อชุมนุม', NAME_MAX_LENGTH);
+
+export const clubDescriptionSchema = z
   .string()
   .trim()
   .max(DESCRIPTION_MAX_LENGTH, `รายละเอียดยาวได้ไม่เกิน ${DESCRIPTION_MAX_LENGTH} ตัวอักษร`)
@@ -158,11 +162,11 @@ export type StudentImportRow = z.infer<typeof studentImportRowSchema>;
 
 export const clubImportRowSchema = z.object({
   clubCode: clubCodeSchema,
-  name: requiredText('ชื่อชุมนุม', NAME_MAX_LENGTH),
+  name: clubNameSchema,
   grade: gradeCell('ชั้นที่เปิดรับ'),
   capacity: wholeNumber('จำนวนรับ', 0, CAPACITY_MAX),
   // An empty description clears it, matching the column default.
-  description: descriptionCell.optional().transform((value) => value ?? ''),
+  description: clubDescriptionSchema.optional().transform((value) => value ?? ''),
 });
 export type ClubImportRow = z.infer<typeof clubImportRowSchema>;
 

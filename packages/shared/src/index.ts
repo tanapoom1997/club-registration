@@ -30,6 +30,7 @@ export {
   TERM_MAX_LENGTH,
   createRoundBatchRequestSchema,
   createRoundRequestSchema,
+  dbIdSchema,
   gradeSchema,
   listRoundsQuerySchema,
   maxActiveSchema,
@@ -68,7 +69,9 @@ export {
   advisorImportRowSchema,
   classroomSchema,
   clubCodeSchema,
+  clubDescriptionSchema,
   clubImportRowSchema,
+  clubNameSchema,
   importChangeCountsSchema,
   importCommitFieldsSchema,
   importCommitResponseSchema,
@@ -104,3 +107,22 @@ export type {
   IssueInitialPasswordsRequest,
   PasswordStatusResponse,
 } from './initial-passwords.js';
+export {
+  adminClubResponseSchema,
+  adminClubSchema,
+  capacitySchema,
+  clubAdvisorSchema,
+  clubIdParamsSchema,
+  roundClubsParamsSchema,
+  roundClubsResponseSchema,
+  updateClubRequestSchema,
+} from './clubs.js';
+export type {
+  AdminClub,
+  AdminClubResponse,
+  ClubAdvisor,
+  ClubIdParams,
+  RoundClubsParams,
+  RoundClubsResponse,
+  UpdateClubRequest,
+} from './clubs.js';

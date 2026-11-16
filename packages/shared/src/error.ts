@@ -22,6 +22,7 @@ export const ERROR_CODES = Object.freeze({
   importConflict: 'import_conflict',
   idempotencyKeyReused: 'idempotency_key_reused',
   nothingToIssue: 'nothing_to_issue',
+  capacityBelowRegistered: 'capacity_below_registered',
 } as const);
 
 export type ErrorCode = (typeof ERROR_CODES)[keyof typeof ERROR_CODES];
