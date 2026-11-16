@@ -1,0 +1,52 @@
+import type { Role } from '@club-registration/shared';
+
+export type MenuItem = { path: string; label: string; description: string };
+
+// Phase 1 menus only; each is a placeholder until its feature lands. Later phases add their own
+// entries rather than shipping dead links now.
+export const MENUS: Readonly<Record<Role, readonly MenuItem[]>> = Object.freeze({
+  student: [
+    {
+      path: 'clubs',
+      label: 'ชุมนุมในชั้นของฉัน',
+      description: 'ดูรายการชุมนุม ครูที่ปรึกษา ที่ว่างที่เหลือ และลงทะเบียน',
+    },
+    {
+      path: 'my-registration',
+      label: 'ผลของฉัน',
+      description: 'ดูชุมนุมที่ลงทะเบียนไว้ และยกเลิก',
+    },
+  ],
+  admin: [
+    {
+      path: 'rounds',
+      label: 'รอบลงทะเบียน',
+      description: 'สร้างรอบต่อชั้น กำหนดเวลาเปิด–ปิด',
+    },
+    {
+      path: 'import',
+      label: 'นำเข้า Excel',
+      description: 'นำเข้านักเรียน ชุมนุม และครู (ตรวจก่อน แล้วค่อยยืนยัน)',
+    },
+    {
+      path: 'clubs',
+      label: 'ชุมนุม',
+      description: 'จำนวนรับและจำนวนที่ลงแล้ว รายรอบ',
+    },
+    {
+      path: 'export',
+      label: 'ส่งออกรายชื่อ',
+      description: 'ดาวน์โหลดรายชื่อรายชุมนุมเป็น CSV/Excel',
+    },
+    {
+      path: 'initial-passwords',
+      label: 'รหัสผ่านเริ่มต้น',
+      description: 'ดาวน์โหลดรหัสผ่านเริ่มต้นของนักเรียน (ได้ครั้งเดียว)',
+    },
+  ],
+});
+
+export const ROLE_LABELS: Readonly<Record<Role, string>> = Object.freeze({
+  student: 'นักเรียน',
+  admin: 'ผู้ดูแลระบบ',
+});

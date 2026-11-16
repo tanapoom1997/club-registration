@@ -2,7 +2,7 @@
 
 ระบบลงทะเบียนชุมนุมโรงเรียน (นักเรียน ~2,500 คน, รอบละ ~450 concurrent) แผนเต็ม สถาปัตยกรรม data model และ roadmap อยู่ใน [README.md](README.md) อ่านก่อนเริ่มงานทุกครั้ง ไฟล์นี้เก็บเฉพาะกติกาการทำงานที่ต้องไม่หลุด
 
-**สถานะ:** Phase 1 scaffold เสร็จแล้ว มี monorepo, migration แรก (ครบทุกตาราง), `GET /api/health` และหน้าสถานะระบบ ยังไม่มี auth และ logic ลงทะเบียน
+**สถานะ:** Phase 1 ข้อ 1 (Auth + role guard) เสร็จแล้ว ต่อจาก scaffold (monorepo, migration แรกครบทุกตาราง, `GET /api/health`) มี login/เปลี่ยนรหัส/logout, `create-admin` และหน้า FE ตาม role (เมนูยังเป็นโครงว่าง) ยังไม่มี logic ลงทะเบียน
 
 ## กฎที่ห้ามละเมิด
 
@@ -25,14 +25,15 @@
 
 | ชั้น | ใช้ | หมายเหตุ |
 |---|---|---|
-| Runtime | Node.js 24 LTS | ใช้ ESM ล้วน (`"type": "module"`) |
+| Runtime | Node.js 24 LTS (≥ 24.7) | ใช้ ESM ล้วน (`"type": "module"`) ต้อง ≥ 24.7 เพราะใช้ `crypto.argon2` |
 | ภาษา | TypeScript (`strict: true`) | target ES2023, module `NodeNext` (`apps/web` ใช้ `Bundler`) pin 6.0.x เพราะ `typescript-eslint` ยังไม่รองรับ 7 |
 | Package manager | pnpm workspaces | monorepo เดียว: `apps/api`, `apps/web`, `packages/shared` |
 | Backend | Fastify + `fastify-type-provider-zod` | validation และ type มาจาก Zod schema เดียว |
 | Validation | Zod | นิยามไว้ใน `packages/shared` ที่เดียว |
 | Database | PostgreSQL + `pg` | SQL ตรงๆ ใช้ parameterized query (`$1, $2`) เสมอ ห้ามต่อ string |
 | Migration | `node-pg-migrate` | migration เป็น SQL ไฟล์ แยกจาก app |
-| Auth | JWT + argon2id (เสนอ) | secret จาก env ดูหัวข้อ Best practice |
+| Auth | `@fastify/jwt` (HS256) + `@fastify/cookie`, argon2id จาก `node:crypto` | session cookie + `session_version` ดู README หัวข้อ Security |
+| Router (FE) | `react-router` (SPA mode) | route ทั้งหมดอยู่ที่ `apps/web/src/routes.tsx` |
 | Frontend | Vite + React + Tailwind + shadcn/ui | SPA ไม่ใช้ SSR |
 | Data fetching | TanStack Query | polling คิว/สถานะ |
 | Excel | `exceljs` | import/export .xlsx |
@@ -51,9 +52,14 @@
 corepack enable
 pnpm install
 cp .env.example .env
+echo "JWT_SECRET=$(openssl rand -base64 48)" >> .env
 docker compose up -d --wait
 pnpm --filter api migrate
+pnpm --filter api create-admin <login_id>   # แสดงรหัสเริ่มต้นครั้งเดียว รันซ้ำไม่สร้างซ้ำ
+pnpm --filter api seed-dev                  # (dev เท่านั้น) นักเรียนสมมติ 3 คน แสดงรหัสครั้งเดียว
 ```
+
+production ใช้ `node dist/create-admin.js <login_id>` หลัง `pnpm build`
 
 ใช้งานประจำ
 
@@ -137,9 +143,10 @@ pnpm build
 - CI/ก่อน commit ต้องผ่าน `typecheck` + `lint` + `test` ห้าม merge ถ้าแดง
 
 ### Security
-- Password hash ด้วย **argon2id** (เสนอ) ห้าม MD5/SHA ธรรมดา เทียบรหัสด้วยฟังก์ชัน constant-time ของไลบรารี
+- Password hash ด้วย **argon2id** (`crypto.argon2` ของ Node, เก็บเป็น PHC string) ห้าม MD5/SHA ธรรมดา เทียบด้วย `timingSafeEqual`
 - JWT: อายุสั้น, ระบุ algorithm ตอน verify, ห้ามใส่ข้อมูลอ่อนไหวใน payload, เก็บฝั่ง client เป็น `HttpOnly; Secure; SameSite` cookie ถ้าทำได้ แทน `localStorage`
-- เปิด `@fastify/helmet` และ `@fastify/rate-limit` (เสนอ) ตั้ง request body size limit
+- เปิด `@fastify/helmet` และ `@fastify/rate-limit` (`global: false` เลือกเปิดราย route ด้วย `app.createRateLimit()`) body limit 64 KiB (route อัปโหลดตั้งเอง)
+- Route ที่ต้อง login ใช้ `guard()` จาก `createAuthGuard` (`apps/api/src/auth/session.ts`) ระบุ `roles` เมื่อจำกัด role
 - Validate input ทุกจุดด้วย Zod ที่ขอบระบบ (body, query, params, ไฟล์ที่อัปโหลด) ไม่เชื่อข้อมูลภายนอก
 - Error response ไม่เปิดเผย stack trace หรือข้อความจาก DB ให้ client
 - Dependency: ใช้ lockfile และ `pnpm install --frozen-lockfile` ใน CI/Docker, เปิด Dependabot/`pnpm audit` (เสนอ), Docker รันด้วย non-root user
