@@ -1,6 +1,7 @@
 import {
   errorResponseSchema,
   healthResponseSchema,
+  importPreviewResponseSchema,
   roundListResponseSchema,
   roundResponseSchema,
   sessionResponseSchema,
@@ -10,6 +11,7 @@ import type {
   CreateRoundBatchRequest,
   CreateRoundRequest,
   HealthResponse,
+  ImportPreviewResponse,
   LoginRequest,
   Round,
   SessionUser,
@@ -105,4 +107,17 @@ export const updateRound = async (id: number, request: UpdateRoundRequest): Prom
 
 export const deleteRound = async (id: number): Promise<void> => {
   await send(`/api/admin/rounds/${id}`, 'DELETE');
+};
+
+export const IMPORT_TEMPLATE_URL = '/api/admin/import/template';
+
+// The browser sets the multipart boundary itself, so no content-type is given here. The term goes
+// first so the server meets it before the file.
+export const previewImport = async (term: string, file: File): Promise<ImportPreviewResponse> => {
+  const body = new FormData();
+  body.append('term', term);
+  body.append('file', file);
+  const response = await fetch('/api/admin/import/preview', { method: 'POST', body });
+  if (!response.ok) throw await toApiError(response);
+  return importPreviewResponseSchema.parse(await response.json());
 };

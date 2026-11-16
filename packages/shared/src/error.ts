@@ -14,6 +14,9 @@ export const ERROR_CODES = Object.freeze({
   rateLimited: 'rate_limited',
   roundExists: 'round_exists',
   roundNotEmpty: 'round_not_empty',
+  fileTooLarge: 'file_too_large',
+  unsupportedFile: 'unsupported_file',
+  invalidWorkbook: 'invalid_workbook',
 } as const);
 
 export type ErrorCode = (typeof ERROR_CODES)[keyof typeof ERROR_CODES];

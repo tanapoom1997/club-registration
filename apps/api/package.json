@@ -8,6 +8,7 @@
     "migrate": "tsx --conditions=@club-registration/source --env-file-if-exists=../../.env src/migrate.ts",
     "create-admin": "tsx --conditions=@club-registration/source --env-file-if-exists=../../.env src/create-admin.ts",
     "seed-dev": "tsx --conditions=@club-registration/source --env-file-if-exists=../../.env src/seed-dev.ts",
+    "generate-template": "tsx --conditions=@club-registration/source src/generate-template.ts",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "build": "tsc -p tsconfig.build.json"
@@ -17,7 +18,9 @@
     "@fastify/cookie": "11.1.5",
     "@fastify/helmet": "13.2.0",
     "@fastify/jwt": "10.2.7",
+    "@fastify/multipart": "10.1.8",
     "@fastify/rate-limit": "11.2.2",
+    "exceljs": "4.4.0",
     "fastify": "5.12.7",
     "fastify-type-provider-zod": "7.0.0",
     "node-pg-migrate": "9.0.0",

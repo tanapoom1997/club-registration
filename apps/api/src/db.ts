@@ -37,3 +37,29 @@ export const isPgError = (
   error instanceof pg.DatabaseError &&
   error.code === code &&
   (constraint === undefined || error.constraint === constraint);
+
+// Runs reads against one consistent snapshot. READ ONLY makes Postgres itself refuse any write,
+// so a dry run cannot change data even through a bug.
+export const withReadOnlySnapshot = async <T>(
+  pool: pg.Pool,
+  work: (client: pg.PoolClient) => Promise<T>,
+): Promise<T> => {
+  const client = await pool.connect();
+  // A client whose ROLLBACK failed may be mid-transaction, so it is destroyed, not pooled.
+  let broken = false;
+  try {
+    await client.query('BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY');
+    const result = await work(client);
+    await client.query('COMMIT');
+    return result;
+  } catch (error) {
+    try {
+      await client.query('ROLLBACK');
+    } catch {
+      broken = true;
+    }
+    throw error;
+  } finally {
+    client.release(broken);
+  }
+};
