@@ -27,9 +27,11 @@ export type ImportPlan = {
     unchanged: number;
   };
   // One entry per club (round + code) whose whole advisor list is replaced; a club created by
-  // this import has no id yet, so it is identified by round and code.
+  // this import has no id yet, so it is identified by round and code. Clubs that already have
+  // exactly the file's list are only counted, so a re-import rewrites nothing.
   advisors: {
     replace: { roundId: number; clubCode: string; advisors: AdvisorRow[] }[];
+    unchanged: number;
     rows: number;
   };
   errors: ImportError[];
@@ -136,7 +138,55 @@ const findClubs = async (db: Queryable, term: string) => {
   return rows.map(toExistingClub);
 };
 
+type StoredAdvisor = Pick<AdvisorImportRow, 'fullName' | 'phone' | 'email' | 'lineId'>;
+
+type StoredAdvisorRow = {
+  round_id: number;
+  club_code: string;
+  full_name: string;
+  phone: string | null;
+  email: string | null;
+  line_id: string | null;
+};
+
 const clubKey = (roundId: number, clubCode: string) => `${roundId}|${clubCode}`;
+
+// Advisor lists of the term's clubs, in insertion order (the order the import wrote them).
+const findAdvisors = async (db: Queryable, term: string) => {
+  const { rows } = await db.query<StoredAdvisorRow>(
+    `SELECT c.round_id, c.club_code, a.full_name, a.phone, a.email, a.line_id
+     FROM club_advisors a
+     JOIN clubs c ON c.id = a.club_id
+     JOIN rounds ro ON ro.id = c.round_id
+     WHERE ro.term = $1
+     ORDER BY a.id`,
+    [term],
+  );
+  return rows.reduce((byClub, row) => {
+    const key = clubKey(row.round_id, row.club_code);
+    const advisor: StoredAdvisor = {
+      fullName: row.full_name,
+      phone: row.phone,
+      email: row.email,
+      lineId: row.line_id,
+    };
+    byClub.set(key, [...(byClub.get(key) ?? []), advisor]);
+    return byClub;
+  }, new Map<string, StoredAdvisor[]>());
+};
+
+const sameAdvisors = (stored: readonly StoredAdvisor[], file: readonly AdvisorRow[]): boolean =>
+  stored.length === file.length &&
+  stored.every((advisor, index) => {
+    const row = file[index];
+    return (
+      row !== undefined &&
+      advisor.fullName === row.fullName &&
+      advisor.phone === row.phone &&
+      advisor.email === row.email &&
+      advisor.lineId === row.lineId
+    );
+  });
 
 const studentChanged = (row: StudentRow, user: ExistingUser): boolean =>
   user.fullName !== row.fullName ||
@@ -254,6 +304,7 @@ const planAdvisors = (
   clubCodesInFile: ReadonlySet<string>,
   fileClubs: readonly { roundId: number; clubCode: string }[],
   existingClubs: readonly ExistingClub[],
+  storedAdvisors: ReadonlyMap<string, readonly StoredAdvisor[]>,
 ) => {
   const roundsByCode = [...fileClubs, ...existingClubs].reduce((byCode, { roundId, clubCode }) => {
     byCode.set(clubCode, new Set([...(byCode.get(clubCode) ?? []), roundId]));
@@ -275,12 +326,19 @@ const planAdvisors = (
     return byCode;
   }, new Map<string, AdvisorRow[]>());
 
-  const replace = [...advisorsByCode].flatMap(([clubCode, advisors]) =>
+  const targets = [...advisorsByCode].flatMap(([clubCode, advisors]) =>
     [...(roundsByCode.get(clubCode) ?? [])]
       .sort((a, b) => a - b)
       .map((roundId) => ({ roundId, clubCode, advisors })),
   );
-  return { plan: { replace, rows: accepted.length }, errors };
+  const replace = targets.filter(
+    ({ roundId, clubCode, advisors }) =>
+      !sameAdvisors(storedAdvisors.get(clubKey(roundId, clubCode)) ?? [], advisors),
+  );
+  return {
+    plan: { replace, unchanged: targets.length - replace.length, rows: accepted.length },
+    errors,
+  };
 };
 
 // Compares the parsed file with the DB and lists what a commit would change. Reads only, and
@@ -301,12 +359,19 @@ export const planImport = async (
     const roundId = roundsByGrade.get(grade);
     return roundId === undefined ? [] : [{ roundId, clubCode }];
   });
+  // Read only when the file has advisor rows: comparing is what lets a re-import report them
+  // unchanged.
+  const storedAdvisors =
+    (parsed.advisors?.length ?? 0) > 0
+      ? await findAdvisors(db, term)
+      : new Map<string, StoredAdvisor[]>();
   const advisors = planAdvisors(
     term,
     parsed.advisors ?? [],
     parsed.clubCodesInFile,
     fileClubs,
     existingClubs,
+    storedAdvisors,
   );
 
   return {
@@ -354,7 +419,11 @@ export const summarizeImportPlan = (
     update: plan.clubs.update.length,
     unchanged: plan.clubs.unchanged,
   },
-  advisors: { clubsReplaced: plan.advisors.replace.length, rows: plan.advisors.rows },
+  advisors: {
+    clubsReplaced: plan.advisors.replace.length,
+    clubsUnchanged: plan.advisors.unchanged,
+    rows: plan.advisors.rows,
+  },
   errors: plan.errors.slice(0, maxErrors),
   errorCount: plan.errors.length,
 });

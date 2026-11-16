@@ -21,6 +21,11 @@ const MIN_TAG_BYTES = 16;
 const PHC_PATTERN =
   /^\$argon2id\$v=(\d+)\$m=(\d+),t=(\d+),p=(\d+)\$([A-Za-z0-9+/]+)\$([A-Za-z0-9+/]+)$/;
 
+// Stored for an account that has no password yet (e.g. a student created by the Excel import,
+// waiting for an admin to issue an initial one). It is not a PHC string, so verifyPassword
+// rejects every password against it and nobody can sign in until a real hash replaces it.
+export const UNISSUED_PASSWORD_HASH = '!unissued';
+
 const toUnpaddedBase64 = (buffer: Buffer): string => buffer.toString('base64').replace(/=+$/, '');
 
 const derive = async (

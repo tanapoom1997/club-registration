@@ -15,6 +15,7 @@ export const JWT_ALGORITHM = 'HS256';
 
 // SameSite=Strict plus JSON-only write endpoints is the CSRF defence: a cross-site form cannot
 // send the cookie, and it cannot send application/json without a CORS preflight we never grant.
+// Upload routes take multipart, which a form can send, so they also call assertSameOrigin.
 const COOKIE_OPTIONS: CookieSerializeOptions = Object.freeze({
   path: '/api',
   httpOnly: true,
