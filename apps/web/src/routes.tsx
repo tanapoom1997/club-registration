@@ -1,4 +1,6 @@
 import { ROLES } from '@club-registration/shared';
+import type { Role } from '@club-registration/shared';
+import type { ReactElement } from 'react';
 import { Navigate } from 'react-router';
 import type { RouteObject } from 'react-router';
 import { RequireSession } from '@/components/RequireSession';
@@ -9,7 +11,14 @@ import { HealthPage } from '@/pages/HealthPage';
 import { HomePage } from '@/pages/HomePage';
 import { LoginPage } from '@/pages/LoginPage';
 import { PlaceholderPage } from '@/pages/PlaceholderPage';
+import { AdminRoundsPage } from '@/pages/admin-rounds/AdminRoundsPage';
 import { MENUS } from '@/navigation';
+
+// Menu entries whose feature has shipped; every other entry still renders its placeholder.
+const PAGES: Readonly<Record<Role, Readonly<Record<string, ReactElement>>>> = Object.freeze({
+  student: {},
+  admin: { rounds: <AdminRoundsPage /> },
+});
 
 const roleRoutes: RouteObject[] = ROLES.map((role) => ({
   path: `/${role}`,
@@ -21,7 +30,7 @@ const roleRoutes: RouteObject[] = ROLES.map((role) => ({
         { index: true, element: <HomePage role={role} /> },
         ...MENUS[role].map((item) => ({
           path: item.path,
-          element: <PlaceholderPage item={item} />,
+          element: PAGES[role][item.path] ?? <PlaceholderPage item={item} />,
         })),
       ],
     },

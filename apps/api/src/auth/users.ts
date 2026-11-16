@@ -1,8 +1,8 @@
 import { roleSchema } from '@club-registration/shared';
 import type { Role, SessionUser } from '@club-registration/shared';
-import type pg from 'pg';
+import type { Queryable } from '../db.js';
 
-export type Queryable = pg.Pool | pg.PoolClient;
+export type { Queryable };
 
 // Server-side view of a user: what the client sees plus the token version it must match.
 export type AuthenticatedUser = SessionUser & { sessionVersion: number };
