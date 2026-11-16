@@ -6,6 +6,7 @@ import type { ConcurrencyLimit } from '../concurrency-limit.js';
 import { isPgError, PG_ERROR_CODES, withTransaction } from '../db.js';
 import type { Queryable } from '../db.js';
 import { AppError } from '../errors.js';
+import { compareClassrooms } from './classroom-order.js';
 
 // How an admin hands out initial passwords:
 //
@@ -70,12 +71,9 @@ const scopeParams = ({ grade, classroom, onlyUnissued }: IssueScope) => [
   onlyUnissued,
 ];
 
-// Classrooms are free text ("1", "2", …, "10"): numeric-aware so "10" sorts after "9".
-const classroomCollator = new Intl.Collator('th', { numeric: true });
-
 const compareStudents = (a: IssuedStudent, b: IssuedStudent): number =>
   a.grade - b.grade ||
-  classroomCollator.compare(a.classroom, b.classroom) ||
+  compareClassrooms(a.classroom, b.classroom) ||
   a.seatNo - b.seatNo ||
   a.loginId.localeCompare(b.loginId);
 
@@ -232,5 +230,5 @@ export const getPasswordStatus = async (db: Queryable): Promise<ClassroomPasswor
       changed: row.changed,
       lastIssuedAt: row.last_issued_at?.toISOString() ?? null,
     }))
-    .sort((a, b) => a.grade - b.grade || classroomCollator.compare(a.classroom, b.classroom));
+    .sort((a, b) => a.grade - b.grade || compareClassrooms(a.classroom, b.classroom));
 };
