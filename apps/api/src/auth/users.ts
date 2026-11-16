@@ -99,7 +99,13 @@ export const bumpSessionVersion = async (
   );
 };
 
-export type NewUser = { loginId: string; fullName: string; role: Role; passwordHash: string };
+export type NewUser = {
+  loginId: string;
+  fullName: string;
+  role: Role;
+  passwordHash: string;
+  mustChangePassword?: boolean;
+};
 
 export type CreateUserResult =
   { created: true; user: AuthenticatedUser } | { created: false; existingRole: Role };
@@ -107,14 +113,14 @@ export type CreateUserResult =
 // ON CONFLICT keeps reruns from creating duplicates even if two run at once.
 export const createUserIfMissing = async (
   db: Queryable,
-  { loginId, fullName, role, passwordHash }: NewUser,
+  { loginId, fullName, role, passwordHash, mustChangePassword = true }: NewUser,
 ): Promise<CreateUserResult> => {
   const { rows } = await db.query<UserRow>(
     `INSERT INTO users (login_id, full_name, role, password_hash, must_change_password)
-     VALUES ($1, $2, $3, $4, true)
+     VALUES ($1, $2, $3, $4, $5)
      ON CONFLICT (login_id) DO NOTHING
      RETURNING ${USER_COLUMNS}`,
-    [loginId, fullName, role, passwordHash],
+    [loginId, fullName, role, passwordHash, mustChangePassword],
   );
   const inserted = rows[0];
   if (inserted) return { created: true, user: toAuthenticatedUser(inserted) };

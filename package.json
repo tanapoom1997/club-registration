@@ -7,6 +7,7 @@
     "node": ">=24.7.0 <25"
   },
   "scripts": {
+    "dev": "pnpm --filter api migrate && pnpm --filter api seed-dev && pnpm --filter api --filter web --parallel run dev",
     "typecheck": "pnpm -r typecheck",
     "lint": "eslint .",
     "format": "prettier --write .",

@@ -53,25 +53,23 @@ corepack enable
 pnpm install
 cp .env.example .env
 echo "JWT_SECRET=$(openssl rand -base64 48)" >> .env
-docker compose up -d --wait
-pnpm --filter api migrate
-pnpm --filter api create-admin <login_id>   # แสดงรหัสเริ่มต้นครั้งเดียว รันซ้ำไม่สร้างซ้ำ
-pnpm --filter api seed-dev                  # (dev เท่านั้น) นักเรียนสมมติ 3 คน แสดงรหัสครั้งเดียว
+docker compose up -d --wait   # หรือเปิด Postgres ของตัวเองที่ DATABASE_URL ชี้อยู่
 ```
-
-production ใช้ `node dist/create-admin.js <login_id>` หลัง `pnpm build`
 
 ใช้งานประจำ
 
 ```bash
-pnpm --filter api dev   # http://localhost:3000
-pnpm --filter web dev   # http://localhost:5173 proxy /api ไปที่ api
+pnpm dev                # migrate → seed บัญชี demo → api (:3000) + web (:5173) ใน terminal เดียว
+pnpm --filter api seed-dev --reset   # สุ่มรหัสบัญชี demo ใหม่ (ลืมรหัส/ไฟล์หาย)
+pnpm --filter api create-admin <login_id>   # admin จริง แสดงรหัสครั้งเดียว บังคับเปลี่ยนตอน login แรก
 pnpm typecheck
 pnpm lint
 pnpm format
 pnpm test               # Vitest + Testcontainers (ต้องเปิด Docker)
 pnpm build
 ```
+
+บัญชี demo (`demo-admin`, `demo1001`, `demo1002`, `demo2001`) เป็นข้อมูลสมมติ ไม่บังคับเปลี่ยนรหัส รหัสสุ่มตอนสร้างครั้งแรกแล้วเก็บใน `.dev-credentials.txt` (gitignored, 600) รัน `pnpm dev` ซ้ำไม่เปลี่ยนรหัส `seed-dev` ไม่ยอมรันเมื่อ `NODE_ENV=production` ส่วน production สร้าง admin ด้วย `node dist/create-admin.js <login_id>` หลัง `pnpm build`
 
 `packages/shared` ไม่ต้อง build ตอน dev และ test เพราะ export condition `@club-registration/source` ชี้ไปที่ `src/` (Vitest ของ api ใช้ alias แทน) ส่วน production ใช้ `dist/` จาก `pnpm build`
 

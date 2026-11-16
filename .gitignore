@@ -5,6 +5,7 @@ dist/
 # secrets
 .env*
 !.env.example
+.dev-credentials.txt
 
 # real student data and database dumps (templates/ keeps empty templates only)
 *.xlsx
