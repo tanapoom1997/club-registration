@@ -1,4 +1,9 @@
-import type { ImportPreviewResponse, Round, SessionUser } from '@club-registration/shared';
+import type {
+  ImportCommitResponse,
+  ImportPreviewResponse,
+  Round,
+  SessionUser,
+} from '@club-registration/shared';
 import { cleanup, fireEvent, screen, within } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { mockApi, renderAt } from '@/test-support/render-app';
@@ -30,13 +35,17 @@ const PREVIEW: ImportPreviewResponse = {
   term: '2569/2',
   students: { create: 120, update: 3, unchanged: 7 },
   clubs: { create: 4, update: 1, unchanged: 0 },
-  advisors: { clubsReplaced: 5, rows: 6 },
+  advisors: { clubsReplaced: 5, clubsUnchanged: 0, rows: 6 },
   errors: [
     { sheet: 'students', row: 14, column: 'ชั้น', message: 'ชั้นต้องเป็น 1–6 (หรือ ม.1–ม.6)' },
     { sheet: 'advisors', row: 3, column: 'อีเมล', message: 'อีเมลไม่ถูกต้อง' },
   ],
   errorCount: 2,
 };
+
+const CLEAN_PREVIEW: ImportPreviewResponse = { ...PREVIEW, errors: [], errorCount: 0 };
+
+const COMMITTED: ImportCommitResponse = CLEAN_PREVIEW;
 
 const ROUNDS = [round({ id: 2, term: '2569/2' }), round({ id: 1, term: '2569/1' })];
 
@@ -56,6 +65,24 @@ const chooseFile = (file: File) => {
 
 const submit = () => {
   fireEvent.click(screen.getByRole('button', { name: 'ตรวจสอบไฟล์' }));
+};
+
+const commitCalls = (fetchMock: ReturnType<typeof mockApi>) =>
+  fetchMock.mock.calls.filter(
+    ([input, init]) => input === '/api/admin/import/commit' && init?.method === 'POST',
+  );
+
+const confirmButton = () => screen.getByRole('button', { name: 'ยืนยันนำเข้า' });
+
+// Previews a clean file and returns it, with the confirm step on screen.
+const previewCleanFile = async () => {
+  renderAt('/admin/import');
+  fireEvent.change(await screen.findByLabelText('ภาคเรียน'), { target: { value: '2569/2' } });
+  const file = xlsxFile();
+  chooseFile(file);
+  submit();
+  await screen.findByRole('table', { name: 'สรุปผลการตรวจสอบ' });
+  return file;
 };
 
 describe('admin import page', () => {
@@ -112,8 +139,7 @@ describe('admin import page', () => {
     mockApi({
       'GET /api/auth/me': () => Response.json({ user: ADMIN }),
       'GET /api/admin/rounds': () => Response.json({ rounds: ROUNDS }),
-      'POST /api/admin/import/preview': () =>
-        Response.json({ ...PREVIEW, errors: [], errorCount: 0 }),
+      'POST /api/admin/import/preview': () => Response.json(CLEAN_PREVIEW),
     });
     renderAt('/admin/import');
     await screen.findByLabelText('ภาคเรียน');
@@ -123,6 +149,101 @@ describe('admin import page', () => {
 
     expect((await screen.findByRole('status')).textContent).toBe('ไม่พบข้อผิดพลาด');
     expect(screen.queryByRole('table', { name: 'รายการข้อผิดพลาด' })).toBeNull();
+  });
+
+  it('re-sends the previewed file with its hash and a fresh key, then shows the result', async () => {
+    const fetchMock = mockApi({
+      'GET /api/auth/me': () => Response.json({ user: ADMIN }),
+      'GET /api/admin/rounds': () => Response.json({ rounds: ROUNDS }),
+      'POST /api/admin/import/preview': () => Response.json(CLEAN_PREVIEW),
+      'POST /api/admin/import/commit': () => Response.json(COMMITTED),
+    });
+    const file = await previewCleanFile();
+    expect(confirmButton()).toHaveProperty('disabled', false);
+
+    fireEvent.click(confirmButton());
+
+    const result = await screen.findByRole('table', { name: 'สรุปผลการนำเข้า' });
+    const studentsRow = within(result).getByRole('row', { name: /นักเรียน/ });
+    expect(
+      within(studentsRow)
+        .getAllByRole('cell')
+        .map((cell) => cell.textContent),
+    ).toEqual(['120', '3', '7']);
+    expect(screen.getByText(/ยังเข้าสู่ระบบไม่ได้จนกว่าจะออกรหัสผ่านเริ่มต้น/)).toBeTruthy();
+    expect(confirmButton()).toHaveProperty('disabled', true);
+    const [[, init]] = commitCalls(fetchMock) as [[string, RequestInit]];
+    const body = init.body as FormData;
+    expect(body.get('term')).toBe('2569/2');
+    expect(body.get('fileSha256')).toBe(CLEAN_PREVIEW.fileSha256);
+    expect(body.get('idempotencyKey')).toMatch(/^[0-9a-f-]{36}$/);
+    expect(body.get('file')).toBe(file);
+  });
+
+  it('disables the confirm button while the import is being sent', async () => {
+    const fetchMock = mockApi({
+      'GET /api/auth/me': () => Response.json({ user: ADMIN }),
+      'GET /api/admin/rounds': () => Response.json({ rounds: ROUNDS }),
+      'POST /api/admin/import/preview': () => Response.json(CLEAN_PREVIEW),
+    });
+    let release: (response: Response) => void = () => undefined;
+    const answer = new Promise<Response>((resolve) => {
+      release = resolve;
+    });
+    const routeOthers = fetchMock.getMockImplementation()!;
+    fetchMock.mockImplementation(async (input, init) =>
+      input === '/api/admin/import/commit' ? await answer : await routeOthers(input, init),
+    );
+    await previewCleanFile();
+
+    fireEvent.click(confirmButton());
+
+    const pending = await screen.findByRole('button', { name: 'กำลังนำเข้า…' });
+    expect(pending).toHaveProperty('disabled', true);
+    expect(screen.getByRole('button', { name: 'ตรวจสอบไฟล์' })).toHaveProperty('disabled', true);
+    release(Response.json(COMMITTED));
+    await screen.findByRole('table', { name: 'สรุปผลการนำเข้า' });
+    expect(commitCalls(fetchMock)).toHaveLength(1);
+  });
+
+  it.each([
+    ['import_file_mismatch', 409, 'ไฟล์ที่ส่งไม่ตรงกับไฟล์ที่ตรวจสอบไว้'],
+    ['import_invalid', 422, 'ข้อมูลในระบบเปลี่ยนไปหลังการตรวจสอบ'],
+    ['import_conflict', 409, 'ข้อมูลในระบบเปลี่ยนไประหว่างนำเข้า'],
+  ])('asks for a new preview after %s', async (code, status, message) => {
+    mockApi({
+      'GET /api/auth/me': () => Response.json({ user: ADMIN }),
+      'GET /api/admin/rounds': () => Response.json({ rounds: ROUNDS }),
+      'POST /api/admin/import/preview': () => Response.json(CLEAN_PREVIEW),
+      'POST /api/admin/import/commit': () =>
+        Response.json({ code, message: 'x', errors: [], errorCount: 1 }, { status }),
+    });
+    await previewCleanFile();
+
+    fireEvent.click(confirmButton());
+
+    const alert = await screen.findByRole('alert');
+    expect(alert.textContent).toContain(message);
+    expect(alert.textContent).toContain('“ตรวจสอบไฟล์” อีกครั้ง');
+    expect(confirmButton()).toHaveProperty('disabled', true);
+    expect(screen.queryByRole('table', { name: 'สรุปผลการนำเข้า' })).toBeNull();
+  });
+
+  it('lets the admin retry the confirm after an error that is not about the preview', async () => {
+    const fetchMock = mockApi({
+      'GET /api/auth/me': () => Response.json({ user: ADMIN }),
+      'GET /api/admin/rounds': () => Response.json({ rounds: ROUNDS }),
+      'POST /api/admin/import/preview': () => Response.json(CLEAN_PREVIEW),
+      'POST /api/admin/import/commit': () =>
+        Response.json({ code: 'internal_error', message: 'x' }, { status: 500 }),
+    });
+    await previewCleanFile();
+
+    fireEvent.click(confirmButton());
+
+    expect((await screen.findByRole('alert')).textContent).toContain('บันทึกไม่สำเร็จ');
+    expect(confirmButton()).toHaveProperty('disabled', false);
+    expect(commitCalls(fetchMock)).toHaveLength(1);
   });
 
   it('does not upload a file that is not .xlsx', async () => {

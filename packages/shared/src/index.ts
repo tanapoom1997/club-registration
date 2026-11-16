@@ -20,6 +20,7 @@ export type {
 export { ERROR_CODES, errorResponseSchema } from './error.js';
 export type { ErrorCode, ErrorResponse } from './error.js';
 export { healthResponseSchema } from './health.js';
+export { idempotencyKeySchema } from './idempotency.js';
 export type { HealthResponse } from './health.js';
 export {
   DEFAULT_MAX_ACTIVE,
@@ -68,7 +69,10 @@ export {
   clubCodeSchema,
   clubImportRowSchema,
   importChangeCountsSchema,
+  importCommitFieldsSchema,
+  importCommitResponseSchema,
   importErrorSchema,
+  importInvalidResponseSchema,
   importPreviewFieldsSchema,
   importPreviewResponseSchema,
   importSheetSchema,
@@ -78,7 +82,10 @@ export type {
   AdvisorImportRow,
   ClubImportRow,
   ImportChangeCounts,
+  ImportCommitFields,
+  ImportCommitResponse,
   ImportError,
+  ImportInvalidResponse,
   ImportPreviewFields,
   ImportPreviewResponse,
   ImportSheet,

@@ -1,5 +1,7 @@
 import { z } from 'zod';
 import { loginIdSchema } from './auth.js';
+import { errorResponseSchema } from './error.js';
+import { idempotencyKeySchema } from './idempotency.js';
 import { termSchema } from './rounds.js';
 
 export const IMPORT_MAX_FILE_BYTES = 5 * 1024 * 1024;
@@ -179,6 +181,17 @@ export const IMPORT_ROW_SCHEMAS = Object.freeze({
 export const importPreviewFieldsSchema = z.strictObject({ term: termSchema });
 export type ImportPreviewFields = z.infer<typeof importPreviewFieldsSchema>;
 
+const sha256HexSchema = z.string().regex(/^[0-9a-f]{64}$/);
+
+// The commit re-sends the previewed file: the server keeps nothing between the two requests, and
+// fileSha256 proves the bytes are the ones the admin looked at.
+export const importCommitFieldsSchema = z.strictObject({
+  term: termSchema,
+  fileSha256: sha256HexSchema,
+  idempotencyKey: idempotencyKeySchema,
+});
+export type ImportCommitFields = z.infer<typeof importCommitFieldsSchema>;
+
 // row is the row number the admin sees in Excel (header = 1); sheet, row or column is null when
 // the problem is not tied to one (e.g. no known sheet in the file, or too many rows).
 export const importErrorSchema = z.object({
@@ -200,13 +213,30 @@ export const importChangeCountsSchema = z.object({
 export type ImportChangeCounts = z.infer<typeof importChangeCountsSchema>;
 
 export const importPreviewResponseSchema = z.object({
-  fileSha256: z.string().regex(/^[0-9a-f]{64}$/),
+  fileSha256: sha256HexSchema,
   term: z.string(),
   students: importChangeCountsSchema,
   clubs: importChangeCountsSchema,
-  // clubsReplaced counts clubs (one per round) whose whole advisor list the file replaces.
-  advisors: z.object({ clubsReplaced: countSchema, rows: countSchema }),
+  // Per club (one per round) named in the advisors sheet: clubsReplaced get the file's list,
+  // clubsUnchanged already have exactly that list (same teachers, same order).
+  advisors: z.object({
+    clubsReplaced: countSchema,
+    clubsUnchanged: countSchema,
+    rows: countSchema,
+  }),
   errors: z.array(importErrorSchema),
   errorCount: countSchema,
 });
 export type ImportPreviewResponse = z.infer<typeof importPreviewResponseSchema>;
+
+// The same shape as the preview, counting what was written; errors is always empty.
+export const importCommitResponseSchema = importPreviewResponseSchema;
+export type ImportCommitResponse = z.infer<typeof importCommitResponseSchema>;
+
+// 422 import_invalid: the file has errors, so nothing was written. The list is capped like the
+// preview's.
+export const importInvalidResponseSchema = errorResponseSchema.extend({
+  errors: z.array(importErrorSchema),
+  errorCount: countSchema,
+});
+export type ImportInvalidResponse = z.infer<typeof importInvalidResponseSchema>;

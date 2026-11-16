@@ -38,17 +38,16 @@ export const isPgError = (
   error.code === code &&
   (constraint === undefined || error.constraint === constraint);
 
-// Runs reads against one consistent snapshot. READ ONLY makes Postgres itself refuse any write,
-// so a dry run cannot change data even through a bug.
-export const withReadOnlySnapshot = async <T>(
+// A client whose ROLLBACK failed may be mid-transaction, so it is destroyed, not pooled.
+const runTransaction = async <T>(
   pool: pg.Pool,
+  begin: string,
   work: (client: pg.PoolClient) => Promise<T>,
 ): Promise<T> => {
   const client = await pool.connect();
-  // A client whose ROLLBACK failed may be mid-transaction, so it is destroyed, not pooled.
   let broken = false;
   try {
-    await client.query('BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY');
+    await client.query(begin);
     const result = await work(client);
     await client.query('COMMIT');
     return result;
@@ -63,3 +62,19 @@ export const withReadOnlySnapshot = async <T>(
     client.release(broken);
   }
 };
+
+// Runs reads against one consistent snapshot. READ ONLY makes Postgres itself refuse any write,
+// so a dry run cannot change data even through a bug.
+export const withReadOnlySnapshot = async <T>(
+  pool: pg.Pool,
+  work: (client: pg.PoolClient) => Promise<T>,
+): Promise<T> =>
+  await runTransaction(pool, 'BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY', work);
+
+// READ COMMITTED (the default): each statement sees what committed before it started, which is
+// what a transaction that first waits on an advisory lock needs. Commits when work returns,
+// rolls back when it throws.
+export const withTransaction = async <T>(
+  pool: pg.Pool,
+  work: (client: pg.PoolClient) => Promise<T>,
+): Promise<T> => await runTransaction(pool, 'BEGIN', work);

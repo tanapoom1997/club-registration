@@ -17,6 +17,9 @@ export const ERROR_CODES = Object.freeze({
   fileTooLarge: 'file_too_large',
   unsupportedFile: 'unsupported_file',
   invalidWorkbook: 'invalid_workbook',
+  importFileMismatch: 'import_file_mismatch',
+  importInvalid: 'import_invalid',
+  importConflict: 'import_conflict',
 } as const);
 
 export type ErrorCode = (typeof ERROR_CODES)[keyof typeof ERROR_CODES];

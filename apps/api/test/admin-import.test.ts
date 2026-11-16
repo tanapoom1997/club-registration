@@ -1,4 +1,4 @@
-import { createHash, randomBytes } from 'node:crypto';
+import { createHash } from 'node:crypto';
 import { readFile } from 'node:fs/promises';
 import type { StartedPostgreSqlContainer } from '@testcontainers/postgresql';
 import {
@@ -31,6 +31,17 @@ import {
   zipEntry,
 } from './support/import.js';
 import type { MultipartFile } from './support/import.js';
+import {
+  addAdvisor,
+  createClub as createClubIn,
+  createRound as createRoundIn,
+  createStudent as createStudentIn,
+  register as registerIn,
+  snapshotDatabase as snapshotDatabaseOf,
+  uniqueCode,
+  uniqueStudentId,
+  uniqueTerm,
+} from './support/import-db.js';
 import { startMigratedPostgres } from './support/postgres.js';
 
 type InjectResponse = Awaited<ReturnType<FastifyInstance['inject']>>;
@@ -39,22 +50,7 @@ const errorOf = (response: InjectResponse) => errorResponseSchema.parse(response
 const previewOf = (response: InjectResponse): ImportPreviewResponse =>
   importPreviewResponseSchema.parse(response.json());
 
-const hex = (bytes = 4) => randomBytes(bytes).toString('hex');
-// Fresh terms, codes and IDs per test, so tests never see each other's data.
-const uniqueTerm = () => `t-${hex()}`;
-const uniqueCode = () => `C${hex(3).toUpperCase()}`;
-const uniqueStudentId = () => `s${hex(5)}`;
-
 const COL = IMPORT_COLUMNS;
-const TABLES = [
-  'users',
-  'student_profiles',
-  'rounds',
-  'clubs',
-  'club_advisors',
-  'registrations',
-  'registration_events',
-] as const;
 
 describe('admin import preview', () => {
   let container: StartedPostgreSqlContainer;
@@ -94,79 +90,17 @@ describe('admin import preview', () => {
     return previewOf(response);
   };
 
-  const createRound = async (term: string, grade: number): Promise<number> => {
-    const { rows } = await pool.query<{ id: number }>(
-      `INSERT INTO rounds (term, grade, opens_at, closes_at)
-       VALUES ($1, $2, now() + interval '1 day', now() + interval '2 days') RETURNING id`,
-      [term, grade],
-    );
-    return rows[0]!.id;
-  };
-
+  const createRound = async (term: string, grade: number) => await createRoundIn(pool, term, grade);
   const createClub = async (
     roundId: number,
     clubCode: string,
-    {
-      name = 'ชุมนุมสมมติ',
-      capacity = 30,
-      description = '',
-    }: { name?: string; capacity?: number; description?: string } = {},
-  ): Promise<number> => {
-    const { rows } = await pool.query<{ id: number }>(
-      `INSERT INTO clubs (round_id, club_code, name, capacity, description)
-       VALUES ($1, $2, $3, $4, $5) RETURNING id`,
-      [roundId, clubCode, name, capacity, description],
-    );
-    return rows[0]!.id;
-  };
-
-  const createStudent = async ({
-    loginId = uniqueStudentId(),
-    fullName = 'นักเรียน สมมติ',
-    grade = 1,
-    classroom = '1',
-    seatNo = 1,
-  }: {
-    loginId?: string;
-    fullName?: string;
-    grade?: number;
-    classroom?: string;
-    seatNo?: number;
-  } = {}) => {
-    const { rows } = await pool.query<{ id: number }>(
-      `INSERT INTO users (login_id, full_name, role, password_hash)
-       VALUES ($1, $2, 'student', 'not-a-real-hash') RETURNING id`,
-      [loginId, fullName],
-    );
-    const id = rows[0]!.id;
-    await pool.query(
-      'INSERT INTO student_profiles (user_id, grade, classroom, seat_no) VALUES ($1, $2, $3, $4)',
-      [id, grade, classroom, seatNo],
-    );
-    return { id, loginId };
-  };
-
-  // Seats a student directly, keeping clubs.registered equal to the registrations.
-  const register = async (roundId: number, studentId: number, clubId: number) => {
-    await pool.query(
-      'INSERT INTO registrations (round_id, student_id, club_id) VALUES ($1, $2, $3)',
-      [roundId, studentId, clubId],
-    );
-    await pool.query('UPDATE clubs SET registered = registered + 1 WHERE id = $1', [clubId]);
-  };
-
-  const snapshotDatabase = async () =>
-    await Promise.all(
-      TABLES.map(async (table) => {
-        // table comes from the constant list above, never from input.
-        const { rows } = await pool.query<{ count: number; digest: string }>(
-          `SELECT count(*)::int AS count,
-                  md5(coalesce(string_agg(t::text, ',' ORDER BY t::text), '')) AS digest
-           FROM ${table} t`,
-        );
-        return { table, ...rows[0]! };
-      }),
-    );
+    options?: Parameters<typeof createClubIn>[3],
+  ) => await createClubIn(pool, roundId, clubCode, options);
+  const createStudent = async (options?: Parameters<typeof createStudentIn>[1]) =>
+    await createStudentIn(pool, options);
+  const register = async (roundId: number, studentId: number, clubId: number) =>
+    await registerIn(pool, roundId, studentId, clubId);
+  const snapshotDatabase = async () => await snapshotDatabaseOf(pool);
 
   beforeAll(async () => {
     container = await startMigratedPostgres();
@@ -267,7 +201,31 @@ describe('admin import preview', () => {
 
       expect(result.errors).toEqual([]);
       // stored: grades 1 and 2; both: grade 1 (DB) and 2 (file); fresh: grade 1.
-      expect(result.advisors).toEqual({ clubsReplaced: 5, rows: 4 });
+      expect(result.advisors).toEqual({ clubsReplaced: 5, clubsUnchanged: 0, rows: 4 });
+    });
+
+    it('counts a club whose stored advisors already match the file, in order, as unchanged', async () => {
+      const term = uniqueTerm();
+      const roundId = await createRound(term, 1);
+      const [same, reordered] = [uniqueCode(), uniqueCode()];
+      const sameId = await createClub(roundId, same);
+      const reorderedId = await createClub(roundId, reordered);
+      await addAdvisor(pool, sameId, 'ครูหนึ่ง');
+      await addAdvisor(pool, sameId, 'ครูสอง');
+      await addAdvisor(pool, reorderedId, 'ครูหนึ่ง');
+      await addAdvisor(pool, reorderedId, 'ครูสอง');
+      const workbook = await buildImportWorkbook({
+        advisors: [
+          advisorRow({ clubCode: same, fullName: 'ครูหนึ่ง' }),
+          advisorRow({ clubCode: same, fullName: 'ครูสอง' }),
+          advisorRow({ clubCode: reordered, fullName: 'ครูสอง' }),
+          advisorRow({ clubCode: reordered, fullName: 'ครูหนึ่ง' }),
+        ],
+      });
+
+      const result = await previewOk(term, workbook);
+
+      expect(result.advisors).toEqual({ clubsReplaced: 1, clubsUnchanged: 1, rows: 4 });
     });
 
     it('accepts the empty template as a file with nothing to change', async () => {
@@ -276,7 +234,7 @@ describe('admin import preview', () => {
       expect(result).toMatchObject({
         students: { create: 0, update: 0, unchanged: 0 },
         clubs: { create: 0, update: 0, unchanged: 0 },
-        advisors: { clubsReplaced: 0, rows: 0 },
+        advisors: { clubsReplaced: 0, clubsUnchanged: 0, rows: 0 },
         errors: [],
         errorCount: 0,
       });
@@ -301,10 +259,7 @@ describe('admin import preview', () => {
       const clubId = await createClub(roundId, code, { capacity: 10 });
       const student = await createStudent({ fullName: 'ชื่อเก่า สมมติ' });
       await register(roundId, student.id, clubId);
-      await pool.query(
-        "INSERT INTO club_advisors (club_id, full_name) VALUES ($1, 'ครูเดิม สมมติ')",
-        [clubId],
-      );
+      await addAdvisor(pool, clubId, 'ครูเดิม สมมติ');
       const before = await snapshotDatabase();
       const workbook = await buildImportWorkbook({
         students: [
@@ -396,7 +351,7 @@ describe('admin import preview', () => {
         ['advisors', 5, COL.advisors.phone],
         ['advisors', 5, COL.advisors.lineId],
       ]);
-      expect(result.advisors).toEqual({ clubsReplaced: 1, rows: 1 });
+      expect(result.advisors).toEqual({ clubsReplaced: 1, clubsUnchanged: 0, rows: 1 });
     });
 
     it('reports a repeated student ID on the later row, naming the first', async () => {
@@ -535,7 +490,7 @@ describe('admin import preview', () => {
         ['advisors', 2, COL.advisors.clubCode],
         ['advisors', 3, COL.advisors.clubCode],
       ]);
-      expect(result.advisors).toEqual({ clubsReplaced: 0, rows: 0 });
+      expect(result.advisors).toEqual({ clubsReplaced: 0, clubsUnchanged: 0, rows: 0 });
     });
 
     it('refuses a grade change for a student registered in a round of their grade this term', async () => {

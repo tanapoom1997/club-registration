@@ -1,6 +1,7 @@
 import {
   errorResponseSchema,
   healthResponseSchema,
+  importCommitResponseSchema,
   importPreviewResponseSchema,
   roundListResponseSchema,
   roundResponseSchema,
@@ -11,6 +12,7 @@ import type {
   CreateRoundBatchRequest,
   CreateRoundRequest,
   HealthResponse,
+  ImportCommitResponse,
   ImportPreviewResponse,
   LoginRequest,
   Round,
@@ -111,13 +113,43 @@ export const deleteRound = async (id: number): Promise<void> => {
 
 export const IMPORT_TEMPLATE_URL = '/api/admin/import/template';
 
-// The browser sets the multipart boundary itself, so no content-type is given here. The term goes
-// first so the server meets it before the file.
-export const previewImport = async (term: string, file: File): Promise<ImportPreviewResponse> => {
+// The browser sets the multipart boundary itself, so no content-type is given here. Fields go
+// first so the server meets them before the file.
+const sendForm = async <T>(
+  path: string,
+  fields: Record<string, string>,
+  file: File,
+  schema: Parser<T>,
+): Promise<T> => {
   const body = new FormData();
-  body.append('term', term);
+  Object.entries(fields).forEach(([name, value]) => body.append(name, value));
   body.append('file', file);
-  const response = await fetch('/api/admin/import/preview', { method: 'POST', body });
+  const response = await fetch(path, { method: 'POST', body });
   if (!response.ok) throw await toApiError(response);
-  return importPreviewResponseSchema.parse(await response.json());
+  return schema.parse(await response.json());
 };
+
+export const previewImport = async (term: string, file: File): Promise<ImportPreviewResponse> =>
+  await sendForm('/api/admin/import/preview', { term }, file, importPreviewResponseSchema);
+
+export type CommitImportRequest = {
+  term: string;
+  file: File;
+  fileSha256: string;
+  idempotencyKey: string;
+};
+
+// Sends the previewed file again: the server keeps nothing between preview and commit, and
+// refuses the commit if the bytes no longer match fileSha256.
+export const commitImport = async ({
+  term,
+  file,
+  fileSha256,
+  idempotencyKey,
+}: CommitImportRequest): Promise<ImportCommitResponse> =>
+  await sendForm(
+    '/api/admin/import/commit',
+    { term, fileSha256, idempotencyKey },
+    file,
+    importCommitResponseSchema,
+  );

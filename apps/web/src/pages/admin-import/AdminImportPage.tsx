@@ -4,16 +4,17 @@ import {
   IMPORT_MAX_FILE_BYTES,
   IMPORT_MAX_ROWS_PER_SHEET,
 } from '@club-registration/shared';
-import { useMutation, useQuery } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useState } from 'react';
 import type { FormEvent } from 'react';
 import { Link } from 'react-router';
 import { FormError } from '@/components/FormError';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
-import { ApiError, IMPORT_TEMPLATE_URL, fetchRounds, previewImport } from '@/lib/api';
+import { ApiError, IMPORT_TEMPLATE_URL, commitImport, fetchRounds, previewImport } from '@/lib/api';
 import { useSetSession } from '@/lib/session';
 import { ROUNDS_QUERY_KEY } from '@/pages/admin-rounds/round-ui';
+import { ConfirmImport } from './ConfirmImport';
 import { ImportSummary } from './ImportSummary';
 
 const MAX_FILE_MB = IMPORT_MAX_FILE_BYTES / (1024 * 1024);
@@ -29,9 +30,26 @@ const ERROR_MESSAGES: Readonly<Record<string, string>> = Object.freeze({
   [ERROR_CODES.rateLimited]: 'ส่งไฟล์ถี่เกินไป กรุณารอสักครู่แล้วลองใหม่',
 });
 
+const PREVIEW_AGAIN = 'กรุณากด “ตรวจสอบไฟล์” อีกครั้งก่อนยืนยัน';
+
+// Each of these means the preview on screen no longer describes what a commit would do.
+const STALE_PREVIEW_MESSAGES: Readonly<Record<string, string>> = Object.freeze({
+  [ERROR_CODES.importFileMismatch]: `ไฟล์ที่ส่งไม่ตรงกับไฟล์ที่ตรวจสอบไว้ ยังไม่ได้บันทึกอะไรเลย ${PREVIEW_AGAIN}`,
+  [ERROR_CODES.importInvalid]: `ข้อมูลในระบบเปลี่ยนไปหลังการตรวจสอบจนไฟล์นี้มีข้อผิดพลาด ยังไม่ได้บันทึกอะไรเลย ${PREVIEW_AGAIN}`,
+  [ERROR_CODES.importConflict]: `ข้อมูลในระบบเปลี่ยนไประหว่างนำเข้า (เช่น มีนักเรียนลงทะเบียนเพิ่ม) ยังไม่ได้บันทึกอะไรเลย ${PREVIEW_AGAIN}`,
+});
+
 const uploadErrorMessage = (error: unknown): string =>
   (error instanceof ApiError ? ERROR_MESSAGES[error.code] : undefined) ??
   'ตรวจสอบไฟล์ไม่สำเร็จ กรุณาลองใหม่อีกครั้ง';
+
+const isStalePreview = (error: unknown): boolean =>
+  error instanceof ApiError && Object.hasOwn(STALE_PREVIEW_MESSAGES, error.code);
+
+const commitErrorMessage = (error: unknown): string =>
+  (error instanceof ApiError
+    ? (STALE_PREVIEW_MESSAGES[error.code] ?? ERROR_MESSAGES[error.code])
+    : undefined) ?? 'บันทึกไม่สำเร็จ ยังไม่ได้บันทึกอะไรเลย กรุณาลองใหม่อีกครั้ง';
 
 // Mirrors the server's checks so an obviously wrong file is caught before uploading; the server
 // still checks everything itself.
@@ -52,17 +70,27 @@ export const AdminImportPage = () => {
   const [file, setFile] = useState<File>();
   const [formError, setFormError] = useState<string>();
   const setSession = useSetSession();
+  const queryClient = useQueryClient();
 
   const roundsQuery = useQuery({
     queryKey: [...ROUNDS_QUERY_KEY, ''],
     queryFn: async () => await fetchRounds(),
   });
+  const onError = (error: Error) => {
+    if (error instanceof ApiError && error.status === 401) setSession(null);
+  };
   const mutation = useMutation({
     mutationFn: async ({ term: chosen, file: chosenFile }: { term: string; file: File }) =>
       await previewImport(chosen, chosenFile),
-    onError: (error) => {
-      if (error instanceof ApiError && error.status === 401) setSession(null);
+    onError,
+  });
+  const commitMutation = useMutation({
+    mutationFn: commitImport,
+    onSuccess: async () => {
+      // Club counts and totals on the rounds page change with the import.
+      await queryClient.invalidateQueries({ queryKey: ROUNDS_QUERY_KEY });
     },
+    onError,
   });
 
   // Rounds arrive newest term first, so the default is the latest term.
@@ -73,6 +101,7 @@ export const AdminImportPage = () => {
   const resetResult = () => {
     setFormError(undefined);
     mutation.reset();
+    commitMutation.reset();
   };
 
   const handleSubmit = (event: FormEvent<HTMLFormElement>) => {
@@ -83,7 +112,22 @@ export const AdminImportPage = () => {
       return;
     }
     setFormError(undefined);
+    commitMutation.reset();
     mutation.mutate({ term: selectedTerm, file });
+  };
+
+  // Sends exactly the file that was previewed (not whatever the input holds now), with the hash
+  // the server reported for it.
+  const handleConfirm = () => {
+    const preview = mutation.data;
+    const previewed = mutation.variables;
+    if (!preview || !previewed) return;
+    commitMutation.mutate({
+      term: preview.term,
+      file: previewed.file,
+      fileSha256: preview.fileSha256,
+      idempotencyKey: crypto.randomUUID(),
+    });
   };
 
   const errorMessage =
@@ -95,8 +139,9 @@ export const AdminImportPage = () => {
         <h1 className="text-xl font-semibold">นำเข้า Excel</h1>
         <p className="text-sm text-muted-foreground">
           อัปโหลดไฟล์ .xlsx ที่มีชีต students, clubs, advisors (มีชีตใดก็ได้)
-          ระบบจะตรวจและสรุปให้ดูก่อน ยังไม่บันทึกอะไรลงระบบ ไฟล์ละไม่เกิน {MAX_FILE_MB} MB
-          และชีตละไม่เกิน {IMPORT_MAX_ROWS_PER_SHEET.toLocaleString('th-TH')} แถว
+          ระบบจะตรวจและสรุปให้ดูก่อนโดยยังไม่บันทึก เมื่อไม่มีข้อผิดพลาดจึงกดยืนยันเพื่อบันทึกลงระบบ
+          ไฟล์ละไม่เกิน {MAX_FILE_MB} MB และชีตละไม่เกิน{' '}
+          {IMPORT_MAX_ROWS_PER_SHEET.toLocaleString('th-TH')} แถว
         </p>
         <p className="text-sm">
           <a className="text-primary underline" href={IMPORT_TEMPLATE_URL} download>
@@ -161,13 +206,26 @@ export const AdminImportPage = () => {
             />
           </div>
           <FormError message={errorMessage} />
-          <Button type="submit" disabled={mutation.isPending}>
+          <Button type="submit" disabled={mutation.isPending || commitMutation.isPending}>
             {mutation.isPending ? 'กำลังตรวจสอบ…' : 'ตรวจสอบไฟล์'}
           </Button>
         </form>
       )}
 
-      {mutation.isSuccess && <ImportSummary preview={mutation.data} />}
+      {mutation.isSuccess && (
+        <ImportSummary preview={mutation.data}>
+          <ConfirmImport
+            hasErrors={mutation.data.errorCount > 0}
+            isPending={commitMutation.isPending}
+            result={commitMutation.data}
+            errorMessage={
+              commitMutation.isError ? commitErrorMessage(commitMutation.error) : undefined
+            }
+            needsNewPreview={commitMutation.isError && isStalePreview(commitMutation.error)}
+            onConfirm={handleConfirm}
+          />
+        </ImportSummary>
+      )}
     </section>
   );
 };

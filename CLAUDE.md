@@ -2,7 +2,7 @@
 
 ระบบลงทะเบียนชุมนุมโรงเรียน (นักเรียน ~2,500 คน, รอบละ ~450 concurrent) แผนเต็ม สถาปัตยกรรม data model และ roadmap อยู่ใน [README.md](README.md) อ่านก่อนเริ่มงานทุกครั้ง ไฟล์นี้เก็บเฉพาะกติกาการทำงานที่ต้องไม่หลุด
 
-**สถานะ:** Phase 1 ข้อ 1 (Auth + role guard) และข้อ 3 (admin จัดการรอบ: `apps/api/src/routes/admin-rounds.ts` + `services/rounds.ts`, หน้า `/admin/rounds`) เสร็จแล้ว ข้อ 2 (import Excel) ทำ dry run แล้ว (`routes/admin-import.ts`, `import/`, `services/import-plan.ts`, หน้า `/admin/import`) เหลือขั้นยืนยัน ต่อจาก scaffold (monorepo, migration แรกครบทุกตาราง, `GET /api/health`) มี login/เปลี่ยนรหัส/logout, `create-admin` และหน้า FE ตาม role (เมนูอื่นยังเป็นโครงว่าง) ยังไม่มี logic ลงทะเบียน
+**สถานะ:** Phase 1 ข้อ 1 (Auth + role guard) และข้อ 3 (admin จัดการรอบ: `apps/api/src/routes/admin-rounds.ts` + `services/rounds.ts`, หน้า `/admin/rounds`) เสร็จแล้ว ข้อ 2 (import Excel: dry run + ยืนยัน, `routes/admin-import.ts`, `import/`, `services/import-plan.ts`, `services/import-commit.ts`, หน้า `/admin/import`) เสร็จแล้ว นักเรียนที่นำเข้าใหม่ยัง login ไม่ได้จนกว่าจะมีขั้นออกรหัสผ่านเริ่มต้น ต่อจาก scaffold (monorepo, migration แรกครบทุกตาราง, `GET /api/health`) มี login/เปลี่ยนรหัส/logout, `create-admin` และหน้า FE ตาม role (เมนูอื่นยังเป็นโครงว่าง) ยังไม่มี logic ลงทะเบียน
 
 ## กฎที่ห้ามละเมิด
 
@@ -147,6 +147,7 @@ pnpm build
 - JWT: อายุสั้น, ระบุ algorithm ตอน verify, ห้ามใส่ข้อมูลอ่อนไหวใน payload, เก็บฝั่ง client เป็น `HttpOnly; Secure; SameSite` cookie ถ้าทำได้ แทน `localStorage`
 - เปิด `@fastify/helmet` และ `@fastify/rate-limit` (`global: false` เลือกเปิดราย route ด้วย `app.createRateLimit()`) body limit 64 KiB (route อัปโหลดตั้งเอง)
 - Route ที่ต้อง login ใช้ `guard()` จาก `createAuthGuard` (`apps/api/src/auth/session.ts`) ระบุ `roles` เมื่อจำกัด role
+- Route เขียนที่ไม่ได้รับ JSON (เช่น multipart อัปโหลด ซึ่ง form ข้ามเว็บส่งได้โดยไม่มี preflight) ต้องเรียก `assertSameOrigin` (`apps/api/src/http/same-origin.ts`) ใน preHandler
 - Validate input ทุกจุดด้วย Zod ที่ขอบระบบ (body, query, params, ไฟล์ที่อัปโหลด) ไม่เชื่อข้อมูลภายนอก
 - Error response ไม่เปิดเผย stack trace หรือข้อความจาก DB ให้ client
 - Dependency: ใช้ lockfile และ `pnpm install --frozen-lockfile` ใน CI/Docker, เปิด Dependabot/`pnpm audit` (เสนอ), Docker รันด้วย non-root user

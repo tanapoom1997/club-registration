@@ -2,7 +2,7 @@
 
 ระบบลงทะเบียนชุมนุมของโรงเรียน สำหรับนักเรียน ~2,500 คน แบ่งรอบตามชั้น ม.1–ม.6 รอบละ ~400–450 คน
 
-> **สถานะ:** Phase 1 ทำ Auth + role guard เสร็จแล้ว (login, บังคับเปลี่ยนรหัสครั้งแรก, logout, `create-admin`, หน้า FE ตาม role) admin จัดการรอบลงทะเบียนได้แล้ว (`/api/admin/rounds` + หน้า `/admin/rounds`) และตรวจไฟล์ import Excel แบบ dry run ได้แล้ว (`/api/admin/import/preview` + หน้า `/admin/import` ยังไม่มีขั้นยืนยัน) ต่อจาก monorepo, migration แรก และ `GET /api/health` ยังไม่มี logic ลงทะเบียน เอกสารนี้คือแผนและข้อกำหนดของโปรเจกต์
+> **สถานะ:** Phase 1 ทำ Auth + role guard เสร็จแล้ว (login, บังคับเปลี่ยนรหัสครั้งแรก, logout, `create-admin`, หน้า FE ตาม role) admin จัดการรอบลงทะเบียนได้แล้ว (`/api/admin/rounds` + หน้า `/admin/rounds`) และนำเข้า Excel ได้แล้วทั้งขั้นตรวจ (dry run) และขั้นยืนยัน (`/api/admin/import/preview`, `/api/admin/import/commit` + หน้า `/admin/import`) นักเรียนที่นำเข้าใหม่ยังเข้าสู่ระบบไม่ได้จนกว่าจะมีขั้นออกรหัสผ่านเริ่มต้น ต่อจาก monorepo, migration แรก และ `GET /api/health` ยังไม่มี logic ลงทะเบียน เอกสารนี้คือแผนและข้อกำหนดของโปรเจกต์
 >
 > **หมายเหตุ:** ตัวเลข performance ทั้งหมดเป็นการประเมินจากหลักการ ยังไม่ได้วัดจริง ต้อง load test ก่อนใช้งาน
 
@@ -141,7 +141,7 @@ COMMIT;
 **เป้าหมาย:** admin เตรียมข้อมูล → นักเรียนลง/ยกเลิกถูกกติกา → admin ได้รายชื่อ
 
 1. ~~**Auth:** login รหัสนักเรียน + รหัสเริ่มต้นสุ่มรายคน, บังคับเปลี่ยนรหัสครั้งแรก, role `student`/`admin` (JWT, secret จาก env)~~ เสร็จแล้ว
-2. **Admin import Excel:** students, clubs, advisors → dry run → ยืนยัน → upsert ใน transaction เดียว (dry run เสร็จแล้ว เหลือขั้นยืนยัน)
+2. ~~**Admin import Excel:** students, clubs, advisors → dry run → ยืนยัน → upsert ใน transaction เดียว~~ เสร็จแล้ว (นักเรียนใหม่ยังไม่มีรหัสผ่าน รอขั้นออกรหัสผ่านเริ่มต้น)
 3. ~~**Admin จัดการรอบ:** สร้างรอบต่อชั้น กำหนด `opens_at`/`closes_at`~~ เสร็จแล้ว (สร้างทีละชั้นหรือครบ ม.1–ม.6, แก้เวลา/`max_active`, ลบรอบที่ยังไม่มีชุมนุม, สถานะคำนวณตอนอ่าน)
 4. **นักเรียน:** ดูรายการชุมนุมในชั้นตัวเอง (ครู, ที่เหลือ), ลง, ยกเลิก, ดูผลของฉัน
 5. **กติกาที่ DB:** 1 คน 1 ชุมนุม, ห้ามเกิน capacity, เฉพาะชั้นตัวเอง, เฉพาะช่วงเปิดรอบ
@@ -226,9 +226,10 @@ Admin เพิ่ม/ลบ/ย้ายนักเรียนแทน บ�
 
 1. Admin อัปโหลด → **dry run** ไม่เขียน DB
 2. สรุป: เพิ่มกี่แถว / อัปเดตกี่แถว / error แถวไหนเพราะอะไร
-3. ยืนยัน → เขียนทั้งหมดใน transaction เดียว (error แถวเดียว = ไม่เขียนเลย)
-4. **Upsert ตามรหัส** อัปโหลดซ้ำได้ไม่เกิดข้อมูลซ้ำ
-5. Advisors **replace ทั้งชุดต่อชุมนุม** เพื่อให้ครูที่ถูกถอดหายจริง
+3. ยืนยัน → ส่งไฟล์เดิมซ้ำพร้อม sha256 ที่ได้จากขั้นตรวจ (server ไม่เก็บไฟล์ไว้ระหว่างสองขั้น ถ้า hash ไม่ตรง = `409 import_file_mismatch`) → ตรวจและเทียบกับ DB ใหม่ แล้วเขียนทั้งหมดใน transaction เดียว (error แถวเดียว = `422 import_invalid` ไม่เขียนเลย) การยืนยันทำได้ทีละครั้งทั้งระบบ (`pg_advisory_xact_lock`)
+4. **Upsert ตามรหัส** อัปโหลดซ้ำได้ไม่เกิดข้อมูลซ้ำ ครั้งที่สองรายงานว่าไม่เปลี่ยนทั้งหมด ไม่ลบนักเรียน/ชุมนุมที่ไม่มีในไฟล์ และไม่แตะ `registered`
+5. Advisors **replace ทั้งชุดต่อชุมนุม** เพื่อให้ครูที่ถูกถอดหายจริง (ชุมนุมที่ไม่มีในชีต advisors คงครูเดิม)
+6. นักเรียนใหม่ได้ `password_hash` เป็นค่าที่ login ไม่ได้ (`!unissued`) + `must_change_password` จนกว่า admin จะออกรหัสผ่านเริ่มต้น นักเรียนเดิมอัปเดตแค่ชื่อ/ชั้น/ห้อง/เลขที่ ไม่แตะรหัสผ่านหรือ session
 
 **กติกาของไฟล์**
 
@@ -270,7 +271,7 @@ Admin เลือก **รอบ** → เลือก **มุมมอง** (
 - **Rate limit** ที่ `/auth/login` และ endpoint เขียน
 - **Session:** JWT (HS256, อายุ 2 ชม.) อยู่ใน cookie `HttpOnly; Secure; SameSite=Strict; Path=/api` ไม่เก็บใน `localStorage` ทุก request เช็ค `users.session_version` กับค่าใน token → logout หรือเปลี่ยนรหัส = token เก่าทุกเครื่องใช้ไม่ได้ทันที (สำคัญกับคอมห้องแล็บที่ใช้ร่วมกัน) และถ้า role ใน DB เปลี่ยน token เดิมก็ใช้ไม่ได้
 - **บังคับเปลี่ยนรหัสครั้งแรก:** ถ้า `must_change_password` ทุก route ตอบ `403 password_change_required` ยกเว้น `/auth/me`, `/auth/change-password`, `/auth/logout`
-- **CSRF:** `SameSite=Strict` + endpoint เขียนรับเฉพาะ JSON (form ข้ามเว็บส่ง `application/json` ไม่ได้ถ้าไม่ผ่าน CORS preflight ซึ่งเราไม่เปิด)
+- **CSRF:** `SameSite=Strict` + endpoint เขียนรับเฉพาะ JSON (form ข้ามเว็บส่ง `application/json` ไม่ได้ถ้าไม่ผ่าน CORS preflight ซึ่งเราไม่เปิด) ส่วน route อัปโหลด (multipart ซึ่ง form ข้ามเว็บส่งได้) ตรวจเพิ่มว่า `Sec-Fetch-Site` เป็น `same-origin`/`none` หรือถ้าไม่มี header นี้ `Origin` (ถ้าส่งมา) ต้องตรงกับ host (`apps/api/src/http/same-origin.ts`) ไม่ผ่าน = `403`
 - **Rate limit login:** 10 ครั้ง/15 นาที ต่อ IP + รหัสผู้ใช้ (คนอื่นแกล้งล็อกบัญชีนักเรียนจากที่อื่นไม่ได้) และ 600 ครั้ง/นาที ต่อ IP ที่ตั้งสูงเพราะทั้งโรงเรียนอาจออก NAT IP เดียว **ต้องปรับตอน load test** store อยู่ใน memory ใช้ได้เพราะเป็นเครื่องเดียว และหลัง Caddy ต้องตั้ง `TRUST_PROXY=true` ไม่อย่างนั้นทุก request จะมี IP ของ Caddy และนับรวมเป็นก้อนเดียว
 - **Login ที่ไม่มีผู้ใช้** ยังคำนวณ argon2 หนึ่งรอบ เวลาตอบจึงไม่บอกว่ารหัสนักเรียนไหนมีอยู่จริง
 - **Admin คนแรก:** `pnpm --filter api create-admin <login_id>` สุ่มรหัส 16 ตัว แสดงครั้งเดียว เก็บแค่ hash และต้องเปลี่ยนตอน login แรก
@@ -356,4 +357,4 @@ EC2 (t4g.small) ──► Caddy (HTTPS อัตโนมัติ)
 
 ## ขั้นตอนถัดไป
 
-ทำต่อใน **Phase 1** โดยทำฝั่ง admin ให้ครบก่อน: Excel import ขั้นยืนยัน (dry run เสร็จแล้ว) → รหัสผ่านเริ่มต้น → หน้าชุมนุม → export → แล้วจึง endpoint ลง/ยกเลิก **พร้อม concurrency test** และหน้านักเรียน → Ops (scaffold, migration แรก, auth + role guard และจัดการรอบเสร็จแล้ว)
+ทำต่อใน **Phase 1** โดยทำฝั่ง admin ให้ครบก่อน: รหัสผ่านเริ่มต้น → หน้าชุมนุม → export → แล้วจึง endpoint ลง/ยกเลิก **พร้อม concurrency test** และหน้านักเรียน → Ops (scaffold, migration แรก, auth + role guard, จัดการรอบ และ import Excel เสร็จแล้ว)

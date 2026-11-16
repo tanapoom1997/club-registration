@@ -3,7 +3,7 @@ import type {
   ImportPreviewResponse,
   ImportSheet,
 } from '@club-registration/shared';
-import { Button } from '@/components/ui/button';
+import type { ReactNode } from 'react';
 
 const SHEET_LABELS: Readonly<Record<ImportSheet, string>> = Object.freeze({
   students: 'นักเรียน (students)',
@@ -24,9 +24,16 @@ const CountsRow = ({ label, counts }: { label: string; counts: ImportChangeCount
   </tr>
 );
 
-const SummaryTable = ({ preview }: { preview: ImportPreviewResponse }) => (
+// The commit answers in the same shape as the preview, so both are shown with this table.
+export const SummaryTable = ({
+  preview,
+  label,
+}: {
+  preview: Pick<ImportPreviewResponse, 'students' | 'clubs' | 'advisors'>;
+  label: string;
+}) => (
   <div className="overflow-x-auto rounded-lg border border-border bg-card">
-    <table className="w-full text-sm" aria-label="สรุปผลการตรวจสอบ">
+    <table className="w-full text-sm" aria-label={label}>
       <thead className="border-b border-border text-muted-foreground">
         <tr>
           <th className="p-3 text-left font-medium">ข้อมูล</th>
@@ -43,8 +50,10 @@ const SummaryTable = ({ preview }: { preview: ImportPreviewResponse }) => (
             {SHEET_LABELS.advisors}
           </th>
           <td className="p-3" colSpan={3}>
-            แทนที่รายชื่อครูของ {formatCount(preview.advisors.clubsReplaced)} ชุมนุม (
-            {formatCount(preview.advisors.rows)} แถว)
+            แทนที่รายชื่อครูของ {formatCount(preview.advisors.clubsReplaced)} ชุมนุม
+            {preview.advisors.clubsUnchanged > 0 &&
+              ` (ไม่เปลี่ยน ${formatCount(preview.advisors.clubsUnchanged)} ชุมนุม)`}{' '}
+            จาก {formatCount(preview.advisors.rows)} แถว
           </td>
         </tr>
       </tbody>
@@ -90,7 +99,14 @@ const ErrorTable = ({ preview }: { preview: ImportPreviewResponse }) => (
   </div>
 );
 
-export const ImportSummary = ({ preview }: { preview: ImportPreviewResponse }) => (
+// children is the action area under the summary (the confirm step).
+export const ImportSummary = ({
+  preview,
+  children,
+}: {
+  preview: ImportPreviewResponse;
+  children: ReactNode;
+}) => (
   <section className="space-y-4" aria-labelledby="import-result-title">
     <div className="space-y-1">
       <h2 id="import-result-title" className="text-lg font-semibold">
@@ -101,7 +117,7 @@ export const ImportSummary = ({ preview }: { preview: ImportPreviewResponse }) =
         <code className="break-all">{preview.fileSha256.slice(0, 12)}</code>
       </p>
     </div>
-    <SummaryTable preview={preview} />
+    <SummaryTable preview={preview} label="สรุปผลการตรวจสอบ" />
     {preview.errorCount === 0 ? (
       <p role="status" className="text-sm text-success-foreground">
         ไม่พบข้อผิดพลาด
@@ -109,11 +125,6 @@ export const ImportSummary = ({ preview }: { preview: ImportPreviewResponse }) =
     ) : (
       <ErrorTable preview={preview} />
     )}
-    <div className="flex flex-wrap items-center gap-3">
-      <Button disabled>ยืนยันนำเข้า</Button>
-      <p className="text-sm text-muted-foreground">
-        การยืนยันและบันทึกลงระบบจะเปิดใช้ในขั้นถัดไป ตอนนี้เป็นการตรวจสอบอย่างเดียว
-      </p>
-    </div>
+    {children}
   </section>
 );

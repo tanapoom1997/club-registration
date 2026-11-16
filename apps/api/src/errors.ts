@@ -15,6 +15,9 @@ const HTTP_STATUS: Readonly<Record<ErrorCode, number>> = Object.freeze({
   [ERROR_CODES.fileTooLarge]: 413,
   [ERROR_CODES.unsupportedFile]: 415,
   [ERROR_CODES.invalidWorkbook]: 400,
+  [ERROR_CODES.importFileMismatch]: 409,
+  [ERROR_CODES.importInvalid]: 422,
+  [ERROR_CODES.importConflict]: 409,
   [ERROR_CODES.rateLimited]: 429,
   [ERROR_CODES.internalError]: 500,
 });
@@ -33,6 +36,10 @@ const DEFAULT_MESSAGES: Readonly<Record<ErrorCode, string>> = Object.freeze({
   [ERROR_CODES.fileTooLarge]: 'File is larger than the import limit',
   [ERROR_CODES.unsupportedFile]: 'Only .xlsx files are accepted',
   [ERROR_CODES.invalidWorkbook]: 'The file could not be read as an Excel workbook',
+  [ERROR_CODES.importFileMismatch]: 'The file differs from the previewed one; preview it again',
+  [ERROR_CODES.importInvalid]: 'The file has errors; nothing was imported',
+  [ERROR_CODES.importConflict]:
+    'Data changed while importing (e.g. registrations above the new capacity); preview again',
   [ERROR_CODES.rateLimited]: 'Too many requests, try again later',
   [ERROR_CODES.internalError]: 'Internal server error',
 });
