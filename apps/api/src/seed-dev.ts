@@ -1,16 +1,52 @@
-import { generatePassword, hashPassword } from './auth/password.js';
-import { createUserIfMissing } from './auth/users.js';
+import { chmod, readFile, writeFile } from 'node:fs/promises';
+import { fileURLToPath } from 'node:url';
+import { parseArgs } from 'node:util';
 import { loadDatabaseConfig } from './config.js';
 import { createPool } from './db.js';
+import { DEMO_ACCOUNTS, seedDemoAccounts } from './dev/demo-accounts.js';
+import type { DemoCredential } from './dev/demo-accounts.js';
 
-// Fictional students for trying the student pages before Excel import exists. The repo is
-// public, so names and IDs here must never resemble real people.
-const DEMO_STUDENTS = Object.freeze([
-  { loginId: 'demo1001', fullName: 'นักเรียนสมมติ หนึ่ง', grade: 1, classroom: '1', seatNo: 1 },
-  { loginId: 'demo1002', fullName: 'นักเรียนสมมติ สอง', grade: 1, classroom: '1', seatNo: 2 },
-  { loginId: 'demo2001', fullName: 'นักเรียนสมมติ สาม', grade: 2, classroom: '1', seatNo: 1 },
-]);
-const STUDENT_PASSWORD_LENGTH = 10;
+// Repo root from both src/ (tsx) and dist/ (node); the name is gitignored.
+const CREDENTIALS_FILE = fileURLToPath(new URL('../../../.dev-credentials.txt', import.meta.url));
+const OWNER_ONLY = 0o600;
+const HEADER = '# Fictional local demo accounts written by seed-dev. Never commit this file.';
+
+type KnownPasswords = Map<string, string>;
+
+const readKnownPasswords = async (): Promise<KnownPasswords> => {
+  try {
+    const text = await readFile(CREDENTIALS_FILE, 'utf8');
+    const entries = text
+      .split('\n')
+      .filter((line) => line.trim() !== '' && !line.startsWith('#'))
+      .map((line) => line.split(/\s+/))
+      .flatMap(([loginId, , password]) =>
+        loginId && password ? [[loginId, password] as const] : [],
+      );
+    return new Map(entries);
+  } catch (error) {
+    if (error instanceof Error && 'code' in error && error.code === 'ENOENT') return new Map();
+    throw error;
+  }
+};
+
+const writeKnownPasswords = async (known: KnownPasswords): Promise<void> => {
+  const lines = DEMO_ACCOUNTS.flatMap(({ loginId, role }) => {
+    const password = known.get(loginId);
+    return password ? [`${loginId.padEnd(12)} ${role.padEnd(8)} ${password}`] : [];
+  });
+  await writeFile(CREDENTIALS_FILE, `${HEADER}\n${lines.join('\n')}\n`, { mode: OWNER_ONLY });
+  // mode only applies when the file is created; tighten an existing file too.
+  await chmod(CREDENTIALS_FILE, OWNER_ONLY);
+};
+
+const mergeIssued = (known: KnownPasswords, issued: readonly DemoCredential[]): KnownPasswords =>
+  new Map([...known, ...issued.map(({ loginId, password }) => [loginId, password] as const)]);
+
+const { values } = parseArgs({
+  args: process.argv.slice(2),
+  options: { reset: { type: 'boolean', default: false } },
+});
 
 if (process.env.NODE_ENV === 'production') {
   console.error('seed-dev refuses to run with NODE_ENV=production');
@@ -18,37 +54,17 @@ if (process.env.NODE_ENV === 'production') {
 } else {
   const pool = createPool(loadDatabaseConfig().DATABASE_URL);
   try {
-    for (const student of DEMO_STUDENTS) {
-      const password = generatePassword(STUDENT_PASSWORD_LENGTH);
-      const passwordHash = await hashPassword(password);
-      const client = await pool.connect();
-      try {
-        await client.query('BEGIN');
-        const result = await createUserIfMissing(client, {
-          loginId: student.loginId,
-          fullName: student.fullName,
-          role: 'student',
-          passwordHash,
-        });
-        if (result.created) {
-          await client.query(
-            `INSERT INTO student_profiles (user_id, grade, classroom, seat_no)
-             VALUES ($1, $2, $3, $4)`,
-            [result.user.id, student.grade, student.classroom, student.seatNo],
-          );
-        }
-        await client.query('COMMIT');
-        console.log(
-          result.created
-            ? `${student.loginId}  grade ${student.grade}  password: ${password}`
-            : `${student.loginId}  already exists; unchanged`,
-        );
-      } catch (error) {
-        await client.query('ROLLBACK');
-        throw error;
-      } finally {
-        client.release();
-      }
+    const { issued, unchanged } = await seedDemoAccounts(pool, { reset: values.reset });
+    const known = mergeIssued(await readKnownPasswords(), issued);
+    await writeKnownPasswords(known);
+
+    console.log(`Demo accounts (also in ${CREDENTIALS_FILE}):`);
+    for (const { loginId, role } of DEMO_ACCOUNTS) {
+      console.log(`  ${loginId.padEnd(12)} ${role.padEnd(8)} ${known.get(loginId) ?? '(unknown)'}`);
+    }
+    const lost = unchanged.filter((loginId) => !known.has(loginId));
+    if (lost.length > 0) {
+      console.log(`Password unknown for ${lost.join(', ')}: pnpm --filter api seed-dev --reset`);
     }
   } finally {
     await pool.end();
