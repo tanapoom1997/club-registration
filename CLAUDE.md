@@ -13,7 +13,7 @@
 5. **ไม่เชื่อ role หรือ `student_id` จาก client** ใช้ค่าจาก JWT เท่านั้น
 6. **`apps/web` กับ `apps/api` ห้าม import กัน** คุยผ่าน HTTP และ `packages/shared` เท่านั้น
 7. **ทุก endpoint เขียนต้อง idempotent** รับ `idempotency_key` และเขียน `registration_events`
-8. **Export CSV/Excel ต้อง escape** ค่าที่ขึ้นต้นด้วย `=`, `+`, `-`, `@`
+8. **Export Excel ต้อง escape** ค่าที่ขึ้นต้นด้วย `=`, `+`, `-`, `@` และ export รายห้องต้องมีนักเรียนทุกคนในห้อง รวมคนที่ยังไม่ลง (สเปกเต็มดู README หัวข้อ Export รายชื่อ)
 9. **ห้ามใส่ข้อมูลจริงใน repo**: ไฟล์ .xlsx ของนักเรียน, `.env*`, `*.dump`, รหัสผ่าน, secret ข้อมูลทดสอบใช้ข้อมูลสมมติเท่านั้น (`templates/` เก็บได้เฉพาะไฟล์เปล่า)
 10. **ห้ามใส่ secret/PII ใน log**
 11. **ห้าม `dangerouslySetInnerHTML`** กับข้อความที่ admin กรอก
@@ -37,6 +37,7 @@
 | Frontend | Vite + React + Tailwind + shadcn/ui | SPA ไม่ใช้ SSR |
 | Data fetching | TanStack Query | polling คิว/สถานะ |
 | Excel | `exceljs` | import/export .xlsx |
+| PDF | ยังไม่เลือก | export รายชื่อ ต้อง spike ภาษาไทยก่อนแล้วถามก่อนเพิ่ม dependency (README รายการที่ยังเปิดอยู่ข้อ 6) |
 | Test | Vitest + Testcontainers | Postgres จริง ไม่ mock |
 | Deploy | Docker image เดียว + Docker Compose + Caddy | เครื่องเดียวบน EC2 |
 
