@@ -16,11 +16,16 @@ import { AdminExportPage } from '@/pages/admin-export/AdminExportPage';
 import { AdminImportPage } from '@/pages/admin-import/AdminImportPage';
 import { AdminInitialPasswordsPage } from '@/pages/admin-initial-passwords/AdminInitialPasswordsPage';
 import { AdminRoundsPage } from '@/pages/admin-rounds/AdminRoundsPage';
+import { MyRegistrationPage } from '@/pages/student/MyRegistrationPage';
+import { StudentClubsPage } from '@/pages/student/StudentClubsPage';
 import { MENUS } from '@/navigation';
 
-// Menu entries whose feature has shipped; every other entry still renders its placeholder.
+// Menu entries whose feature has shipped; an entry added before its page renders a placeholder.
 const PAGES: Readonly<Record<Role, Readonly<Record<string, ReactElement>>>> = Object.freeze({
-  student: {},
+  student: {
+    clubs: <StudentClubsPage />,
+    'my-registration': <MyRegistrationPage />,
+  },
   admin: {
     rounds: <AdminRoundsPage />,
     import: <AdminImportPage />,
