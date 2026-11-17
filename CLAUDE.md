@@ -2,7 +2,7 @@
 
 ระบบลงทะเบียนชุมนุมโรงเรียน (นักเรียน ~2,500 คน, รอบละ ~450 concurrent) แผนเต็ม สถาปัตยกรรม data model และ roadmap อยู่ใน [README.md](README.md) อ่านก่อนเริ่มงานทุกครั้ง ไฟล์นี้เก็บเฉพาะกติกาการทำงานที่ต้องไม่หลุด
 
-**สถานะ:** Phase 1 ข้อ 1–7 และ 9 เสร็จแล้ว (admin: รอบ, import, รหัสผ่านเริ่มต้น, ชุมนุม, export Excel/PDF; นักเรียน: ดูชุมนุม, ลง/ยกเลิก พร้อม concurrency test) เหลือข้อ 8 Ops: O1 image, O2 compose production, O3 backup/restore เสร็จแล้ว เหลือ O4 runbook EC2 + DNS → O5 load test รายละเอียดและไฟล์ของแต่ละงานดู README หัวข้อ [Roadmap](README.md#roadmap) และเรื่องที่ค้างดู [รายการที่ยังเปิดอยู่](README.md#รายการที่ยังเปิดอยู่)
+**สถานะ:** Phase 1 ข้อ 1–7 และ 9 เสร็จแล้ว (admin: รอบ, import, รหัสผ่านเริ่มต้น, ชุมนุม, export Excel/PDF; นักเรียน: ดูชุมนุม, ลง/ยกเลิก พร้อม concurrency test) เหลือข้อ 8 Ops: O1 image, O2 compose production, O3 backup/restore เสร็จแล้ว เหลือ O4 runbook EC2 + DNS → O5 load test ซึ่งเลื่อนไว้จนกว่าจะมีเครื่อง EC2 (ระหว่างนี้ทำบน local ตาม README หัวข้อขั้นตอนถัดไป) รายละเอียดและไฟล์ของแต่ละงานดู README หัวข้อ [Roadmap](README.md#roadmap) และเรื่องที่ค้างดู [รายการที่ยังเปิดอยู่](README.md#รายการที่ยังเปิดอยู่)
 
 ## กฎที่ห้ามละเมิด
 

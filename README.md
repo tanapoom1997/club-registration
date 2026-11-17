@@ -652,7 +652,13 @@ aws iam put-role-policy --role-name <ชื่อ role ของ EC2> --policy-n
 
 ## ขั้นตอนถัดไป
 
-ทำต่อใน **Phase 1** ข้อ 8 Ops:
+**เลื่อนไว้จนกว่าจะมีเครื่อง EC2** (Phase 1 ข้อ 8 ที่เหลือ ตัดสินใจทำงานบน local ไปก่อน):
 
-1. **O4 runbook EC2 + DNS:** สร้างเครื่อง t4g.small, IAM role + bucket จริง, ติดตั้ง Docker และ AWS CLI, swap หรือ build เฉพาะตอนไม่มีรอบเปิด (RAM 2 GB), อัปเดต DNS ตอน boot, ตั้งเวลา `scripts/backup.sh` (systemd timer/cron) พร้อมแจ้งเตือนเมื่อล้ม และ build + smoke บน arm64 จริง
-2. **O5 load test** บนสเปคเครื่องจริง: ตัดสิน `DB_POOL_MAX`, timeout, memory limit และค่า Postgres และตัดสินว่าต้องดึง queue (Phase 3) ขึ้นมาก่อนไหม
+- **O4 runbook EC2 + DNS:** สร้างเครื่อง t4g.small, IAM role + bucket จริง, ติดตั้ง Docker และ AWS CLI, swap หรือ build เฉพาะตอนไม่มีรอบเปิด (RAM 2 GB), อัปเดต DNS ตอน boot, ตั้งเวลา `scripts/backup.sh` (systemd timer/cron) พร้อมแจ้งเตือนเมื่อล้ม
+- **O5 load test** บนสเปคเครื่องจริง: ตัดสิน `DB_POOL_MAX`, timeout, memory limit และค่า Postgres และตัดสินว่าต้องดึง queue (Phase 3) ขึ้นมาก่อนไหม (รวมเวลาที่การลงทะเบียนต้องรอ import commit ของไฟล์ 2,500 คน)
+
+**ทำบน local ตามลำดับ:**
+
+1. แก้ข้อ 13–14 ใน [รายการที่ยังเปิดอยู่](#รายการที่ยังเปิดอยู่) (หน้าเว็บ)
+2. ทดสอบทั้งระบบด้วยมือตาม checklist บนเครื่อง arm64 (ปิดข้อ 15)
+3. เริ่ม **Phase 2** (เปลี่ยนชุมนุม + waitlist + admin แก้แทน) ทั้งที่ Phase 1 ยังเหลือ O4/O5 เพราะสองข้อนั้นต้องใช้เครื่องจริง Phase 2 ไม่ได้พึ่ง O4/O5 แต่ต้องรัน O5 ซ้ำหลัง Phase 2 เพราะการเลื่อนคิวทำให้ transaction ในรอบยาวขึ้น
