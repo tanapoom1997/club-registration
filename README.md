@@ -2,7 +2,7 @@
 
 ระบบลงทะเบียนชุมนุมของโรงเรียน สำหรับนักเรียน ~2,500 คน แบ่งรอบตามชั้น ม.1–ม.6 รอบละ ~400–450 คน
 
-> **สถานะ:** Phase 1 ทำ Auth + role guard เสร็จแล้ว (login, บังคับเปลี่ยนรหัสครั้งแรก, logout, `create-admin`, หน้า FE ตาม role) admin จัดการรอบลงทะเบียนได้แล้ว (`/api/admin/rounds` + หน้า `/admin/rounds`) นำเข้า Excel ได้แล้วทั้งขั้นตรวจ (dry run) และขั้นยืนยัน (`/api/admin/import/preview`, `/api/admin/import/commit` + หน้า `/admin/import`) ออกรหัสผ่านเริ่มต้นให้นักเรียนเป็นไฟล์ Excel ได้แล้ว (`/api/admin/students/password-status`, `/api/admin/students/initial-passwords` + หน้า `/admin/initial-passwords`) ดู/แก้ชุมนุมรายรอบได้แล้ว (`/api/admin/rounds/:roundId/clubs`, `/api/admin/clubs/:id` + หน้า `/admin/clubs`) ส่งออกรายชื่อรายชุมนุม/รายห้องเป็น Excel และ PDF ได้แล้ว (`/api/admin/rounds/:roundId/export` + หน้า `/admin/export`) นักเรียนอ่านรอบกับรายการชุมนุมของชั้นตัวเองผ่าน API ได้แล้ว (`/api/student/round`, `/api/student/clubs`) และ**ลง/ยกเลิกชุมนุมผ่าน API ได้แล้ว** (`POST /api/student/registration`, `POST /api/student/registration/cancel`) พร้อม concurrency test 500 request กับ Postgres จริง และ**มีหน้าเว็บนักเรียนแล้ว** (`/student/clubs` ดูชุมนุมและลง, `/student/my-registration` ดูผลและยกเลิก) งาน Ops เริ่มแล้ว: **มี production Docker image แล้ว** (O1: `api` และ `web` จาก `Dockerfile` ที่ root พร้อม `scripts/smoke-images.sh` ใน CI), **มี Compose ของ production แล้ว** (O2: `compose.prod.yml` + `deploy/production.env.example` HTTPS อัตโนมัติด้วย Caddy เมื่อมี domain พร้อม `scripts/smoke-compose.sh` ใน CI) และ**มี backup/restore แล้ว** (O3: `scripts/backup.sh` `pg_dump` ไป S3 แบบเข้ารหัส, `scripts/restore.sh` กู้แบบได้ทั้งก้อนหรือไม่ได้เลยและซ้อมกู้ลง DB ชั่วคราว พร้อม `scripts/smoke-backup.sh` ใน CI) ดูหัวข้อ [Infra และ Deployment](#infra-และ-deployment) ต่อจาก monorepo, migration แรก และ `GET /api/health` เอกสารนี้คือแผนและข้อกำหนดของโปรเจกต์
+> **สถานะ:** Phase 1 ฟีเจอร์ครบแล้ว (admin: รอบ, import Excel, รหัสผ่านเริ่มต้น, ชุมนุม, export Excel/PDF; นักเรียน: ดูชุมนุม, ลง/ยกเลิก พร้อม concurrency test 500 request) งาน Ops ทำ image, compose production + HTTPS และ backup/restore เสร็จแล้ว เหลือ runbook EC2 + DNS แล้ว load test บนเครื่องจริง ดู [Roadmap](#roadmap) และ [รายการที่ยังเปิดอยู่](#รายการที่ยังเปิดอยู่)
 >
 > **หมายเหตุ:** ตัวเลข performance ทั้งหมดเป็นการประเมินจากหลักการ ยังไม่ได้วัดจริง ต้อง load test ก่อนใช้งาน
 
@@ -636,6 +636,22 @@ aws iam put-role-policy --role-name <ชื่อ role ของ EC2> --policy-n
 | 6 | ~~สร้าง PDF ด้วยอะไร~~ | **ปิดแล้ว:** spike ผ่าน ใช้ `pdfkit` + ฟอนต์ Sarabun (OFL) ฝั่ง server (ดูหัวข้อ [Export รายชื่อ](#export-รายชื่อ)) |
 | 7 | Export รายห้องต้องแยกตามรอบไหม | แยกตามรอบ (1 รอบ = 1 ชั้นอยู่แล้ว) |
 
+**เรื่องที่ค้างจากงานที่ทำแล้ว** (เจอระหว่างรีวิว ยังไม่ได้แก้ ไม่ block การใช้งาน Phase 1)
+
+| # | เรื่อง | ผลกระทบ | ทางที่คิดไว้ |
+|---|---|---|---|
+| 8 | รอบของภาคเรียนเก่ายังเปิดอยู่ตอน import ภาคเรียนใหม่ย้ายชั้นนักเรียน | นักเรียนยังถือที่นั่งในรอบเก่าและยกเลิกเองไม่ได้ เพราะหน้าเว็บแสดงรอบของชั้นใหม่ | ตอนนี้แค่ข้อแนะนำในหัวข้อ Import ให้ปิดรอบเก่าก่อน ถ้าจะบังคับ: ปฏิเสธการย้ายชั้นเมื่อมีที่นั่งในรอบที่ยังเปิดของภาคเรียนอื่น |
+| 9 | ออกรหัสผ่านเริ่มต้นพร้อมกับยืนยัน import | ทั้งคู่ lock แถว `users` หลายแถวโดยไม่เรียงลำดับ ถ้าชนกัน Postgres ตัดตัวหนึ่ง (deadlock 40P01) admin เห็น 500 ไม่ค้าง ข้อมูลไม่เสีย | lock แถวเรียง id ทั้งสองฝั่ง หรือให้การออกรหัสผ่านถือ import lock ด้วย |
+| 10 | เลขหน้า PDF นับต่อทั้งไฟล์ | export ทั้งรอบแล้วพิมพ์แยกให้ครูแต่ละคน เลขหน้าจะไม่เริ่มที่ 1 | ถ้าครูต้องการ เปลี่ยนเป็นนับใหม่ต่อชุมนุม/ห้อง |
+| 11 | export ทั้งรอบที่ไม่มีข้อมูลตอบ `404 nothing_to_export` | แค่ข้อความในหน้าเว็บ | ทางเลือก: ไฟล์ที่มี sheet "ไม่มีข้อมูล" |
+| 12 | ปุ่ม "ลองอีกครั้ง" ของนักเรียนใช้ idempotency key เดิมกับ 5xx ด้วย (ไม่ใช่แค่ network error) | ปลอดภัย เพราะ 500 ของ API rollback แล้ว และ 502/504 จาก proxy ก็ไม่รู้ผลเหมือนกัน | คงไว้ ยืนยันอีกครั้งหลัง load test |
+| 13 | เก็บกวาดหน้าเว็บ | ไม่กระทบการทำงาน | ย้าย `STATUS_DISPLAY`/`gradeLabel` จาก `pages/admin-rounds/round-ui.ts` ไป `lib/`, คืน focus ให้ปุ่มยกเลิกหลังปิดกล่องยืนยัน, ซ่อนปุ่ม "ลงชุมนุม" ที่กดไม่ได้เมื่อมีชุมนุมแล้ว, หน้าชุมนุมของ admin เลือกรอบที่เปิดอยู่ให้อัตโนมัติ และเริ่ม poll เมื่อรอบเพิ่งเปิดโดยไม่ต้องโหลดใหม่ |
+| 14 | bundle JS ของหน้าเว็บ ~566 kB (Vite เตือนเกิน 500 kB) | โหลดครั้งแรกช้าบนมือถือเน็ตช้า | แยก chunk หน้า admin ด้วย lazy route ก่อนหรือหลัง load test |
+| 15 | arm64 ยังไม่เคย build/รันจริง | CI build แค่ amd64 ส่วน t4g เป็น arm64 | ตรวจตอน O4: build บนเครื่องจริงแล้วรัน smoke |
+
 ## ขั้นตอนถัดไป
 
-ทำต่อใน **Phase 1**: Ops ต่อจาก O3 (O4 runbook EC2 + DNS (รวม swap หรือเวลาที่ build บนเครื่อง 2 GB, ติดตั้ง AWS CLI, IAM role/instance profile + bucket จริง และตั้งเวลา `scripts/backup.sh` ด้วย systemd timer/cron พร้อมแจ้งเตือนเมื่อล้ม) → O5 load test บนสเปคเครื่องจริง ซึ่งตัดสิน pool, memory limit และค่า Postgres) (backup/restore, production image, compose production, scaffold, migration แรก, auth + role guard, จัดการรอบ, import Excel, รหัสผ่านเริ่มต้น, หน้าชุมนุม, export Excel/PDF, API อ่านของนักเรียน, API ลง/ยกเลิกพร้อม concurrency test และหน้าเว็บนักเรียน เสร็จแล้ว)
+ทำต่อใน **Phase 1** ข้อ 8 Ops:
+
+1. **O4 runbook EC2 + DNS:** สร้างเครื่อง t4g.small, IAM role + bucket จริง, ติดตั้ง Docker และ AWS CLI, swap หรือ build เฉพาะตอนไม่มีรอบเปิด (RAM 2 GB), อัปเดต DNS ตอน boot, ตั้งเวลา `scripts/backup.sh` (systemd timer/cron) พร้อมแจ้งเตือนเมื่อล้ม และ build + smoke บน arm64 จริง
+2. **O5 load test** บนสเปคเครื่องจริง: ตัดสิน `DB_POOL_MAX`, timeout, memory limit และค่า Postgres และตัดสินว่าต้องดึง queue (Phase 3) ขึ้นมาก่อนไหม
