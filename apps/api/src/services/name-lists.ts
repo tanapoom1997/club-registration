@@ -5,6 +5,7 @@ import { withReadOnlySnapshot } from '../db.js';
 import type { Queryable } from '../db.js';
 import { AppError } from '../errors.js';
 import { compareClassrooms } from './classroom-order.js';
+import { ADVISOR_NAMES_JOIN } from './clubs.js';
 import { findRound } from './rounds.js';
 
 // Name lists for teachers (README "Export รายชื่อ"). Each export reads everything in one read-only
@@ -105,13 +106,9 @@ export const readClubLists = async (
     const round = await findExportRound(client, roundId);
     const { rows: clubRows } = await client.query<ClubRow>(
       `SELECT c.id, c.club_code, c.name, c.capacity,
-              COALESCE(a.names, '{}') AS advisor_names
+              COALESCE(advisor_names.names, '{}') AS advisor_names
        FROM clubs c
-       LEFT JOIN LATERAL (
-         SELECT array_agg(ca.full_name ORDER BY ca.id) AS names
-         FROM club_advisors ca
-         WHERE ca.club_id = c.id
-       ) a ON true
+       ${ADVISOR_NAMES_JOIN}
        WHERE c.round_id = $1 AND ($2::int IS NULL OR c.id = $2)
        ORDER BY c.club_code, c.id`,
       [roundId, clubId ?? null],

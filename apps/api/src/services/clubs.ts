@@ -56,6 +56,17 @@ const toClub = (row: ClubRow): AdminClub => ({
 
 const CLUB_COLUMNS = 'id, round_id, club_code, name, description, capacity, registered';
 
+// For lists that show advisors by name only (the student club list, the per-club name list):
+// joins the names of club `c`'s advisors, in insertion order as on the admin list, as
+// advisor_names.names (NULL when there are none). The contact columns are deliberately not
+// selected, so they cannot leak into such a list even through a later change to its mapping.
+export const ADVISOR_NAMES_JOIN = `
+  LEFT JOIN LATERAL (
+    SELECT array_agg(ca.full_name ORDER BY ca.id) AS names
+    FROM club_advisors ca
+    WHERE ca.club_id = c.id
+  ) advisor_names ON true`;
+
 // Advisors are listed in insertion order, which is the order of the imported file. `source` is
 // always a constant (a table or a CTE name), never input.
 const selectWithAdvisors = (source: string, filter = '') => `
