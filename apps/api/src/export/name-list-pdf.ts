@@ -8,7 +8,9 @@ import type { ListCell, ListSection } from './name-list-content.js';
 
 // Name lists as PDF (README "Export รายชื่อ"): A4 portrait, one section per club or classroom
 // starting on a new page, the table header repeated on every page a long list continues onto, and
-// a footer with the export time (Thai time) and page number on every page.
+// a footer with the export time (Thai time) and page number on every page. Pages are numbered
+// within their section ("หน้า 1/2" of that club or classroom), not across the file, so each
+// teacher's printout of a whole-round export starts at page 1.
 //
 // Every cell is a single line. pdfkit only breaks lines at spaces and Thai names have none inside
 // a word, so text wider than its cell is cut at a grapheme boundary (a consonant never loses its
@@ -230,21 +232,47 @@ const drawSection = (
   );
 };
 
-// Drawn once every page exists, so each footer knows the page count.
-const drawFooters = (doc: PDFKit.PDFDocument, exportedAt: Date): void => {
+// The pages one section was drawn on: indexes first .. first + count - 1 of the buffered pages.
+type SectionPages = { first: number; count: number };
+
+const pageCount = (doc: PDFKit.PDFDocument): number => {
   const { start, count } = doc.bufferedPageRange();
+  return start + count;
+};
+
+// Each section starts a page of its own and continues onto as many as it needs.
+const drawSections = (
+  doc: PDFKit.PDFDocument,
+  columns: readonly PdfColumn[],
+  sections: readonly ListSection[],
+): SectionPages[] =>
+  sections.map((section, index) => {
+    if (index > 0) doc.addPage();
+    const first = pageCount(doc) - 1;
+    drawSection(doc, columns, section);
+    return { first, count: pageCount(doc) - first };
+  });
+
+// Drawn once every page exists, so each footer knows how many pages its section has.
+const drawFooters = (
+  doc: PDFKit.PDFDocument,
+  sectionPages: readonly SectionPages[],
+  exportedAt: Date,
+): void => {
   const exported = `ส่งออกเมื่อ ${formatExportTime(exportedAt)} น.`;
-  Array.from({ length: count }, (_, index) => start + index).forEach((pageIndex) => {
-    doc.switchToPage(pageIndex);
-    doc.font(REGULAR).fontSize(FOOTER_SIZE).fillColor('black');
-    drawLine(doc, exported, PAGE.marginX, PAGE.footerY);
-    const pageLabel = `หน้า ${pageIndex - start + 1}/${count}`;
-    drawLine(
-      doc,
-      pageLabel,
-      PAGE.width - PAGE.marginX - doc.widthOfString(pageLabel),
-      PAGE.footerY,
-    );
+  sectionPages.forEach(({ first, count }) => {
+    Array.from({ length: count }, (_, offset) => offset).forEach((offset) => {
+      doc.switchToPage(first + offset);
+      doc.font(REGULAR).fontSize(FOOTER_SIZE).fillColor('black');
+      drawLine(doc, exported, PAGE.marginX, PAGE.footerY);
+      const pageLabel = `หน้า ${offset + 1}/${count}`;
+      drawLine(
+        doc,
+        pageLabel,
+        PAGE.width - PAGE.marginX - doc.widthOfString(pageLabel),
+        PAGE.footerY,
+      );
+    });
   });
 };
 
@@ -266,11 +294,7 @@ const buildListPdf = async (
   doc.registerFont(BOLD, BOLD_FONT);
   // Start reading before end() so no output is left waiting in the stream.
   const bytes = buffer(doc);
-  sections.forEach((section, index) => {
-    if (index > 0) doc.addPage();
-    drawSection(doc, columns, section);
-  });
-  drawFooters(doc, exportedAt);
+  drawFooters(doc, drawSections(doc, columns, sections), exportedAt);
   doc.end();
   return await bytes;
 };
