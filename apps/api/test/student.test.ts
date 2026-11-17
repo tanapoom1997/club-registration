@@ -23,9 +23,16 @@ import { startMigratedPostgres, stopPostgres } from './support/postgres.js';
 
 type InjectResponse = Awaited<ReturnType<FastifyInstance['inject']>>;
 
+type AdvisorFields = {
+  fullName: string;
+  phone: string | null;
+  email: string | null;
+  lineId: string | null;
+};
+
 // Every value below is made up.
 const STUDENT_NAME = 'นักเรียนสมมติ ทดสอบอ่าน';
-const ADVISOR = Object.freeze({
+const ADVISOR: Readonly<AdvisorFields> = Object.freeze({
   fullName: 'ครูสมมติ ที่ปรึกษา',
   phone: '080-000-0002',
   email: 'fictional.advisor@example.com',
@@ -96,7 +103,7 @@ describe('student read API', () => {
   const closedRound = async (grade = 1, closedHoursAgo = 24) =>
     await createRoundAt(grade, -closedHoursAgo - 24, -closedHoursAgo);
 
-  const addAdvisor = async (clubId: number, advisor: Partial<typeof ADVISOR> = {}) => {
+  const addAdvisor = async (clubId: number, advisor: Partial<AdvisorFields> = {}) => {
     const { fullName, phone, email, lineId } = { ...ADVISOR, ...advisor };
     await pool.query(
       `INSERT INTO club_advisors (club_id, full_name, phone, email, line_id)
