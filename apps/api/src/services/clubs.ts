@@ -7,8 +7,8 @@ import type {
 } from '@club-registration/shared';
 import type pg from 'pg';
 import { isPgError, PG_ERROR_CODES, withReadOnlySnapshot } from '../db.js';
-import type { Queryable } from '../db.js';
 import { AppError } from '../errors.js';
+import { lockRoundOfClub } from './round-lock.js';
 import { findRound } from './rounds.js';
 
 // The unnamed table CHECK (registered >= 0 AND registered <= capacity) from the initial migration.
@@ -102,17 +102,22 @@ export const listRoundClubs = async (
     return { round, clubs: rows.map(toClub) };
   });
 
-// A single UPDATE with no app-side check of registered: the clubs CHECK is evaluated against the
-// row as it is when the UPDATE gets its row lock, so a registration committed a moment earlier is
-// counted and the change is refused, whatever the admin's screen showed. Registration's own
-// `UPDATE ... WHERE registered < capacity` takes the same row lock, so the two serialize without
-// the round advisory lock. Raising capacity is allowed while the round is open; Phase 2 must then
-// promote the waitlist in the same transaction, under pg_advisory_xact_lock(round_id).
+// An in-round write, so it runs in the caller's transaction and first takes the round's advisory
+// lock (CLAUDE.md rule 3, round-lock.ts): it waits for any registration in flight in the round to
+// commit, and registrations wait for it. The UPDATE then has no app-side check of registered: the
+// clubs CHECK is evaluated against the row as it is when the UPDATE gets its row lock, so a
+// registration committed a moment earlier is counted and the change is refused, whatever the
+// admin's screen showed. The CHECK, not the lock, is what decides: a writer that skipped the lock
+// would still meet the same row lock and the same CHECK. Raising capacity is allowed while the
+// round is open; Phase 2 must then promote the waitlist in this same transaction.
 export const updateClub = async (
-  db: Queryable,
+  db: pg.PoolClient,
   id: number,
   { name, description, capacity }: UpdateClubRequest,
 ): Promise<AdminClub> => {
+  if ((await lockRoundOfClub(db, id)) === undefined) {
+    throw new AppError(ERROR_CODES.notFound, 'Club not found');
+  }
   let rows: ClubRow[];
   try {
     ({ rows } = await db.query<ClubRow>(

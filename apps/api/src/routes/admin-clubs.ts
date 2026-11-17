@@ -8,11 +8,13 @@ import {
 import type { FastifyPluginAsyncZod } from 'fastify-type-provider-zod';
 import type pg from 'pg';
 import type { AuthGuard } from '../auth/session.js';
+import { withTransaction } from '../db.js';
 import { listRoundClubs, updateClub } from '../services/clubs.js';
 
 // Same convention as the round routes: a club edit is not a registration write, so it takes no
 // idempotency_key and writes no registration_events row (which needs a student). A retried PATCH
-// sets the same values again. Responses carry advisors' contact details, so nothing here logs a
+// sets the same values again. It is an in-round write, though, so it runs in a transaction that
+// takes the round's advisory lock first (updateClub). Responses carry advisors' contact details, so nothing here logs a
 // club or advisor.
 export const adminClubRoutes =
   ({ pool, guard }: { pool: pg.Pool; guard: AuthGuard }): FastifyPluginAsyncZod =>
@@ -38,6 +40,11 @@ export const adminClubRoutes =
           response: { 200: adminClubResponseSchema },
         },
       },
-      async (request) => ({ club: await updateClub(pool, request.params.id, request.body) }),
+      async (request) => ({
+        club: await withTransaction(
+          pool,
+          async (client) => await updateClub(client, request.params.id, request.body),
+        ),
+      }),
     );
   };
