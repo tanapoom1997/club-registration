@@ -134,7 +134,9 @@ const insertEvent = async (
 
 // FOR SHARE holds the student's grade still until commit: an import that is moving the student
 // to another grade either commits first (and the insert below sees the new grade) or waits for
-// this transaction. Missing profile = 403, as on the reads.
+// this transaction. For an import of this round's term the round lock already orders the two
+// (the import commit holds every round lock of its term); this row lock also covers an import of
+// another term, which does not. Missing profile = 403, as on the reads.
 const lockStudentProfile = async (db: pg.PoolClient, studentId: number): Promise<void> => {
   const { rowCount } = await db.query(
     'SELECT 1 FROM student_profiles WHERE user_id = $1 FOR SHARE',
