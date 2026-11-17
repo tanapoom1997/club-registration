@@ -1,4 +1,5 @@
 import { useEffect, useRef } from 'react';
+import type { KeyboardEvent } from 'react';
 import { FormError } from '@/components/FormError';
 import { Button } from '@/components/ui/button';
 
@@ -23,7 +24,8 @@ type WritePanelProps = {
 };
 
 // Inline next to what it acts on rather than a modal, so on a phone it opens where the student
-// tapped. It takes focus when it opens so keyboard and screen reader users land on the question.
+// tapped. It takes focus when it opens so keyboard and screen reader users land on the question,
+// and Escape closes it like the dismiss button (not while a request is in flight).
 export const WritePanel = ({
   state: { pending, error, canRetry, onConfirm, onRetry, onDismiss },
   label,
@@ -38,6 +40,12 @@ export const WritePanel = ({
     panelRef.current?.focus();
   }, []);
 
+  const handleKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
+    if (event.key !== 'Escape' || pending) return;
+    event.preventDefault();
+    onDismiss();
+  };
+
   // A refused request is settled: the panel only explains why. A new attempt starts from the
   // button again, with a new idempotency key.
   const refused = error !== undefined && !canRetry;
@@ -48,6 +56,7 @@ export const WritePanel = ({
       tabIndex={-1}
       role="alertdialog"
       aria-label={label}
+      onKeyDown={handleKeyDown}
       className="space-y-3 rounded-md border border-border bg-warning p-3 text-warning-foreground focus-visible:outline-none"
     >
       {!refused && (

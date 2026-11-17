@@ -145,6 +145,18 @@ describe('student clubs page', () => {
     expect(callsTo(fetchMock, 'POST', REGISTER_PATH)).toHaveLength(0);
   });
 
+  it('closes the confirmation with Escape and returns focus to the register button', async () => {
+    const { fetchMock } = mockStudentApi();
+    await openPage();
+    const dialog = startRegister(CHESS.clubCode, CHESS.name);
+
+    fireEvent.keyDown(dialog, { key: 'Escape' });
+
+    expect(screen.queryByRole('alertdialog')).toBeNull();
+    expect(document.activeElement).toBe(registerButton(CHESS.clubCode, CHESS.name));
+    expect(callsTo(fetchMock, 'POST', REGISTER_PATH)).toHaveLength(0);
+  });
+
   it('disables the register buttons while the request is on its way', async () => {
     mockStudentApi({}, { [`POST ${REGISTER_PATH}`]: () => new Promise<Response>(() => {}) });
     await openPage();
@@ -156,6 +168,9 @@ describe('student clubs page', () => {
       within(dialog).getByRole<HTMLButtonElement>('button', { name: 'ยืนยัน ลงชุมนุม' }).disabled,
     ).toBe(true);
     expect(registerButton(ART.clubCode, ART.name).disabled).toBe(true);
+    // Escape does not close it either: the answer must stay where the student can see it.
+    fireEvent.keyDown(dialog, { key: 'Escape' });
+    expect(screen.getByRole('alertdialog')).toBe(dialog);
   });
 
   it.each([
