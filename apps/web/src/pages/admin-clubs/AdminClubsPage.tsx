@@ -1,12 +1,13 @@
 import type { AdminClub, Round } from '@club-registration/shared';
 import { skipToken, useQuery } from '@tanstack/react-query';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Link } from 'react-router';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
 import { fetchRoundClubs, fetchRounds } from '@/lib/api';
 import { STATUS_DISPLAY, roundOptionLabel } from '@/lib/round-display';
+import { refetchWhileOpen } from '@/lib/round-refetch';
 import { ROUNDS_QUERY_KEY } from '@/pages/admin-rounds/round-ui';
 import { ClubsTable } from './ClubsTable';
 import { EditClubForm } from './EditClubForm';
@@ -31,6 +32,11 @@ const RoundSummary = ({ round }: { round: Round }) => {
           รอบนี้เปิดอยู่ ตัวเลขอัปเดตอัตโนมัติทุก {CLUBS_POLL_INTERVAL_MS / 1000} วินาที
         </span>
       )}
+      {round.status === 'upcoming' && (
+        <span className="text-muted-foreground">
+          เมื่อถึงเวลาเปิดรอบ ตัวเลขจะเริ่มอัปเดตเองโดยไม่ต้องโหลดหน้าใหม่
+        </span>
+      )}
     </div>
   );
 };
@@ -53,11 +59,19 @@ export const AdminClubsPage = () => {
   const clubsQuery = useQuery({
     queryKey: [...CLUBS_QUERY_KEY, roundId],
     queryFn: roundId === undefined ? skipToken : async () => await fetchRoundClubs(roundId),
-    // The status comes from the server with every answer, so polling stops by itself once the
-    // round closes. A round that opens while the page is up starts polling after a manual reload.
-    refetchInterval: (query) =>
-      query.state.data?.round.status === 'open' ? CLUBS_POLL_INTERVAL_MS : false,
+    // Same timing as the student clubs page: polls while open, asks again when an upcoming round
+    // should open (so it starts polling without a reload), stops once the server says closed.
+    refetchInterval: (query) => refetchWhileOpen(query.state.data?.round, CLUBS_POLL_INTERVAL_MS),
   });
+
+  // The picker labels come from the rounds list, read once. When the polled clubs answer reports
+  // another status (the round opened or closed meanwhile), the list is read again to match.
+  const shownStatus = clubsQuery.data?.round.status;
+  const listedStatus = roundsQuery.data?.find(({ id }) => id === roundId)?.status;
+  const { refetch: refetchRounds } = roundsQuery;
+  useEffect(() => {
+    if (shownStatus && listedStatus && shownStatus !== listedStatus) void refetchRounds();
+  }, [shownStatus, listedStatus, refetchRounds]);
 
   const chooseRound = (value: string) => {
     setRoundId(Number(value));

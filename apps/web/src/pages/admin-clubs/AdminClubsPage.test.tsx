@@ -92,6 +92,17 @@ const mockClubsApi = (round: Round, extra: Parameters<typeof mockApi>[0] = {}) =
   });
 };
 
+// One round whose status a test changes, as the clock would, between two answers.
+const mockLiveRoundApi = (initial: Round) => {
+  const state = { round: initial };
+  const fetchMock = mockApi({
+    'GET /api/auth/me': () => Response.json({ user: ADMIN }),
+    'GET /api/admin/rounds': () => Response.json({ rounds: [state.round] }),
+    [`GET ${CLUBS_PATH}`]: () => Response.json({ round: state.round, clubs: CLUBS }),
+  });
+  return { fetchMock, state };
+};
+
 // The page preselects a round, so with a single round its table appears without a choice.
 const openTable = async () => await screen.findByRole('table', { name: 'รายการชุมนุม' });
 
@@ -341,16 +352,62 @@ describe('admin clubs page', () => {
     await waitFor(() => expect(fetchCalls(fetchMock, 'GET', CLUBS_PATH)).toHaveLength(2));
   });
 
-  it.each(['upcoming', 'closed'] as const)('does not poll a round that is %s', async (status) => {
+  it('does not poll a closed round', async () => {
     vi.useFakeTimers({ shouldAdvanceTime: true });
-    const fetchMock = mockClubsApi(roundFixture({ status }));
+    const fetchMock = mockClubsApi(roundFixture({ status: 'closed' }));
     renderAt('/admin/clubs');
     await openTable();
 
     await act(async () => {
-      await vi.advanceTimersByTimeAsync(CLUBS_POLL_INTERVAL_MS * 3);
+      await vi.advanceTimersByTimeAsync(5 * 60_000);
     });
 
     expect(fetchCalls(fetchMock, 'GET', CLUBS_PATH)).toHaveLength(1);
+  });
+
+  it('starts polling by itself when an upcoming round opens, without a reload', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    const opensAt = new Date(Date.now() + 20_000).toISOString();
+    const { fetchMock, state } = mockLiveRoundApi(roundFixture({ status: 'upcoming', opensAt }));
+    renderAt('/admin/clubs');
+    await openTable();
+    expect(screen.getByText(/ตัวเลขจะเริ่มอัปเดตเองโดยไม่ต้องโหลดหน้าใหม่/)).toBeTruthy();
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(15_000);
+    });
+    expect(fetchCalls(fetchMock, 'GET', CLUBS_PATH)).toHaveLength(1);
+    state.round = { ...state.round, status: 'open' };
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(7_000);
+    });
+
+    await waitFor(() => expect(fetchCalls(fetchMock, 'GET', CLUBS_PATH)).toHaveLength(2));
+    expect(await screen.findByText(/รอบนี้เปิดอยู่ ตัวเลขอัปเดตอัตโนมัติ/)).toBeTruthy();
+    // The picker label follows the new status too.
+    expect(await screen.findByRole('option', { name: '2569/1 ม.1 (เปิดอยู่)' })).toBeTruthy();
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(CLUBS_POLL_INTERVAL_MS);
+    });
+    await waitFor(() => expect(fetchCalls(fetchMock, 'GET', CLUBS_PATH)).toHaveLength(3));
+  });
+
+  it('stops polling once the server says the round has closed', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    const { fetchMock, state } = mockLiveRoundApi(roundFixture({ status: 'open' }));
+    renderAt('/admin/clubs');
+    await openTable();
+
+    state.round = { ...state.round, status: 'closed' };
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(CLUBS_POLL_INTERVAL_MS);
+    });
+    await waitFor(() => expect(fetchCalls(fetchMock, 'GET', CLUBS_PATH)).toHaveLength(2));
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(5 * 60_000);
+    });
+
+    expect(fetchCalls(fetchMock, 'GET', CLUBS_PATH)).toHaveLength(2);
+    expect(screen.getByText('ปิดแล้ว')).toBeTruthy();
   });
 });
