@@ -8,7 +8,11 @@ import type { WriteState } from './WritePanel';
 
 type ClubCardProps = {
   club: StudentClub;
+  // This card is the club the student holds.
   held: boolean;
+  // The student holds a club in this round, this one or another. The held-club card at the top
+  // already explains how to change, so no card offers a register button that could never work.
+  holdsClub: boolean;
   canRegister: boolean;
   // Set while this club's confirmation is open.
   write: WriteState | undefined;
@@ -19,7 +23,14 @@ const clubLabel = ({ clubCode, name }: StudentClub) => `${clubCode} ${name}`;
 
 // Every name and the description come from admin input, so they are rendered as text nodes only,
 // never as HTML; whitespace-pre-line keeps the admin's line breaks.
-export const ClubCard = ({ club, held, canRegister, write, onRegister }: ClubCardProps) => {
+export const ClubCard = ({
+  club,
+  held,
+  holdsClub,
+  canRegister,
+  write,
+  onRegister,
+}: ClubCardProps) => {
   const headingId = useId();
   const registerRef = useRef<HTMLButtonElement>(null);
   const wasConfirming = useRef(false);
@@ -80,7 +91,7 @@ export const ClubCard = ({ club, held, canRegister, write, onRegister }: ClubCar
           dismissLabel="ไม่ลง"
         />
       ) : (
-        !held && (
+        !holdsClub && (
           <Button
             ref={registerRef}
             className="w-full sm:w-auto"

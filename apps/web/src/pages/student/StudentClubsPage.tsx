@@ -128,9 +128,8 @@ export const StudentClubsPage = () => {
                   <ClubCard
                     club={club}
                     held={data.registration?.club.id === club.id}
-                    canRegister={
-                      data.round?.status === 'open' && !data.registration && !mutation.isPending
-                    }
+                    holdsClub={data.registration !== null}
+                    canRegister={data.round?.status === 'open' && !mutation.isPending}
                     write={
                       targetId === club.id && !mutation.isSuccess
                         ? {
