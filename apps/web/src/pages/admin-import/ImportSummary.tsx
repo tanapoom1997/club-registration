@@ -4,6 +4,7 @@ import type {
   ImportSheet,
 } from '@club-registration/shared';
 import type { ReactNode } from 'react';
+import { Table, TableBody, TableCell, TableHead, TableHeader } from '@/components/ui/table';
 
 const SHEET_LABELS: Readonly<Record<ImportSheet, string>> = Object.freeze({
   students: 'นักเรียน (students)',
@@ -15,12 +16,10 @@ const formatCount = (count: number) => count.toLocaleString('th-TH');
 
 const CountsRow = ({ label, counts }: { label: string; counts: ImportChangeCounts }) => (
   <tr>
-    <th scope="row" className="p-3 text-left font-medium">
-      {label}
-    </th>
-    <td className="p-3 text-right">{formatCount(counts.create)}</td>
-    <td className="p-3 text-right">{formatCount(counts.update)}</td>
-    <td className="p-3 text-right">{formatCount(counts.unchanged)}</td>
+    <TableHead scope="row">{label}</TableHead>
+    <TableCell className="text-right">{formatCount(counts.create)}</TableCell>
+    <TableCell className="text-right">{formatCount(counts.update)}</TableCell>
+    <TableCell className="text-right">{formatCount(counts.unchanged)}</TableCell>
   </tr>
 );
 
@@ -32,33 +31,29 @@ export const SummaryTable = ({
   preview: Pick<ImportPreviewResponse, 'students' | 'clubs' | 'advisors'>;
   label: string;
 }) => (
-  <div className="overflow-x-auto rounded-lg border border-border bg-card">
-    <table className="w-full text-sm" aria-label={label}>
-      <thead className="border-b border-border text-muted-foreground">
-        <tr>
-          <th className="p-3 text-left font-medium">ข้อมูล</th>
-          <th className="p-3 text-right font-medium">เพิ่มใหม่</th>
-          <th className="p-3 text-right font-medium">แก้ไข</th>
-          <th className="p-3 text-right font-medium">ไม่เปลี่ยน</th>
-        </tr>
-      </thead>
-      <tbody className="divide-y divide-border">
-        <CountsRow label={SHEET_LABELS.students} counts={preview.students} />
-        <CountsRow label={SHEET_LABELS.clubs} counts={preview.clubs} />
-        <tr>
-          <th scope="row" className="p-3 text-left font-medium">
-            {SHEET_LABELS.advisors}
-          </th>
-          <td className="p-3" colSpan={3}>
-            แทนที่รายชื่อครูของ {formatCount(preview.advisors.clubsReplaced)} ชุมนุม
-            {preview.advisors.clubsUnchanged > 0 &&
-              ` (ไม่เปลี่ยน ${formatCount(preview.advisors.clubsUnchanged)} ชุมนุม)`}{' '}
-            จาก {formatCount(preview.advisors.rows)} แถว
-          </td>
-        </tr>
-      </tbody>
-    </table>
-  </div>
+  <Table aria-label={label}>
+    <TableHeader>
+      <tr>
+        <TableHead>ข้อมูล</TableHead>
+        <TableHead className="text-right">เพิ่มใหม่</TableHead>
+        <TableHead className="text-right">แก้ไข</TableHead>
+        <TableHead className="text-right">ไม่เปลี่ยน</TableHead>
+      </tr>
+    </TableHeader>
+    <TableBody>
+      <CountsRow label={SHEET_LABELS.students} counts={preview.students} />
+      <CountsRow label={SHEET_LABELS.clubs} counts={preview.clubs} />
+      <tr>
+        <TableHead scope="row">{SHEET_LABELS.advisors}</TableHead>
+        <TableCell colSpan={3}>
+          แทนที่รายชื่อครูของ {formatCount(preview.advisors.clubsReplaced)} ชุมนุม
+          {preview.advisors.clubsUnchanged > 0 &&
+            ` (ไม่เปลี่ยน ${formatCount(preview.advisors.clubsUnchanged)} ชุมนุม)`}{' '}
+          จาก {formatCount(preview.advisors.rows)} แถว
+        </TableCell>
+      </tr>
+    </TableBody>
+  </Table>
 );
 
 const ErrorTable = ({ preview }: { preview: ImportPreviewResponse }) => (
@@ -71,31 +66,29 @@ const ErrorTable = ({ preview }: { preview: ImportPreviewResponse }) => (
         แสดง {formatCount(preview.errors.length)} รายการแรก
       </p>
     )}
-    <div className="overflow-x-auto rounded-lg border border-border bg-card">
-      <table className="w-full text-left text-sm" aria-label="รายการข้อผิดพลาด">
-        <thead className="border-b border-border text-muted-foreground">
-          <tr>
-            <th className="p-3 font-medium">ชีต</th>
-            <th className="p-3 text-right font-medium">แถว</th>
-            <th className="p-3 font-medium">คอลัมน์</th>
-            <th className="p-3 font-medium">ปัญหา</th>
+    <Table aria-label="รายการข้อผิดพลาด">
+      <TableHeader>
+        <tr>
+          <TableHead>ชีต</TableHead>
+          <TableHead className="text-right">แถว</TableHead>
+          <TableHead>คอลัมน์</TableHead>
+          <TableHead>ปัญหา</TableHead>
+        </tr>
+      </TableHeader>
+      <TableBody>
+        {preview.errors.map((error, index) => (
+          // The list is static once received, so the index is a stable key.
+          <tr key={index}>
+            <TableCell className="whitespace-nowrap">
+              {error.sheet ? SHEET_LABELS[error.sheet] : 'ทั้งไฟล์'}
+            </TableCell>
+            <TableCell className="text-right">{error.row ?? '–'}</TableCell>
+            <TableCell className="whitespace-nowrap">{error.column ?? '–'}</TableCell>
+            <TableCell>{error.message}</TableCell>
           </tr>
-        </thead>
-        <tbody className="divide-y divide-border">
-          {preview.errors.map((error, index) => (
-            // The list is static once received, so the index is a stable key.
-            <tr key={index}>
-              <td className="p-3 whitespace-nowrap">
-                {error.sheet ? SHEET_LABELS[error.sheet] : 'ทั้งไฟล์'}
-              </td>
-              <td className="p-3 text-right">{error.row ?? '–'}</td>
-              <td className="p-3 whitespace-nowrap">{error.column ?? '–'}</td>
-              <td className="p-3">{error.message}</td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
-    </div>
+        ))}
+      </TableBody>
+    </Table>
   </div>
 );
 

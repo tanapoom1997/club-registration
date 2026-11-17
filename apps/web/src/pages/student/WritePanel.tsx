@@ -2,6 +2,8 @@ import { useEffect, useRef } from 'react';
 import type { KeyboardEvent } from 'react';
 import { FormError } from '@/components/FormError';
 import { Button } from '@/components/ui/button';
+import { alertVariants } from '@/components/ui/alert';
+import { cn } from '@/lib/utils';
 
 export type WriteState = {
   pending: boolean;
@@ -57,7 +59,7 @@ export const WritePanel = ({
       role="alertdialog"
       aria-label={label}
       onKeyDown={handleKeyDown}
-      className="space-y-3 rounded-md border border-border bg-warning p-3 text-warning-foreground focus-visible:outline-none"
+      className={cn(alertVariants({ variant: 'warning' }), 'space-y-3 focus-visible:outline-none')}
     >
       {!refused && (
         <>

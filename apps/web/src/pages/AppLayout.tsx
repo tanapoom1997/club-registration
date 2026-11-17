@@ -16,13 +16,15 @@ const navLinkClass = ({ isActive }: { isActive: boolean }) =>
   );
 
 export const AppLayout = ({ role }: { role: Role }) => {
+  // Admin pages carry wide tables; student pages read better in a narrower column.
+  const width = role === 'admin' ? 'max-w-6xl' : 'max-w-4xl';
   const { data: user } = useSession();
   const logoutMutation = useLogout();
 
   return (
     <div className="min-h-dvh">
       <header className="z-10 border-b border-border bg-card/80 backdrop-blur-md sm:sticky sm:top-0">
-        <div className="mx-auto flex max-w-4xl flex-wrap items-center justify-between gap-3 p-4">
+        <div className={cn('mx-auto flex flex-wrap items-center justify-between gap-3 p-4', width)}>
           <Link to={homePathFor(role)} className="flex items-center gap-2.5 font-bold">
             <BrandMark />
             ระบบลงทะเบียนชุมนุม
@@ -48,7 +50,7 @@ export const AppLayout = ({ role }: { role: Role }) => {
             </Button>
           </div>
         </div>
-        <nav aria-label="เมนูหลัก" className="mx-auto flex max-w-4xl flex-wrap gap-1 px-4 pb-3">
+        <nav aria-label="เมนูหลัก" className={cn('mx-auto flex flex-wrap gap-1 px-4 pb-3', width)}>
           <NavLink to={homePathFor(role)} end className={navLinkClass}>
             หน้าแรก
           </NavLink>
@@ -59,7 +61,7 @@ export const AppLayout = ({ role }: { role: Role }) => {
           ))}
         </nav>
       </header>
-      <main className="mx-auto max-w-4xl px-4 py-6 sm:py-8">
+      <main className={cn('mx-auto px-4 py-6 sm:py-8', width)}>
         <FormError
           message={logoutMutation.isError ? 'ออกจากระบบไม่สำเร็จ กรุณาลองใหม่' : undefined}
         />

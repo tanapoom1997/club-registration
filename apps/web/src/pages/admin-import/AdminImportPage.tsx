@@ -11,6 +11,8 @@ import { Link } from 'react-router';
 import { FormError } from '@/components/FormError';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
+import { Select } from '@/components/ui/select';
+import { Card } from '@/components/ui/card';
 import { ApiError, IMPORT_TEMPLATE_URL, commitImport, fetchRounds, previewImport } from '@/lib/api';
 import { useSetSession } from '@/lib/session';
 import { ROUNDS_QUERY_KEY } from '@/pages/admin-rounds/round-ui';
@@ -61,9 +63,6 @@ const fileProblem = (file: File | undefined): string | undefined => {
   if (file.size > IMPORT_MAX_FILE_BYTES) return ERROR_MESSAGES[ERROR_CODES.fileTooLarge];
   return undefined;
 };
-
-const selectClassName =
-  'w-full rounded-md border border-input bg-card px-3 py-2 text-base focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring';
 
 export const AdminImportPage = () => {
   const [term, setTerm] = useState('');
@@ -144,7 +143,11 @@ export const AdminImportPage = () => {
           {IMPORT_MAX_ROWS_PER_SHEET.toLocaleString('th-TH')} แถว
         </p>
         <p className="text-sm">
-          <a className="text-primary underline" href={IMPORT_TEMPLATE_URL} download>
+          <a
+            className="font-medium text-primary underline underline-offset-4"
+            href={IMPORT_TEMPLATE_URL}
+            download
+          >
             ดาวน์โหลดไฟล์ตัวอย่าง (template)
           </a>
         </p>
@@ -162,54 +165,58 @@ export const AdminImportPage = () => {
       ) : terms.length === 0 ? (
         <p className="text-muted-foreground">
           ยังไม่มีรอบลงทะเบียน ให้{' '}
-          <Link className="text-primary underline" to="/admin/rounds">
+          <Link
+            className="font-medium text-primary underline underline-offset-4"
+            to="/admin/rounds"
+          >
             สร้างรอบ
           </Link>{' '}
           ก่อนนำเข้าชุมนุม
         </p>
       ) : (
-        <form
-          aria-label="ตรวจสอบไฟล์นำเข้า"
-          className="max-w-md space-y-4"
-          onSubmit={handleSubmit}
-          noValidate
-        >
-          <div className="space-y-1.5">
-            <Label htmlFor="import-term">ภาคเรียน</Label>
-            <select
-              id="import-term"
-              className={selectClassName}
-              value={selectedTerm}
-              onChange={(event) => {
-                setTerm(event.target.value);
-                resetResult();
-              }}
-            >
-              {terms.map((value) => (
-                <option key={value} value={value}>
-                  {value}
-                </option>
-              ))}
-            </select>
-          </div>
-          <div className="space-y-1.5">
-            <Label htmlFor="import-file">ไฟล์ Excel (.xlsx)</Label>
-            <input
-              id="import-file"
-              type="file"
-              accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-              className="block w-full text-sm"
-              onChange={(event) => {
-                setFile(event.target.files?.[0]);
-                resetResult();
-              }}
-            />
-          </div>
-          <FormError message={errorMessage} />
-          <Button type="submit" disabled={mutation.isPending || commitMutation.isPending}>
-            {mutation.isPending ? 'กำลังตรวจสอบ…' : 'ตรวจสอบไฟล์'}
-          </Button>
-        </form>
+        <Card className="max-w-md p-6">
+          <form
+            aria-label="ตรวจสอบไฟล์นำเข้า"
+            className="space-y-4"
+            onSubmit={handleSubmit}
+            noValidate
+          >
+            <div className="space-y-1.5">
+              <Label htmlFor="import-term">ภาคเรียน</Label>
+              <Select
+                id="import-term"
+                value={selectedTerm}
+                onChange={(event) => {
+                  setTerm(event.target.value);
+                  resetResult();
+                }}
+              >
+                {terms.map((value) => (
+                  <option key={value} value={value}>
+                    {value}
+                  </option>
+                ))}
+              </Select>
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="import-file">ไฟล์ Excel (.xlsx)</Label>
+              <input
+                id="import-file"
+                type="file"
+                accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+                className="block w-full cursor-pointer rounded-lg border border-dashed border-input p-2 text-sm text-muted-foreground file:mr-3 file:cursor-pointer file:rounded-md file:border-0 file:bg-primary-soft file:px-4 file:py-2 file:font-medium file:text-primary hover:border-primary/50 focus-visible:border-primary focus-visible:ring-4 focus-visible:ring-primary/15 focus-visible:outline-none"
+                onChange={(event) => {
+                  setFile(event.target.files?.[0]);
+                  resetResult();
+                }}
+              />
+            </div>
+            <FormError message={errorMessage} />
+            <Button type="submit" disabled={mutation.isPending || commitMutation.isPending}>
+              {mutation.isPending ? 'กำลังตรวจสอบ…' : 'ตรวจสอบไฟล์'}
+            </Button>
+          </form>
+        </Card>
       )}
 
       {mutation.isSuccess && (

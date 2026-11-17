@@ -3,6 +3,8 @@ import { useQuery } from '@tanstack/react-query';
 import { useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router';
 import { Button } from '@/components/ui/button';
+import { alertVariants } from '@/components/ui/alert';
+import { cn } from '@/lib/utils';
 import { cancelRegistration, fetchStudentRound } from '@/lib/api';
 import { HeldClubCard } from './HeldClubCard';
 import { NoRound, RoundHeader, StudentLoadState } from './RoundHeader';
@@ -19,7 +21,7 @@ import {
 const CLUBS_PATH = '/student/clubs';
 
 const ClubsLink = ({ children }: { children: string }) => (
-  <Link className="text-primary underline" to={CLUBS_PATH}>
+  <Link className="font-medium text-primary underline underline-offset-4" to={CLUBS_PATH}>
     {children}
   </Link>
 );
@@ -91,7 +93,7 @@ export const MyRegistrationPage = () => {
               <p
                 ref={noticeRef}
                 tabIndex={-1}
-                className="rounded-md bg-success p-3 text-sm text-success-foreground focus:outline-none"
+                className={cn(alertVariants({ variant: 'success' }), 'focus:outline-none')}
               >
                 ยกเลิกชุมนุมแล้ว{' '}
                 {round.status === 'open' && (

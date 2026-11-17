@@ -7,6 +7,9 @@ import { Link } from 'react-router';
 import { FormError } from '@/components/FormError';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
+import { Select } from '@/components/ui/select';
+import { alertVariants } from '@/components/ui/alert';
+import { Card } from '@/components/ui/card';
 import {
   ApiError,
   downloadNameList,
@@ -33,9 +36,6 @@ const ALL_TERMS = '';
 
 type ScopeOption = { value: string; label: string };
 type ScopeChoice = { options: ScopeOption[]; wholeLabel: string; summary: string };
-
-const selectClassName =
-  'w-full rounded-md border border-input bg-card px-3 py-2 text-base focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring';
 
 const sum = (values: readonly number[]): number =>
   values.reduce((total, value) => total + value, 0);
@@ -166,142 +166,148 @@ export const AdminExportPage = () => {
       ) : rounds.length === 0 ? (
         <p className="text-muted-foreground">
           ยังไม่มีรอบลงทะเบียน ให้{' '}
-          <Link className="text-primary underline" to="/admin/rounds">
+          <Link
+            className="font-medium text-primary underline underline-offset-4"
+            to="/admin/rounds"
+          >
             สร้างรอบ
           </Link>{' '}
           ก่อน
         </p>
       ) : (
-        <form
-          aria-label="ส่งออกรายชื่อ"
-          className="max-w-xl space-y-5"
-          onSubmit={handleSubmit}
-          noValidate
-        >
-          <div className="space-y-1.5">
-            <Label htmlFor="export-round">รอบลงทะเบียน</Label>
-            <select
-              id="export-round"
-              className={selectClassName}
-              value={roundId ?? NO_ROUND}
-              onChange={(event) =>
-                choose(() =>
-                  setRoundId(
-                    event.target.value === NO_ROUND ? undefined : Number(event.target.value),
-                  ),
-                )
-              }
-            >
-              <option value={NO_ROUND}>เลือกรอบ</option>
-              {rounds.map((round) => (
-                <option key={round.id} value={round.id}>
-                  {roundOptionLabel(round)}
-                </option>
-              ))}
-            </select>
-          </div>
-
-          <fieldset className="space-y-2">
-            <legend className="text-sm font-medium">มุมมอง</legend>
-            {EXPORT_VIEWS.map((value) => (
-              <label key={value} className="flex items-start gap-2 text-sm">
-                <input
-                  type="radio"
-                  name="export-view"
-                  className="mt-1"
-                  value={value}
-                  checked={view === value}
-                  onChange={() => choose(() => setView(value))}
-                />
-                <span>
-                  <span className="font-medium">{VIEW_OPTIONS[value].label}</span>
-                  <span className="block text-muted-foreground">
-                    {VIEW_OPTIONS[value].description}
-                  </span>
-                </span>
-              </label>
-            ))}
-          </fieldset>
-
-          {roundId === undefined ? null : scopeQuery.isPending ? (
-            <p className="text-muted-foreground">กำลังโหลดตัวเลือก…</p>
-          ) : scopeQuery.isError || !scopeChoice ? (
-            <div className="flex items-center gap-3" role="alert">
-              <p>โหลดรายการ{view === 'club' ? 'ชุมนุม' : 'ห้อง'}ไม่สำเร็จ</p>
-              <Button type="button" variant="outline" onClick={() => void scopeQuery.refetch()}>
-                ลองใหม่
-              </Button>
-            </div>
-          ) : scopeChoice.options.length === 0 ? (
-            <p className="text-muted-foreground">
-              {view === 'club'
-                ? 'รอบนี้ยังไม่มีชุมนุม เพิ่มได้จากการนำเข้า Excel'
-                : 'ชั้นของรอบนี้ยังไม่มีนักเรียน เพิ่มได้จากการนำเข้า Excel'}
-            </p>
-          ) : (
+        <Card className="max-w-xl p-6">
+          <form aria-label="ส่งออกรายชื่อ" className="space-y-5" onSubmit={handleSubmit} noValidate>
             <div className="space-y-1.5">
-              <Label htmlFor="export-scope">ขอบเขต</Label>
-              <select
-                id="export-scope"
-                className={selectClassName}
-                value={scope}
-                onChange={(event) => {
-                  setScope(event.target.value);
-                  mutation.reset();
-                }}
+              <Label htmlFor="export-round">รอบลงทะเบียน</Label>
+              <Select
+                id="export-round"
+                value={roundId ?? NO_ROUND}
+                onChange={(event) =>
+                  choose(() =>
+                    setRoundId(
+                      event.target.value === NO_ROUND ? undefined : Number(event.target.value),
+                    ),
+                  )
+                }
               >
-                <option value={WHOLE_ROUND}>{scopeChoice.wholeLabel}</option>
-                {scopeChoice.options.map(({ value, label }) => (
-                  <option key={value} value={value}>
-                    {label}
+                <option value={NO_ROUND}>เลือกรอบ</option>
+                {rounds.map((round) => (
+                  <option key={round.id} value={round.id}>
+                    {roundOptionLabel(round)}
                   </option>
                 ))}
-              </select>
-              <p className="text-sm text-muted-foreground" aria-live="polite">
-                {scopeChoice.summary}
-              </p>
+              </Select>
             </div>
-          )}
 
-          <fieldset className="space-y-2">
-            <legend className="text-sm font-medium">รูปแบบ</legend>
-            {EXPORT_FORMATS.map((value) => (
-              <label key={value} className="flex items-start gap-2 text-sm">
-                <input
-                  type="radio"
-                  name="export-format"
-                  className="mt-1"
-                  value={value}
-                  checked={format === value}
-                  onChange={() => {
-                    setFormat(value);
+            <fieldset className="space-y-2">
+              <legend className="text-sm font-medium">มุมมอง</legend>
+              {EXPORT_VIEWS.map((value) => (
+                <label
+                  key={value}
+                  className="flex cursor-pointer items-start gap-3 rounded-xl border border-border p-3 text-sm transition-colors hover:bg-muted/50 has-checked:border-primary has-checked:bg-primary-soft"
+                >
+                  <input
+                    type="radio"
+                    name="export-view"
+                    className="mt-1"
+                    value={value}
+                    checked={view === value}
+                    onChange={() => choose(() => setView(value))}
+                  />
+                  <span>
+                    <span className="font-medium">{VIEW_OPTIONS[value].label}</span>
+                    <span className="block text-muted-foreground">
+                      {VIEW_OPTIONS[value].description}
+                    </span>
+                  </span>
+                </label>
+              ))}
+            </fieldset>
+
+            {roundId === undefined ? null : scopeQuery.isPending ? (
+              <p className="text-muted-foreground">กำลังโหลดตัวเลือก…</p>
+            ) : scopeQuery.isError || !scopeChoice ? (
+              <div className="flex items-center gap-3" role="alert">
+                <p>โหลดรายการ{view === 'club' ? 'ชุมนุม' : 'ห้อง'}ไม่สำเร็จ</p>
+                <Button type="button" variant="outline" onClick={() => void scopeQuery.refetch()}>
+                  ลองใหม่
+                </Button>
+              </div>
+            ) : scopeChoice.options.length === 0 ? (
+              <p className="text-muted-foreground">
+                {view === 'club'
+                  ? 'รอบนี้ยังไม่มีชุมนุม เพิ่มได้จากการนำเข้า Excel'
+                  : 'ชั้นของรอบนี้ยังไม่มีนักเรียน เพิ่มได้จากการนำเข้า Excel'}
+              </p>
+            ) : (
+              <div className="space-y-1.5">
+                <Label htmlFor="export-scope">ขอบเขต</Label>
+                <Select
+                  id="export-scope"
+                  value={scope}
+                  onChange={(event) => {
+                    setScope(event.target.value);
                     mutation.reset();
                   }}
-                />
-                <span>
-                  <span className="font-medium">{FORMAT_OPTIONS[value].label}</span>
-                  <span className="block text-muted-foreground">
-                    {FORMAT_OPTIONS[value].description}
+                >
+                  <option value={WHOLE_ROUND}>{scopeChoice.wholeLabel}</option>
+                  {scopeChoice.options.map(({ value, label }) => (
+                    <option key={value} value={value}>
+                      {label}
+                    </option>
+                  ))}
+                </Select>
+                <p className="text-sm text-muted-foreground" aria-live="polite">
+                  {scopeChoice.summary}
+                </p>
+              </div>
+            )}
+
+            <fieldset className="space-y-2">
+              <legend className="text-sm font-medium">รูปแบบ</legend>
+              {EXPORT_FORMATS.map((value) => (
+                <label
+                  key={value}
+                  className="flex cursor-pointer items-start gap-3 rounded-xl border border-border p-3 text-sm transition-colors hover:bg-muted/50 has-checked:border-primary has-checked:bg-primary-soft"
+                >
+                  <input
+                    type="radio"
+                    name="export-format"
+                    className="mt-1"
+                    value={value}
+                    checked={format === value}
+                    onChange={() => {
+                      setFormat(value);
+                      mutation.reset();
+                    }}
+                  />
+                  <span>
+                    <span className="font-medium">{FORMAT_OPTIONS[value].label}</span>
+                    <span className="block text-muted-foreground">
+                      {FORMAT_OPTIONS[value].description}
+                    </span>
                   </span>
-                </span>
-              </label>
-            ))}
-          </fieldset>
+                </label>
+              ))}
+            </fieldset>
 
-          <Button
-            type="submit"
-            disabled={!scopeChoice || scopeChoice.options.length === 0 || mutation.isPending}
-          >
-            {mutation.isPending ? 'กำลังสร้างไฟล์…' : 'ดาวน์โหลดรายชื่อ'}
-          </Button>
+            <Button
+              type="submit"
+              disabled={!scopeChoice || scopeChoice.options.length === 0 || mutation.isPending}
+            >
+              {mutation.isPending ? 'กำลังสร้างไฟล์…' : 'ดาวน์โหลดรายชื่อ'}
+            </Button>
 
-          <FormError message={mutation.isError ? exportErrorMessage(mutation.error) : undefined} />
-          {mutation.isSuccess && (
-            <p className="rounded-md bg-success p-3 text-sm text-success-foreground" role="status">
-              ดาวน์โหลดไฟล์ {mutation.data.filename} แล้ว
-            </p>
-          )}
-        </form>
+            <FormError
+              message={mutation.isError ? exportErrorMessage(mutation.error) : undefined}
+            />
+            {mutation.isSuccess && (
+              <p className={alertVariants({ variant: 'success' })} role="status">
+                ดาวน์โหลดไฟล์ {mutation.data.filename} แล้ว
+              </p>
+            )}
+          </form>
+        </Card>
       )}
     </section>
   );

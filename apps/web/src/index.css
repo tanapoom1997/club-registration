@@ -65,3 +65,10 @@ body {
 ::selection {
   background-color: color-mix(in oklch, var(--primary) 20%, transparent);
 }
+
+@layer base {
+  input[type='checkbox'],
+  input[type='radio'] {
+    accent-color: var(--primary);
+  }
+}

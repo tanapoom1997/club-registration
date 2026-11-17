@@ -7,6 +7,7 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { Table, TableBody, TableCell, TableHead, TableHeader } from '@/components/ui/table';
 import { deleteRound, fetchRounds } from '@/lib/api';
 import { STATUS_DISPLAY, gradeLabel } from '@/lib/round-display';
 import { formatThaiDateTime } from '@/lib/thai-time';
@@ -24,69 +25,69 @@ type RoundsTableProps = {
 };
 
 const RoundsTable = ({ rounds, onEdit, onDelete }: RoundsTableProps) => (
-  <div className="overflow-x-auto rounded-lg border border-border bg-card">
-    <table className="w-full text-left text-sm" aria-label="รายการรอบลงทะเบียน">
-      <thead className="border-b border-border text-muted-foreground">
-        <tr>
-          <th className="p-3 font-medium">ภาคเรียน</th>
-          <th className="p-3 font-medium">ชั้น</th>
-          <th className="p-3 font-medium">เปิด</th>
-          <th className="p-3 font-medium">ปิด</th>
-          <th className="p-3 font-medium">สถานะ</th>
-          <th className="p-3 text-right font-medium">ชุมนุม</th>
-          <th className="p-3 text-right font-medium">ลงแล้ว / รับ</th>
-          <th className="p-3 text-right font-medium">เข้าพร้อมกัน</th>
-          <th className="p-3">
-            <span className="sr-only">จัดการ</span>
-          </th>
-        </tr>
-      </thead>
-      <tbody className="divide-y divide-border">
-        {rounds.map((round) => {
-          const status = STATUS_DISPLAY[round.status];
-          return (
-            <tr key={round.id}>
-              <td className="p-3">{round.term}</td>
-              <td className="p-3">{gradeLabel(round.grade)}</td>
-              <td className="p-3 whitespace-nowrap">{formatThaiDateTime(round.opensAt)}</td>
-              <td className="p-3 whitespace-nowrap">{formatThaiDateTime(round.closesAt)}</td>
-              <td className="p-3">
-                <Badge variant={status.variant}>{status.label}</Badge>
-              </td>
-              <td className="p-3 text-right">{round.clubCount}</td>
-              <td className="p-3 text-right whitespace-nowrap">
-                {round.totalRegistered} / {round.totalCapacity}
-              </td>
-              <td className="p-3 text-right">{round.maxActive}</td>
-              <td className="p-3">
-                <div className="flex justify-end gap-1">
+  <Table aria-label="รายการรอบลงทะเบียน">
+    <TableHeader>
+      <tr>
+        <TableHead>ภาคเรียน</TableHead>
+        <TableHead>ชั้น</TableHead>
+        <TableHead>เปิด</TableHead>
+        <TableHead>ปิด</TableHead>
+        <TableHead>สถานะ</TableHead>
+        <TableHead className="text-right">ชุมนุม</TableHead>
+        <TableHead className="text-right">ลงแล้ว / รับ</TableHead>
+        <TableHead className="text-right">เข้าพร้อมกัน</TableHead>
+        <TableHead>
+          <span className="sr-only">จัดการ</span>
+        </TableHead>
+      </tr>
+    </TableHeader>
+    <TableBody>
+      {rounds.map((round) => {
+        const status = STATUS_DISPLAY[round.status];
+        return (
+          <tr key={round.id}>
+            <TableCell>{round.term}</TableCell>
+            <TableCell>{gradeLabel(round.grade)}</TableCell>
+            <TableCell className="whitespace-nowrap">{formatThaiDateTime(round.opensAt)}</TableCell>
+            <TableCell className="whitespace-nowrap">
+              {formatThaiDateTime(round.closesAt)}
+            </TableCell>
+            <TableCell>
+              <Badge variant={status.variant}>{status.label}</Badge>
+            </TableCell>
+            <TableCell className="text-right">{round.clubCount}</TableCell>
+            <TableCell className="text-right whitespace-nowrap">
+              {round.totalRegistered} / {round.totalCapacity}
+            </TableCell>
+            <TableCell className="text-right">{round.maxActive}</TableCell>
+            <TableCell>
+              <div className="flex justify-end gap-1">
+                <Button
+                  variant="outline"
+                  className="px-3 py-1"
+                  aria-label={`แก้ไขรอบ ${roundName(round)}`}
+                  onClick={() => onEdit(round)}
+                >
+                  แก้ไข
+                </Button>
+                {/* Hidden once clubs exist; the API refuses such a delete regardless. */}
+                {round.clubCount === 0 && (
                   <Button
-                    variant="outline"
+                    variant="danger"
                     className="px-3 py-1"
-                    aria-label={`แก้ไขรอบ ${roundName(round)}`}
-                    onClick={() => onEdit(round)}
+                    aria-label={`ลบรอบ ${roundName(round)}`}
+                    onClick={() => onDelete(round)}
                   >
-                    แก้ไข
+                    ลบ
                   </Button>
-                  {/* Hidden once clubs exist; the API refuses such a delete regardless. */}
-                  {round.clubCount === 0 && (
-                    <Button
-                      variant="ghost"
-                      className="px-3 py-1 text-destructive"
-                      aria-label={`ลบรอบ ${roundName(round)}`}
-                      onClick={() => onDelete(round)}
-                    >
-                      ลบ
-                    </Button>
-                  )}
-                </div>
-              </td>
-            </tr>
-          );
-        })}
-      </tbody>
-    </table>
-  </div>
+                )}
+              </div>
+            </TableCell>
+          </tr>
+        );
+      })}
+    </TableBody>
+  </Table>
 );
 
 export const AdminRoundsPage = () => {
