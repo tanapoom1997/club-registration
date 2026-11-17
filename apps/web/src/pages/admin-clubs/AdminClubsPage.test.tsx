@@ -92,13 +92,76 @@ const mockClubsApi = (round: Round, extra: Parameters<typeof mockApi>[0] = {}) =
   });
 };
 
-const chooseRound = async (label = '2569/1 ม.1') => {
+// The page preselects a round, so with a single round its table appears without a choice.
+const openTable = async () => await screen.findByRole('table', { name: 'รายการชุมนุม' });
+
+const roundPicker = () => screen.getByLabelText<HTMLSelectElement>('รอบลงทะเบียน');
+
+const chooseRound = async (label: string) => {
   const option = await screen.findByRole('option', { name: new RegExp(`^${label}`) });
-  fireEvent.change(screen.getByLabelText('รอบลงทะเบียน'), {
-    target: { value: option.getAttribute('value') },
-  });
-  return await screen.findByRole('table', { name: 'รายการชุมนุม' });
+  fireEvent.change(roundPicker(), { target: { value: option.getAttribute('value') } });
 };
+
+const clubsPathOf = (roundId: number) => `/api/admin/rounds/${roundId}/clubs`;
+
+// Several rounds, each answering with its own copy of the clubs.
+const mockRoundsApi = (rounds: Round[], extra: Parameters<typeof mockApi>[0] = {}) =>
+  mockApi({
+    'GET /api/auth/me': () => Response.json({ user: ADMIN }),
+    'GET /api/admin/rounds': () => Response.json({ rounds }),
+    ...Object.fromEntries(
+      rounds.map((round) => [
+        `GET ${clubsPathOf(round.id)}`,
+        () =>
+          Response.json({ round, clubs: CLUBS.map((club) => ({ ...club, roundId: round.id })) }),
+      ]),
+    ),
+    ...extra,
+  });
+
+// Fictional rounds of one term, one per grade so each has its own label in the picker.
+const OPEN_LATE = roundFixture({
+  id: 21,
+  grade: 1,
+  status: 'open',
+  opensAt: '2026-11-17T01:00:00.000Z',
+  closesAt: '2026-11-19T09:00:00.000Z',
+});
+const OPEN_SOON = roundFixture({
+  id: 22,
+  grade: 2,
+  status: 'open',
+  opensAt: '2026-11-17T02:00:00.000Z',
+  closesAt: '2026-11-18T09:00:00.000Z',
+});
+const UPCOMING_LATE = roundFixture({
+  id: 23,
+  grade: 3,
+  status: 'upcoming',
+  opensAt: '2026-12-08T01:00:00.000Z',
+  closesAt: '2026-12-08T09:00:00.000Z',
+});
+const UPCOMING_SOON = roundFixture({
+  id: 24,
+  grade: 4,
+  status: 'upcoming',
+  opensAt: '2026-12-01T01:00:00.000Z',
+  closesAt: '2026-12-01T09:00:00.000Z',
+});
+const CLOSED_EARLY = roundFixture({
+  id: 25,
+  grade: 5,
+  status: 'closed',
+  opensAt: '2026-11-01T01:00:00.000Z',
+  closesAt: '2026-11-01T09:00:00.000Z',
+});
+const CLOSED_LATE = roundFixture({
+  id: 26,
+  grade: 6,
+  status: 'closed',
+  opensAt: '2026-11-10T01:00:00.000Z',
+  closesAt: '2026-11-10T09:00:00.000Z',
+});
 
 const rowOf = (table: HTMLElement, clubCode: string) =>
   within(table).getByText(clubCode).closest('tr') as HTMLElement;
@@ -119,7 +182,7 @@ describe('admin clubs page', () => {
     mockClubsApi(roundFixture());
     renderAt('/admin/clubs');
 
-    const table = await chooseRound();
+    const table = await openTable();
 
     const chess = rowOf(table, 'A100');
     expect(chess.textContent).toContain('ชุมนุมหมากรุกสมมติ');
@@ -139,10 +202,60 @@ describe('admin clubs page', () => {
     expect(screen.getByText('2 ชุมนุม · ลงแล้ว 18 / รับ 50')).toBeTruthy();
   });
 
+  it.each([
+    [
+      'the open round closing soonest',
+      [CLOSED_LATE, UPCOMING_SOON, OPEN_LATE, OPEN_SOON, CLOSED_EARLY],
+      OPEN_SOON,
+    ],
+    [
+      'the upcoming round opening soonest when none is open',
+      [CLOSED_LATE, UPCOMING_LATE, UPCOMING_SOON],
+      UPCOMING_SOON,
+    ],
+    [
+      'the most recently closed round when all are closed',
+      [CLOSED_EARLY, CLOSED_LATE],
+      CLOSED_LATE,
+    ],
+  ])('preselects %s', async (_, rounds, expected) => {
+    const fetchMock = mockRoundsApi(rounds);
+    renderAt('/admin/clubs');
+
+    await openTable();
+
+    expect(roundPicker().value).toBe(String(expected.id));
+    expect(screen.queryByRole('option', { name: 'เลือกรอบ' })).toBeNull();
+    const clubLists = fetchMock.mock.calls
+      .map(([input]) => input)
+      .filter((input) => input.endsWith('/clubs'));
+    expect(clubLists).toEqual([clubsPathOf(expected.id)]);
+  });
+
+  it('keeps the round the admin picked when the rounds list is reloaded', async () => {
+    const fetchMock = mockRoundsApi([OPEN_SOON, CLOSED_LATE], {
+      'PATCH /api/admin/clubs/11': () => Response.json({ club: { ...CLUBS[0], roundId: 26 } }),
+    });
+    renderAt('/admin/clubs');
+    await openTable();
+
+    await chooseRound('2569/1 ม.6');
+    await openTable();
+    expect(fetchCalls(fetchMock, 'GET', clubsPathOf(CLOSED_LATE.id))).toHaveLength(1);
+    const form = openEditor('A100');
+    fireEvent.change(within(form).getByLabelText('จำนวนรับ'), { target: { value: '35' } });
+    fireEvent.click(within(form).getByRole('button', { name: 'บันทึกการแก้ไข' }));
+    await screen.findByRole('status');
+
+    // Saving reloads the rounds list, which still lists an open round the page would preselect.
+    await waitFor(() => expect(fetchCalls(fetchMock, 'GET', '/api/admin/rounds')).toHaveLength(2));
+    expect(roundPicker().value).toBe(String(CLOSED_LATE.id));
+  });
+
   it('saves only the changed capacity and shows the new numbers', async () => {
     const fetchMock = mockClubsApi(roundFixture());
     renderAt('/admin/clubs');
-    await chooseRound();
+    await openTable();
     const form = openEditor('A100');
 
     fireEvent.change(within(form).getByLabelText('จำนวนรับ'), { target: { value: '35' } });
@@ -163,7 +276,7 @@ describe('admin clubs page', () => {
   it('saves a new name and description', async () => {
     const fetchMock = mockClubsApi(roundFixture());
     renderAt('/admin/clubs');
-    await chooseRound();
+    await openTable();
     const form = openEditor('B200');
 
     fireEvent.change(within(form).getByLabelText('ชื่อชุมนุม'), {
@@ -189,7 +302,7 @@ describe('admin clubs page', () => {
         ),
     });
     renderAt('/admin/clubs');
-    await chooseRound();
+    await openTable();
     const form = openEditor('A100');
 
     fireEvent.change(within(form).getByLabelText('จำนวนรับ'), { target: { value: '5' } });
@@ -204,7 +317,7 @@ describe('admin clubs page', () => {
   it('does not send a blank name', async () => {
     const fetchMock = mockClubsApi(roundFixture());
     renderAt('/admin/clubs');
-    await chooseRound();
+    await openTable();
     const form = openEditor('A100');
 
     fireEvent.change(within(form).getByLabelText('ชื่อชุมนุม'), { target: { value: '  ' } });
@@ -218,7 +331,7 @@ describe('admin clubs page', () => {
     vi.useFakeTimers({ shouldAdvanceTime: true });
     const fetchMock = mockClubsApi(roundFixture({ status: 'open' }));
     renderAt('/admin/clubs');
-    await chooseRound();
+    await openTable();
     expect(fetchCalls(fetchMock, 'GET', CLUBS_PATH)).toHaveLength(1);
 
     await act(async () => {
@@ -232,7 +345,7 @@ describe('admin clubs page', () => {
     vi.useFakeTimers({ shouldAdvanceTime: true });
     const fetchMock = mockClubsApi(roundFixture({ status }));
     renderAt('/admin/clubs');
-    await chooseRound();
+    await openTable();
 
     await act(async () => {
       await vi.advanceTimersByTimeAsync(CLUBS_POLL_INTERVAL_MS * 3);

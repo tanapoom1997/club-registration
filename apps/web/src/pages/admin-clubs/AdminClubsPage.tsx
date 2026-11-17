@@ -10,9 +10,8 @@ import { STATUS_DISPLAY, roundOptionLabel } from '@/lib/round-display';
 import { ROUNDS_QUERY_KEY } from '@/pages/admin-rounds/round-ui';
 import { ClubsTable } from './ClubsTable';
 import { EditClubForm } from './EditClubForm';
-import { CLUBS_POLL_INTERVAL_MS, CLUBS_QUERY_KEY } from './club-ui';
+import { CLUBS_POLL_INTERVAL_MS, CLUBS_QUERY_KEY, preferredRound } from './club-ui';
 
-const NO_ROUND = '';
 // The rounds page lists every term under the same key, so both pages share one cached list.
 const ALL_TERMS = '';
 
@@ -37,6 +36,7 @@ const RoundSummary = ({ round }: { round: Round }) => {
 };
 
 export const AdminClubsPage = () => {
+  // Starts unset and is filled in from the rounds list once; after that only the admin changes it.
   const [roundId, setRoundId] = useState<number>();
   // An id, not a snapshot, so the editor sees the latest registered count after every poll.
   const [editingId, setEditingId] = useState<number>();
@@ -46,6 +46,10 @@ export const AdminClubsPage = () => {
     queryKey: [...ROUNDS_QUERY_KEY, ALL_TERMS],
     queryFn: async () => await fetchRounds(),
   });
+  // A one-time preselection rather than a value derived on every render, so a later refetch of the
+  // rounds list (whose statuses move with the clock) never switches the round under the admin.
+  const preselected = roundId === undefined ? preferredRound(roundsQuery.data ?? []) : undefined;
+  if (preselected) setRoundId(preselected.id);
   const clubsQuery = useQuery({
     queryKey: [...CLUBS_QUERY_KEY, roundId],
     queryFn: roundId === undefined ? skipToken : async () => await fetchRoundClubs(roundId),
@@ -56,7 +60,7 @@ export const AdminClubsPage = () => {
   });
 
   const chooseRound = (value: string) => {
-    setRoundId(value === NO_ROUND ? undefined : Number(value));
+    setRoundId(Number(value));
     setEditingId(undefined);
     setSaved(undefined);
   };
@@ -103,10 +107,9 @@ export const AdminClubsPage = () => {
           <select
             id="clubs-round"
             className={selectClassName}
-            value={roundId ?? NO_ROUND}
+            value={roundId ?? ''}
             onChange={(event) => chooseRound(event.target.value)}
           >
-            <option value={NO_ROUND}>เลือกรอบ</option>
             {rounds.map((round) => (
               <option key={round.id} value={round.id}>
                 {roundOptionLabel(round)}
