@@ -88,6 +88,7 @@ club-registration/
 ├── deploy/         # production.env.example (template ของ env file production ไม่มีค่าจริง), ตัวอย่าง IAM policy และ lifecycle ของ S3
 ├── scripts/        # backup.sh, restore.sh (รันบน host), smoke-*.sh ทดสอบ image/compose/backup จริง (CI job images), lib/ ที่ใช้ร่วมกัน
 ├── templates/      # Excel template เปล่า (ไม่มีข้อมูลจริง)
+├── samples/        # (gitignored ไม่ commit) ไฟล์ import สมมติจาก `pnpm --filter api generate-sample-import`
 ├── Dockerfile      # target api และ web
 ├── .dockerignore   # allowlist ของ build context
 ├── docker-compose.yml  # Postgres สำหรับ dev เท่านั้น
@@ -289,6 +290,20 @@ Admin เพิ่ม/ลบ/ย้ายนักเรียนแทน บ�
 - Export escape ค่าที่ขึ้นต้นด้วย `=`, `+`, `-`, `@` กัน formula injection
 - ขอเฉพาะคอลัมน์ที่จำเป็น (PDPA) ไม่รับเลขบัตรประชาชน/ที่อยู่
 
+**ไฟล์ตัวอย่างสำหรับลอง import (ข้อมูลสมมติ)**
+
+```bash
+pnpm --filter api generate-sample-import   # เขียน 3 ไฟล์ลง samples/ ที่ root (gitignored) รันซ้ำได้ข้อมูลเดิม
+```
+
+- ไม่ commit ไฟล์ .xlsx ตัวอย่าง แต่ commit ตัวสร้าง (`apps/api/src/dev/sample-import.ts`) หัวตารางมาจากนิยามคอลัมน์ใน `packages/shared/src/import.ts` เหมือน template ข้อมูลตายตัว (ไม่สุ่ม ไม่มีวันที่) ไม่ยอมรันเมื่อ `NODE_ENV=production` และไม่อยู่ใน image (`dist/dev/` ถูกลบตอน build)
+- `import-all-fictional.xlsx` (3 ชีต), `import-students-only-fictional.xlsx`, `import-clubs-advisors-fictional.xlsx`
+- **นักเรียน 80 คน** ม.1/ม.2 ชั้นละ 2 ห้อง ห้องละ 20 คน รวมนักเรียน demo (`demo1001`, `demo1002`, `demo2001`) ด้วยชื่อ ชั้น ห้อง เลขที่เดียวกับ `seed-dev` (อ่านจาก `DEMO_ACCOUNTS`) import แล้วบัญชี demo จึงไม่เปลี่ยนและรหัสผ่านเดิมยังใช้ได้ คนอื่นมีรหัสเป็นตัวเลขล้วน จึงไม่ชนกับบัญชี demo
+- **ชุมนุม 8 รหัส (9 แถว):** C102/C202 รับ 2–3 คนไว้ลองกรณีเต็ม, C300 รับทั้ง ม.1 และ ม.2 (2 แถวรหัสเดียวกัน), C104 ไม่มีครู, C101 มีรายละเอียดหลายบรรทัด **ครู 8 แถว:** เบอร์ `000-000-000X` อีเมล `@example.com` LINE ID สมมติ (ช่องติดต่อว่างบ้าง) ไม่มีเซลล์ไหนขึ้นต้นด้วย `=`, `+`, `-`, `@`
+- ลองใช้: `pnpm dev` → login `demo-admin` → สร้างรอบ ม.1 และ ม.2 ในภาคเรียนเดียวกัน → import ไฟล์ all ด้วยภาคเรียนนั้น dry run ต้องไม่มี error → ยืนยัน (นักเรียนใหม่ login ได้หลังออกรหัสผ่านเริ่มต้น) เทสต์ `apps/api/test/sample-import.test.ts` และ `sample-import-commit.test.ts` ตรวจทั้งไฟล์และ dry run + ยืนยันกับ Postgres จริง (import ซ้ำได้ไม่เปลี่ยนทั้งหมด)
+
+**ไฟล์จริงของโรงเรียนเก็บนอก repo เสมอ:** repo เป็น Public รายชื่อนักเรียนจริง ไฟล์รหัสผ่านเริ่มต้น และไฟล์ export ที่ดาวน์โหลดมา เก็บไว้นอก checkout เช่น `~/club-registration-data/` (`chmod 700`) แม้ `.gitignore` จะกัน `*.xlsx` (นอก `templates/`), `samples/`, `*.dump`, `.env*` ไว้แล้วก็ตาม เพราะ `git add -f` ข้ามได้ CI จึงรัน `scripts/check-no-data-files.sh` เป็นขั้นแรกของ job `check`: ล้มถ้า git track `*.xlsx`, `*.xls`, `*.csv`, `*.dump`, `*.sql.gz`, `*.tar.gz` (ไม่สนตัวพิมพ์) นอก `templates/` หรือ env file (`.env*`, `*.env`, `*.env.*`) ที่ไม่ใช่ `*.example` พิมพ์แค่ path ไม่พิมพ์เนื้อหา รันในเครื่องได้ด้วยคำสั่งเดียวกัน
+
 ## Export รายชื่อ
 
 Admin เลือก **รอบ** → เลือก **มุมมอง** (รายชุมนุม / รายห้อง) → เลือก **ขอบเขต** (ชุมนุมหรือห้องเดียว / ทั้งรอบ) → เลือก **รูปแบบ** (Excel / PDF)
@@ -336,7 +351,7 @@ Admin เลือก **รอบ** → เลือก **มุมมอง** (
 - **Frontend:** ห้าม `dangerouslySetInnerHTML` กับ `description` ที่ admin กรอก
 - **Log:** ไม่ใส่ secret/PII พอสำหรับ debug
 - **Backup:** dump มีข้อมูลส่วนบุคคลทั้งหมดและ hash รหัสผ่าน เก็บใน bucket private (Block Public Access) เข้ารหัส SSE-S3 role ของเครื่องเขียน/อ่านได้เฉพาะ prefix ของ backup ลบไม่ได้ ไฟล์ในเครื่อง 600 และไม่พิมพ์เนื้อหาออก log (ดู [Backup และ Restore (O3)](#backup-และ-restore-o3))
-- **Repo เป็น Public:** ห้ามมีข้อมูลจริงทุกชนิด (นักเรียน ครู domain จริง IP ชื่อ bucket) เปิด secret scanning และ push protection แล้ว `.gitignore` กัน `*.xlsx` จริง / `.env*` / `*.dump` / `*.dump.partial` / `caddy-data-*.tar.gz` (เว้น `templates/`) ถ้าเผลอ push secret ต้อง rotate ทันที ลบจาก history ไม่พอ
+- **Repo เป็น Public:** ห้ามมีข้อมูลจริงทุกชนิด (นักเรียน ครู domain จริง IP ชื่อ bucket) เปิด secret scanning และ push protection แล้ว `.gitignore` กัน `*.xlsx` จริง / `samples/` / `.env*` / `*.dump` / `*.dump.partial` / `caddy-data-*.tar.gz` (เว้น `templates/`) และ CI ตรวจซ้ำด้วย `scripts/check-no-data-files.sh` (กัน `git add -f` ดู [Excel Import/Export](#excel-importexport)) ไฟล์จริงเก็บนอก repo ถ้าเผลอ push secret ต้อง rotate ทันที ลบจาก history ไม่พอ
 
 ## Infra และ Deployment
 
@@ -366,7 +381,7 @@ EC2 (t4g.small) ──► web: Caddy (HTTPS อัตโนมัติเมื
 - **ไม่มี secret ใน image:** `.dockerignore` เป็น allowlist ส่งเข้า build เฉพาะ manifest, lockfile, `tsconfig.base.json`, `Caddyfile`, `apps/`, `packages/` และ template เปล่า แล้วตัด `node_modules`, `dist`, `.env*`, `.dev-credentials.txt`, `*.dump`, `*.xlsx` (ยกเว้น template) และเทสต์ออกอีกชั้น smoke script ตรวจว่าไม่มีไฟล์ `.env*`/`.dev-credentials.txt`/`*.dump` ทั้ง image
 - **Build หลัง proxy ที่ดักถอด TLS:** ส่ง CA เป็น build secret `docker build --secret id=extra_ca,src=<pem> …` (ไม่ถูกเขียนลง layer) ปกติไม่ต้องใช้
 - **api:** `CMD ["node", "dist/server.js"]` แบบ exec form node ได้ SIGTERM จาก `docker stop` เองแล้วปิด Fastify กับ pool ก่อนออก (smoke วัดได้ไม่ถึง 1 วินาที exit code 0) `HEALTHCHECK` ใช้ node ยิง `GET /api/health` (slim ไม่มี curl, DB ล่ม = 503 = unhealthy) ทุก 30 วินาที ช่วงเริ่มทุก 2 วินาที (`--start-interval` ต้องใช้ Docker Engine ≥ 25) migration และสร้าง admin เป็นคำสั่งแยกใน image เดียวกัน
-- **web:** `Caddyfile` ที่ root อ่าน env 2 ตัว (ตารางข้างล่าง) cache: ไฟล์ใน `/assets/` มี hash ในชื่อ ได้ `Cache-Control: public, max-age=31536000, immutable` เฉพาะไฟล์ที่มีจริง (ไฟล์ที่ไม่มี = 404 ไม่ fallback เป็น `index.html` แท็บที่เปิดค้างไว้ข้าม deploy แล้วขอ chunk ของหน้าเก่าจะได้ 404 และหน้าเว็บขึ้นข้อความพร้อมปุ่มโหลดหน้าใหม่) ที่เหลือรวม `index.html` เป็น `no-cache` (revalidate ด้วย ETag deploy ใหม่จึงเห็นทันที) บีบอัด zstd/gzip ไม่เขียน access log (จะมี IP และ path ของนักเรียนทุกคน) Caddy เขียนทับ `X-Forwarded-For` ที่ client ส่งมาเอง api จึงตั้ง `TRUST_PROXY=true` ได้โดยปลอม IP ไม่ได้
+- **web:** `Caddyfile` ที่ root อ่าน env 2 ตัว (ตารางข้างล่าง) cache: ไฟล์ใน `/assets/` มี hash ในชื่อ ได้ `Cache-Control: public, max-age=31536000, immutable` เฉพาะไฟล์ที่มีจริง (ไฟล์ที่ไม่มี = 404 ไม่ fallback เป็น `index.html` แท็บที่เปิดค้างไว้ข้าม deploy แล้วขอ chunk ของหน้าเก่าจะได้ 404 และหน้าเว็บขึ้นข้อความพร้อมปุ่มโหลดหน้าใหม่) ที่เหลือรวม `index.html` เป็น `no-cache` (revalidate ด้วย ETag deploy ใหม่จึงเห็นทันที) บีบอัด zstd/gzip ไม่เขียน access log (จะมี IP และ path ของนักเรียนทุกคน) Caddy เขียนทับ `X-Forwarded-For` ที่ client ส่งมาเอง api จึงตั้ง `TRUST_PROXY=true` ได้โดยปลอม IP ไม่ได้ (ใช้ได้เมื่อ Caddy รับตรงจาก internet ถ้าอยู่หลัง load balancer ดู [รายการที่ยังเปิดอยู่](#รายการที่ยังเปิดอยู่) ข้อ 16)
 - **Security headers ของหน้าเว็บ** (เฉพาะที่ไม่ใช่ `/api/*` ซึ่งใช้ของ `@fastify/helmet` ใน api อยู่แล้ว ไม่ซ้ำกัน): `Content-Security-Policy: default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self'; font-src 'self'; connect-src 'self'; object-src 'none'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'` (ไม่มี `'unsafe-inline'`/`'unsafe-eval'`), `X-Content-Type-Options: nosniff`, `X-Frame-Options: DENY`, `Referrer-Policy: no-referrer`, `Permissions-Policy` ปิดกล้อง ไมค์ ตำแหน่ง การจ่ายเงิน USB ตรวจใน Chromium จริงแล้วว่าไม่มี CSP violation (login, เปลี่ยนรหัส, หน้า admin, ดาวน์โหลด template และดาวน์โหลดแบบ blob รวม chunk ของหน้าที่โหลดทีหลังซึ่งเป็น same-origin จึงผ่าน `script-src 'self'`) zod ทดสอบ eval ด้วย `new Function` ตอนสร้าง schema ซึ่ง CSP รายงานเป็น violation ทุกหน้า หน้าเว็บจึง import `@club-registration/shared/zod-jitless` เป็นอันแรกใน `main.tsx` เพื่อปิด JIT ของ zod ก่อน (api ไม่ import จึงยังใช้ JIT) HSTS ใส่เฉพาะตอนเป็น HTTPS (ดู [O2](#compose-ของ-production-o2)) ส่วน `upgrade-insecure-requests` ไม่ใส่ เพราะหน้าเว็บโหลดทุกอย่างแบบ relative จาก origin เดียวกันอยู่แล้ว
 - **Multi-arch:** เครื่องจริงเป็น t4g (arm64) และ build บนเครื่องเองด้วย `docker compose build` ไม่มี registry ส่วน CI build แค่ amd64 เพื่อพิสูจน์ว่า Dockerfile ใช้ได้ **arm64 ยังไม่ได้ทดสอบ** (native binary ของ rolldown, lightningcss, Tailwind ที่ใช้ตอน build เว็บต้องมีของ arm64 ใน lockfile) ต้องรัน smoke script บนเครื่องจริงครั้งแรก
 - **Smoke test:** `scripts/smoke-images.sh` (ต้องมีแค่ Docker และ curl) build ทั้งสอง image สร้าง network แล้วรัน postgres → `node dist/migrate.js` → `create-admin` → api → web บนพอร์ตว่าง แล้วตรวจผ่าน Caddy: `/api/health` 200 และ DB up, `/` เป็น SPA พร้อม security headers, deep link (`/student/clubs`) ได้ `index.html`, asset ที่มี hash ได้ 200 + immutable + บีบอัด, asset ที่ไม่มีได้ 404, `/api/nonexistent` ได้ JSON 404 ของ api, `/api/*` มี CSP ของ helmet ตัวเดียว, admin ที่สร้าง login ผ่าน Caddy ได้ (argon2id ใน image), ทั้งสอง container รันเป็น non-root, image api มีฟอนต์ OFL และ template ตรงที่ api หา ไม่มี `src`/เทสต์/dev dependency และ `docker stop` api จบเองภายใน 5 วินาทีด้วย exit code 0, ไม่มี entry point ของ dev ใน image api, `/data` กับ `/config` ของ image web ว่าง, ไม่มี HSTS บน HTTP ธรรมดา, health listener ของ Caddy ตอบใน container ลบ container/network เสมอด้วย `trap` secret ทุกตัวสุ่มต่อรอบและไม่พิมพ์ออกมา CI รันเป็น job `images` ทุก PR และทุก push เข้า `main`
@@ -594,6 +609,8 @@ aws iam put-role-policy --role-name <ชื่อ role ของ EC2> --policy-n
 | PaaS (Render/Railway/Fly) | ชี้ Dockerfile (target `api`/`web`) + Postgres ของ platform (ไม่แนะนำสำหรับวันจริง) |
 | ECS/App Runner | push image ไป ECR + RDS + ALB, `TRUST_PROXY=true` |
 
+ทุกทางที่มี load balancer ของ platform อยู่หน้า Caddy/api ต้องตั้งเรื่อง IP ของ client ก่อน ดู [รายการที่ยังเปิดอยู่](#รายการที่ยังเปิดอยู่) ข้อ 16
+
 **ค่าใช้จ่าย (ประมาณ ต้องเช็คราคาจริง)**
 
 | รายการ | ประมาณ |
@@ -650,6 +667,7 @@ aws iam put-role-policy --role-name <ชื่อ role ของ EC2> --policy-n
 | 13 | ~~เก็บกวาดหน้าเว็บ~~ | ~~ไม่กระทบการทำงาน~~ | **แก้แล้ว:** helper แสดงรอบอยู่ที่ `apps/web/src/lib/round-display.ts`, focus กลับปุ่มยกเลิก (หรือข้อความผลเมื่อยกเลิกสำเร็จ) และกล่องยืนยันปิดด้วย Escape ได้, ไม่แสดงปุ่ม "ลงชุมนุม" เมื่อมีชุมนุมแล้ว, `/admin/clubs` เลือกรอบให้เองและเริ่ม poll ตอนรอบเปิดด้วยตัวตั้งเวลาเดียวกับหน้านักเรียน (`lib/round-refetch.ts`) |
 | 14 | ~~bundle JS ของหน้าเว็บ ~566 kB (Vite เตือนเกิน 500 kB)~~ | ~~โหลดครั้งแรกช้าบนมือถือเน็ตช้า~~ | **แก้แล้ว:** หน้าเมนูทุกหน้าโหลดแยก chunk ด้วย `React.lazy` หลังผ่าน `RequireSession` (นักเรียนไม่โหลดหน้า admin และกลับกัน) และ React แยก chunk ที่ cache ข้าม deploy ได้ entry เหลือ 279 kB (gzip 84) + React 219 kB (gzip 68) โหลดคู่กัน chunk ที่หาย (deploy ทับ) ขึ้นข้อความพร้อมปุ่มโหลดหน้าใหม่ (`apps/web/src/components/PageOutlet.tsx`) |
 | 15 | arm64 ยังไม่เคย build/รันจริง | CI build แค่ amd64 ส่วน t4g เป็น arm64 | ตรวจตอน O4: build บนเครื่องจริงแล้วรัน smoke |
+| 16 | Caddy เขียนทับ `X-Forwarded-For` เสมอ (ถือว่าตัวเองเป็นด่านแรก ไม่ได้ตั้ง `trusted_proxies`) | ถ้า deploy หลัง load balancer ของ platform (ALB, PaaS) api จะเห็น IP ของ LB แทนนักเรียนทุกคน rate limit ของ login (ต่อ IP และ IP + รหัสผู้ใช้) จะนับทุกคนรวมเป็นก้อนเดียว วันจริงอาจโดน `429` กันทั้งโรงเรียน (EC2 เครื่องเดียวที่ Caddy รับตรงจาก internet ไม่มีปัญหานี้) | ตอน deploy หลัง LB: ตั้ง `trusted_proxies` ของ Caddy เป็นช่วง IP ของ LB ของ platform นั้น และให้ api เชื่อ `X-Forwarded-For` ตามจำนวน hop หรือช่วง IP ของ proxy (Fastify `trustProxy` ตอนนี้ `TRUST_PROXY` เป็นแค่ `true`/`false` ซึ่งเอาค่าซ้ายสุด และ LB ส่วนใหญ่ต่อท้าย header ที่ client ส่งมาแทนการเขียนทับ ค่าซ้ายสุดจึงปลอมได้) แล้วทดสอบว่าปลอม IP ไม่ได้ **ยังไม่ตัดสิน deploy target:** คง image `web` (Caddy) ไว้ หรือรวมเป็น image เดียวให้ Fastify เสิร์ฟไฟล์ static ตัดสินเมื่อรู้ว่าจะ deploy ที่ไหน |
 
 ## ขั้นตอนถัดไป
 

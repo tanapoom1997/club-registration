@@ -12,6 +12,9 @@ dist/
 # real student data and database dumps (templates/ keeps empty templates only)
 *.xlsx
 !templates/*.xlsx
+# fictional import workbooks from `pnpm --filter api generate-sample-import` (regenerate, never
+# commit); real school files live outside the repo, e.g. ~/club-registration-data/
+samples/
 *.dump
 *.dump.partial
 # Caddy certificate archives from scripts/backup.sh --include-certs (private keys)

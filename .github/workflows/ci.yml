@@ -27,6 +27,10 @@ jobs:
         with:
           persist-credentials: false
 
+      # The repo is public: fail before anything else if git tracks a spreadsheet, dump, archive or
+      # env file that could hold real data (.gitignore can be bypassed with git add -f).
+      - run: scripts/check-no-data-files.sh
+
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version-file: .nvmrc

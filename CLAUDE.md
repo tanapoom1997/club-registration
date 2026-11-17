@@ -15,6 +15,7 @@
 7. **ทุก endpoint เขียนต้อง idempotent** รับ `idempotency_key` และเขียน `registration_events`
 8. **Export Excel ต้อง escape** ค่าที่ขึ้นต้นด้วย `=`, `+`, `-`, `@` (ใช้ `escapeCellText` ใน `apps/api/src/export/escape-cell.ts` ที่เดียว) และ export รายห้องต้องมีนักเรียนทุกคนในห้อง รวมคนที่ยังไม่ลง (สเปกเต็มดู README หัวข้อ Export รายชื่อ)
 9. **ห้ามใส่ข้อมูลจริงใน repo**: ไฟล์ .xlsx ของนักเรียน, `.env*`, `*.dump`, รหัสผ่าน, secret ข้อมูลทดสอบใช้ข้อมูลสมมติเท่านั้น (`templates/` เก็บได้เฉพาะไฟล์เปล่า)
+   ไฟล์จริงของโรงเรียนเก็บนอก repo (เช่น `~/club-registration-data/`) ไฟล์ตัวอย่างสร้างด้วย `generate-sample-import` ลง `samples/` (gitignored) ไม่ commit และ CI ตรวจด้วย `scripts/check-no-data-files.sh`
 10. **ห้ามใส่ secret/PII ใน log**
 11. **ห้าม `dangerouslySetInnerHTML`** กับข้อความที่ admin กรอก
 12. **repo นี้เป็น Public** ห้าม commit อะไรที่ระบุตัวโรงเรียน นักเรียน หรือครูจริง รวมถึง domain, IP, ชื่อ bucket และข้อมูลทดสอบที่ลอกจากของจริง ตัวอย่างและ seed data ใช้ข้อมูลสมมติเท่านั้น ถ้าไม่แน่ใจว่าไฟล์ปลอดภัยพอจะ commit ไหม ให้ถามก่อน
@@ -64,6 +65,8 @@ pnpm dev                # migrate → seed บัญชี demo → api (:3000) 
 pnpm --filter api seed-dev --reset   # สุ่มรหัสบัญชี demo ใหม่ (ลืมรหัส/ไฟล์หาย)
 pnpm --filter api create-admin <login_id>   # admin จริง แสดงรหัสครั้งเดียว บังคับเปลี่ยนตอน login แรก
 pnpm --filter api generate-template   # สร้าง templates/import-template.xlsx ใหม่หลังแก้คอลัมน์ใน packages/shared
+pnpm --filter api generate-sample-import   # ไฟล์ import สมมติ 3 ไฟล์ลง samples/ (gitignored ห้าม commit) รวมนักเรียน demo ตรงกับ seed-dev
+scripts/check-no-data-files.sh   # ล้มถ้า git track .xlsx/.xls/.csv/.dump/.sql.gz/.tar.gz นอก templates/ หรือ env file ที่ไม่ใช่ *.example (ขั้นแรกของ CI)
 pnpm typecheck
 pnpm lint
 pnpm format
@@ -89,7 +92,7 @@ scripts/restore.sh --yes latest|latest-local|<s3-uri|ไฟล์>   # กู้
 
 backup/restore (README หัวข้อ Backup และ Restore (O3)): dump มี PII ทั้งหมด ไฟล์ 600 ในไดเรกทอรี 700 ห้ามพิมพ์เนื้อหาหรือแถวออก log ห้ามใส่ชื่อ bucket/account id/region จริงใน repo restore กู้ลง DB ใหม่แล้วสลับชื่อใน transaction เดียว (ห้ามเปลี่ยนเป็น `--clean` ลง DB เดิม เพราะได้ข้อมูลผสมเมื่อ schema ต่างกัน) ตรวจ dump ด้วยการอ่านทั้งไฟล์ (`--list` อย่างเดียวไม่จับไฟล์ที่ถูกตัด) แก้ script แล้วต้องรัน `scripts/smoke-backup.sh` และ shellcheck
 
-บัญชี demo (`demo-admin`, `demo1001`, `demo1002`, `demo2001`) เป็นข้อมูลสมมติ ไม่บังคับเปลี่ยนรหัส รหัสสุ่มตอนสร้างครั้งแรกแล้วเก็บใน `.dev-credentials.txt` (gitignored, 600) รัน `pnpm dev` ซ้ำไม่เปลี่ยนรหัส `seed-dev` ไม่ยอมรันเมื่อ `NODE_ENV=production` ส่วน production สร้าง admin ด้วย `node dist/create-admin.js <login_id>` หลัง `pnpm build` หรือใน image `docker run --rm -it -e DATABASE_URL club-registration-api node dist/create-admin.js <login_id>` (migration ก็เช่นกัน: `node dist/migrate.js`) image `api` ไม่มี `seed-dev`/`generate-template` (ลบตอน build)
+บัญชี demo (`demo-admin`, `demo1001`, `demo1002`, `demo2001`) เป็นข้อมูลสมมติ ไม่บังคับเปลี่ยนรหัส รหัสสุ่มตอนสร้างครั้งแรกแล้วเก็บใน `.dev-credentials.txt` (gitignored, 600) รัน `pnpm dev` ซ้ำไม่เปลี่ยนรหัส `seed-dev` ไม่ยอมรันเมื่อ `NODE_ENV=production` ส่วน production สร้าง admin ด้วย `node dist/create-admin.js <login_id>` หลัง `pnpm build` หรือใน image `docker run --rm -it -e DATABASE_URL club-registration-api node dist/create-admin.js <login_id>` (migration ก็เช่นกัน: `node dist/migrate.js`) image `api` ไม่มี `seed-dev`/`generate-template`/`dist/dev/` (รวม `generate-sample-import`, ลบตอน build)
 
 `packages/shared` ไม่ต้อง build ตอน dev และ test เพราะ export condition `@club-registration/source` ชี้ไปที่ `src/` (Vitest ของ api ใช้ alias แทน) ส่วน production ใช้ `dist/` จาก `pnpm build`
 
@@ -158,7 +161,7 @@ backup/restore (README หัวข้อ Backup และ Restore (O3)): dump �
 ### TypeScript / Lint
 - `tsconfig`: `strict`, `noUncheckedIndexedAccess`, `exactOptionalPropertyTypes`, `noImplicitOverride`, `verbatimModuleSyntax`, `isolatedModules`
 - ESLint เปิดอย่างน้อย: `@typescript-eslint/no-floating-promises`, `no-misused-promises`, `no-explicit-any`, `consistent-type-imports`, `eqeqeq`, `no-restricted-imports` (กัน web↔api import กัน)
-- CI/ก่อน commit ต้องผ่าน `typecheck` + `lint` + `test` ห้าม merge ถ้าแดง CI อยู่ที่ `.github/workflows/ci.yml` (job `check`: format:check, typecheck, lint, test, build และ job `images`: `scripts/smoke-images.sh`, `scripts/smoke-compose.sh` แล้ว `scripts/smoke-backup.sh` ซึ่งรันในเครื่องด้วยคำสั่งเดียวกันได้) รันทุก PR และทุก push เข้า `main` action pin ด้วย commit SHA ถ้าเพิ่มขั้นตอนให้รันซ้ำในเครื่องได้ด้วยคำสั่ง `pnpm` เดียวกัน
+- CI/ก่อน commit ต้องผ่าน `typecheck` + `lint` + `test` ห้าม merge ถ้าแดง CI อยู่ที่ `.github/workflows/ci.yml` (job `check`: `scripts/check-no-data-files.sh`, format:check, typecheck, lint, test, build และ job `images`: `scripts/smoke-images.sh`, `scripts/smoke-compose.sh` แล้ว `scripts/smoke-backup.sh` ซึ่งรันในเครื่องด้วยคำสั่งเดียวกันได้) รันทุก PR และทุก push เข้า `main` action pin ด้วย commit SHA ถ้าเพิ่มขั้นตอนให้รันซ้ำในเครื่องได้ด้วยคำสั่ง `pnpm` เดียวกัน
 
 ### Security
 - Password hash ด้วย **argon2id** (`crypto.argon2` ของ Node, เก็บเป็น PHC string) ห้าม MD5/SHA ธรรมดา เทียบด้วย `timingSafeEqual`

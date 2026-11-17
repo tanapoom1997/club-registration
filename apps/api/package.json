@@ -9,6 +9,7 @@
     "create-admin": "tsx --conditions=@club-registration/source --env-file-if-exists=../../.env src/create-admin.ts",
     "seed-dev": "tsx --conditions=@club-registration/source --env-file-if-exists=../../.env src/seed-dev.ts",
     "generate-template": "tsx --conditions=@club-registration/source src/generate-template.ts",
+    "generate-sample-import": "tsx --conditions=@club-registration/source src/dev/generate-sample-import.ts",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "build": "tsc -p tsconfig.build.json"
