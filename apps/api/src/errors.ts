@@ -9,6 +9,7 @@ const HTTP_STATUS: Readonly<Record<ErrorCode, number>> = Object.freeze({
   [ERROR_CODES.invalidCredentials]: 401,
   [ERROR_CODES.forbidden]: 403,
   [ERROR_CODES.passwordChangeRequired]: 403,
+  [ERROR_CODES.studentProfileMissing]: 403,
   [ERROR_CODES.notFound]: 404,
   [ERROR_CODES.roundExists]: 409,
   [ERROR_CODES.roundNotEmpty]: 409,
@@ -34,6 +35,8 @@ const DEFAULT_MESSAGES: Readonly<Record<ErrorCode, string>> = Object.freeze({
   [ERROR_CODES.invalidCredentials]: 'Invalid login ID or password',
   [ERROR_CODES.forbidden]: 'Not allowed',
   [ERROR_CODES.passwordChangeRequired]: 'Password must be changed first',
+  [ERROR_CODES.studentProfileMissing]:
+    'This student account has no grade or classroom yet; ask an admin to import it',
   [ERROR_CODES.notFound]: 'Not found',
   [ERROR_CODES.roundExists]: 'A round for this term and grade already exists',
   [ERROR_CODES.roundNotEmpty]: 'Round still has clubs or other data attached',

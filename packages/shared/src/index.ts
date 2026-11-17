@@ -147,3 +147,19 @@ export type {
   RoundClassroomsResponse,
   RoundExportParams,
 } from './export.js';
+export {
+  studentClubSchema,
+  studentClubsResponseSchema,
+  studentQuerySchema,
+  studentRegistrationSchema,
+  studentRoundResponseSchema,
+  studentRoundSchema,
+} from './student.js';
+export type {
+  StudentClub,
+  StudentClubsResponse,
+  StudentQuery,
+  StudentRegistration,
+  StudentRound,
+  StudentRoundResponse,
+} from './student.js';
