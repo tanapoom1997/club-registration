@@ -97,7 +97,7 @@ describe('student clubs page', () => {
     },
   );
 
-  it('shows the club the student holds at the top and blocks registering for another', async () => {
+  it('shows the club the student holds at the top and offers no register button', async () => {
     mockStudentApi({ registration: registrationFor(ART) });
 
     await openPage();
@@ -109,9 +109,20 @@ describe('student clubs page', () => {
       within(held).getByRole('link', { name: 'ดูผลของฉันและยกเลิก' }).getAttribute('href'),
     ).toBe('/student/my-registration');
     expect(within(cardOf(ART.name)).getByText('ชุมนุมของฉัน')).toBeTruthy();
-    expect(screen.queryByRole('button', { name: `ลงชุมนุม C300 ${ART.name}` })).toBeNull();
-    expect(registerButton(CHESS.clubCode, CHESS.name).disabled).toBe(true);
+    // The held-club card explains how to change, so no card shows a button that cannot work.
+    expect(screen.queryByRole('button', { name: /^ลงชุมนุม / })).toBeNull();
   });
+
+  it.each(['upcoming', 'closed'] as const)(
+    'offers no register button to a student holding a club while the round is %s',
+    async (status) => {
+      mockStudentApi({ round: roundFixture({ status }), registration: registrationFor(ART) });
+
+      await openPage();
+
+      expect(screen.queryByRole('button', { name: /^ลงชุมนุม / })).toBeNull();
+    },
+  );
 
   it('registers after confirmation with a new idempotency key and shows the held club', async () => {
     const { fetchMock } = mockStudentApi();
@@ -131,7 +142,7 @@ describe('student clubs page', () => {
     expect(screen.getByRole('heading', { name: 'ชุมนุมของฉัน' })).toBeTruthy();
     expect(screen.queryByRole('alertdialog')).toBeNull();
     await waitFor(() => expect(cardOf(CHESS.name).textContent).toContain('เหลือ 17 ที่'));
-    expect(registerButton(ART.clubCode, ART.name).disabled).toBe(true);
+    expect(screen.queryByRole('button', { name: /^ลงชุมนุม / })).toBeNull();
   });
 
   it('sends nothing when the student backs out of the confirmation', async () => {
@@ -142,6 +153,18 @@ describe('student clubs page', () => {
     fireEvent.click(within(dialog).getByRole('button', { name: 'ไม่ลง' }));
 
     expect(screen.queryByRole('alertdialog')).toBeNull();
+    expect(callsTo(fetchMock, 'POST', REGISTER_PATH)).toHaveLength(0);
+  });
+
+  it('closes the confirmation with Escape and returns focus to the register button', async () => {
+    const { fetchMock } = mockStudentApi();
+    await openPage();
+    const dialog = startRegister(CHESS.clubCode, CHESS.name);
+
+    fireEvent.keyDown(dialog, { key: 'Escape' });
+
+    expect(screen.queryByRole('alertdialog')).toBeNull();
+    expect(document.activeElement).toBe(registerButton(CHESS.clubCode, CHESS.name));
     expect(callsTo(fetchMock, 'POST', REGISTER_PATH)).toHaveLength(0);
   });
 
@@ -156,6 +179,9 @@ describe('student clubs page', () => {
       within(dialog).getByRole<HTMLButtonElement>('button', { name: 'ยืนยัน ลงชุมนุม' }).disabled,
     ).toBe(true);
     expect(registerButton(ART.clubCode, ART.name).disabled).toBe(true);
+    // Escape does not close it either: the answer must stay where the student can see it.
+    fireEvent.keyDown(dialog, { key: 'Escape' });
+    expect(screen.getByRole('alertdialog')).toBe(dialog);
   });
 
   it.each([

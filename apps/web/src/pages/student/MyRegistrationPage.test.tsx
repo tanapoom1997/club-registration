@@ -114,6 +114,60 @@ describe('student my-registration page', () => {
   });
 
   it.each([
+    [
+      'the dismiss button',
+      (dialog: HTMLElement) => {
+        fireEvent.click(within(dialog).getByRole('button', { name: 'ไม่ยกเลิก' }));
+      },
+    ],
+    [
+      'Escape',
+      (dialog: HTMLElement) => {
+        fireEvent.keyDown(dialog, { key: 'Escape' });
+      },
+    ],
+  ])(
+    'returns focus to the cancel button when the student backs out with %s',
+    async (_, backOut) => {
+      mockStudentApi({ registration: HELD });
+      await openPage();
+      fireEvent.click(screen.getByRole('button', { name: CANCEL_BUTTON }));
+      const dialog = screen.getByRole('alertdialog', { name: DIALOG });
+      expect(document.activeElement).toBe(dialog);
+
+      backOut(dialog);
+
+      expect(screen.queryByRole('alertdialog')).toBeNull();
+      expect(document.activeElement).toBe(screen.getByRole('button', { name: CANCEL_BUTTON }));
+    },
+  );
+
+  it('returns focus to the cancel button when a refusal is dismissed', async () => {
+    mockStudentApi(
+      { registration: HELD },
+      { [`POST ${CANCEL_PATH}`]: apiError(429, 'rate_limited') },
+    );
+    await openPage();
+    const dialog = confirmCancel();
+    await within(dialog).findByRole('alert');
+
+    fireEvent.click(within(dialog).getByRole('button', { name: 'ปิด' }));
+
+    expect(document.activeElement).toBe(screen.getByRole('button', { name: CANCEL_BUTTON }));
+  });
+
+  it('moves focus to the outcome once the cancel went through', async () => {
+    mockStudentApi({ registration: HELD });
+    await openPage();
+
+    confirmCancel();
+
+    const notice = await screen.findByText(/ยกเลิกชุมนุมแล้ว/);
+    expect(document.activeElement).toBe(notice);
+    expect(within(notice).getByRole('link', { name: 'ชุมนุมในชั้นของฉัน' })).toBeTruthy();
+  });
+
+  it.each([
     [409, 'round_not_open', 'ยกเลิกไม่ได้ เพราะรอบนี้ไม่ได้เปิดอยู่แล้ว'],
     [409, 'not_registered', 'คุณไม่มีชุมนุมที่ลงไว้ในรอบนี้ (อาจยกเลิกไปแล้ว)'],
     [409, 'idempotency_key_reused', 'คำขอนี้ซ้ำกับคำขอก่อนหน้า กรุณากดใหม่อีกครั้ง'],

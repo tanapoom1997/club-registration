@@ -9,6 +9,7 @@ import type {
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { useEffect } from 'react';
 import { ApiError } from '@/lib/api';
+import { refetchWhileOpen, untilNextStatusChange } from '@/lib/round-refetch';
 import { useSetSession } from '@/lib/session';
 
 const UNAUTHORIZED = 401;
@@ -22,32 +23,15 @@ export const STUDENT_CLUBS_QUERY_KEY = Object.freeze([...STUDENT_QUERY_KEY, 'clu
 
 // While the round is open, seats change under the student's eyes.
 export const CLUBS_POLL_INTERVAL_MS = 5_000;
-// The next status change is timed by the phone's clock, which may be off. The cap bounds how late
-// a slow clock notices it; the floor keeps a fast clock from refetching in a tight loop while the
-// server still says "upcoming".
-const STATUS_CHECK_MAX_MS = 30_000;
-const STATUS_CHECK_MIN_MS = 2_000;
-// Spreads the refetch of a whole grade waiting on the same opening time over a second.
-const STATUS_CHECK_JITTER_MS = 1_000;
-
-const untilNextStatusChange = (round: StudentRound, now: number): number => {
-  const boundary = round.status === 'upcoming' ? round.opensAt : round.closesAt;
-  const delay = Date.parse(boundary) - now + Math.random() * STATUS_CHECK_JITTER_MS;
-  return Math.min(Math.max(delay, STATUS_CHECK_MIN_MS), STATUS_CHECK_MAX_MS);
-};
 
 // The server decides the status on every answer; the page only chooses when to ask again. A round
 // waiting to open is asked again when it should open, so the page switches without a reload.
-export const clubsRefetchInterval = (round: StudentRound | null | undefined): number | false => {
-  if (!round || round.status === 'closed') return false;
-  return round.status === 'open'
-    ? CLUBS_POLL_INTERVAL_MS
-    : untilNextStatusChange(round, Date.now());
-};
+export const clubsRefetchInterval = (round: StudentRound | null | undefined): number | false =>
+  refetchWhileOpen(round, CLUBS_POLL_INTERVAL_MS);
 
 // The result page only needs the status, to show or hide the cancel button at the right time.
 export const roundRefetchInterval = (round: StudentRound | null | undefined): number | false =>
-  !round || round.status === 'closed' ? false : untilNextStatusChange(round, Date.now());
+  !round || round.status === 'closed' ? false : untilNextStatusChange(round);
 
 // A refused request (4xx) will be refused again; only network and server failures are retried.
 export const retryRead = (failureCount: number, error: unknown): boolean =>

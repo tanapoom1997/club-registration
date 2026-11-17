@@ -3,7 +3,7 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { formatThaiDateTime } from '@/lib/thai-time';
-import { STATUS_DISPLAY, gradeLabel } from '@/pages/admin-rounds/round-ui';
+import { STATUS_DISPLAY, gradeLabel } from '@/lib/round-display';
 import { isProfileMissing } from './student-ui';
 
 export const RoundHeader = ({ round }: { round: StudentRound }) => {

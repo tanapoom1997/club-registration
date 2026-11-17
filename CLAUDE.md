@@ -33,7 +33,7 @@
 | Database | PostgreSQL + `pg` | SQL ตรงๆ ใช้ parameterized query (`$1, $2`) เสมอ ห้ามต่อ string |
 | Migration | `node-pg-migrate` | migration เป็น SQL ไฟล์ แยกจาก app |
 | Auth | `@fastify/jwt` (HS256) + `@fastify/cookie`, argon2id จาก `node:crypto` | session cookie + `session_version` ดู README หัวข้อ Security |
-| Router (FE) | `react-router` (SPA mode) | route ทั้งหมดอยู่ที่ `apps/web/src/routes.tsx` |
+| Router (FE) | `react-router` (SPA mode) | route ทั้งหมดอยู่ที่ `apps/web/src/routes.tsx` หน้าเมนูโหลดแยก chunk ด้วย `React.lazy` (ไม่ใช้ route `lazy` เพราะจะโหลดก่อน `RequireSession` ตรวจ role) |
 | Frontend | Vite + React + Tailwind + shadcn/ui | SPA ไม่ใช้ SSR |
 | Data fetching | TanStack Query | polling คิว/สถานะ |
 | Excel | `exceljs` | import/export .xlsx |

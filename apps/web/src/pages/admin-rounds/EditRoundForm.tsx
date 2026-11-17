@@ -9,7 +9,8 @@ import { updateRound } from '@/lib/api';
 import { isoToThaiInput } from '@/lib/thai-time';
 import { ConfirmPanel } from './ConfirmPanel';
 import { RoundWindowFields } from './RoundWindowFields';
-import { gradeLabel, roundErrorMessage, useRoundMutation, windowFromValues } from './round-ui';
+import { gradeLabel } from '@/lib/round-display';
+import { roundErrorMessage, useRoundMutation, windowFromValues } from './round-ui';
 import type { WindowValues } from './round-ui';
 
 const valuesOf = (round: Round): WindowValues => ({

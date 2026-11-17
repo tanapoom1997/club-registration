@@ -1,6 +1,6 @@
 import type { StudentRegistration } from '@club-registration/shared';
 import { useQuery } from '@tanstack/react-query';
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router';
 import { Button } from '@/components/ui/button';
 import { cancelRegistration, fetchStudentRound } from '@/lib/api';
@@ -52,10 +52,28 @@ export const MyRegistrationPage = () => {
   const round = data?.round;
   const registration = data?.registration;
   const panelClub = mutation.isSuccess ? undefined : confirming;
+  const panelOpen = panelClub !== undefined;
+
+  const headingRef = useRef<HTMLHeadingElement>(null);
+  const cancelRef = useRef<HTMLButtonElement>(null);
+  const noticeRef = useRef<HTMLParagraphElement>(null);
+  const wasPanelOpen = useRef(false);
+  // Closing the panel removes the focused element, so focus goes back to the cancel button it
+  // came from, as on the clubs page. After a cancel that button is gone; the notice says what
+  // happened and holds the link to choose a new club, so focus lands there instead. The heading
+  // is the last resort (e.g. the round closed while the panel was open).
+  useEffect(() => {
+    if (wasPanelOpen.current && !panelOpen) {
+      (cancelRef.current ?? noticeRef.current ?? headingRef.current)?.focus();
+    }
+    wasPanelOpen.current = panelOpen;
+  }, [panelOpen]);
 
   return (
     <section className="space-y-4">
-      <h1 className="text-xl font-semibold">ผลของฉัน</h1>
+      <h1 ref={headingRef} tabIndex={-1} className="text-xl font-semibold focus:outline-none">
+        ผลของฉัน
+      </h1>
 
       {!data ? (
         <StudentLoadState
@@ -70,7 +88,11 @@ export const MyRegistrationPage = () => {
           <RoundHeader round={round} />
           <div role="status">
             {mutation.isSuccess && (
-              <p className="rounded-md bg-success p-3 text-sm text-success-foreground">
+              <p
+                ref={noticeRef}
+                tabIndex={-1}
+                className="rounded-md bg-success p-3 text-sm text-success-foreground focus:outline-none"
+              >
                 ยกเลิกชุมนุมแล้ว{' '}
                 {round.status === 'open' && (
                   <>
@@ -85,6 +107,7 @@ export const MyRegistrationPage = () => {
             <HeldClubCard registration={registration}>
               {panelClub ? null : round.status === 'open' ? (
                 <Button
+                  ref={cancelRef}
                   variant="outline"
                   className="w-full sm:w-auto"
                   onClick={() => openConfirmation(registration.club)}
