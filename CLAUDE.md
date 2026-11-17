@@ -8,7 +8,7 @@
 
 1. **Invariant ต้อง enforce ที่ DB** (UNIQUE, CHECK, `UPDATE ... WHERE registered < capacity`) ห้ามพึ่งการเช็คใน app อย่างเดียว
 2. **ใช้ SQL ตรงๆ ผ่าน `pg`** ไม่เพิ่ม ORM, Redis หรือ dependency ใหญ่ โดยไม่ถามก่อน (เหตุผลอยู่ใน README หัวข้อ Tech Stack)
-3. **ทุก write transaction ในรอบเริ่มด้วย `pg_advisory_xact_lock(round_id)`** (ตั้งแต่ Phase 1: ลง/ยกเลิก และ admin แก้ชุมนุม ใช้ `lockRound`/`lockRoundOfClub` ใน `apps/api/src/services/round-lock.ts` ส่วนยืนยัน import ใช้ `lockRoundsForImport` ล็อกทุกรอบของภาคเรียนและรอบที่ยังไม่ปิดของภาคเรียนอื่น เรียง id จากน้อยไปมากต่อจาก import lock) ก่อนอ่านอะไรที่ใช้ตัดสินผล มีแค่ import ที่ถือหลาย round lock และต้องได้ครบก่อนแตะแถวใด ถ้าเพิ่ม writer ที่ถือหลายรอบต้องล็อกเรียง id แบบเดียวกัน (เหตุผลเรื่อง deadlock อยู่ใน `round-lock.ts`)
+3. **ทุก write transaction ในรอบเริ่มด้วย `pg_advisory_xact_lock(round_id)`** (ตั้งแต่ Phase 1: ลง/ยกเลิก และ admin แก้ชุมนุม ใช้ `lockRound`/`lockRoundOfClub` ใน `apps/api/src/services/round-lock.ts` ส่วนยืนยัน import ใช้ `lockRoundsForImport` ล็อกทุกรอบของภาคเรียนและรอบที่ยังไม่ปิดของภาคเรียนอื่น เรียง id จากน้อยไปมากต่อจาก import lock) ก่อนอ่านอะไรที่ใช้ตัดสินผล มีแค่ import ที่ถือหลาย round lock และต้องได้ครบก่อนแตะแถวใด ถ้าเพิ่ม writer ที่ถือหลายรอบต้องล็อกเรียง id แบบเดียวกัน การออกรหัสผ่านเริ่มต้นถือ import lock (`lockImport`) ก่อน row lock เพื่อไม่ให้ชนกับ import (เหตุผลเรื่อง deadlock และลำดับ lock ทั้งหมดอยู่ใน `round-lock.ts`)
 4. **ห้าม mock Postgres ในเทสต์** ใช้ Testcontainers เสมอ การเปลี่ยนแปลงที่แตะ logic ลง/ยกเลิก/เปลี่ยน/waitlist ต้องมี concurrency test และ invariant check คู่กัน
 5. **ไม่เชื่อ role หรือ `student_id` จาก client** ใช้ค่าจาก JWT เท่านั้น
 6. **`apps/web` กับ `apps/api` ห้าม import กัน** คุยผ่าน HTTP และ `packages/shared` เท่านั้น

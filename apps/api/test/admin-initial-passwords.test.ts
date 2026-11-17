@@ -464,7 +464,7 @@ describe('admin initial passwords', () => {
       await assertOneValidPasswordEach(students, [rows]);
     });
 
-    it('settles two transactions that wait on the same row locks', async () => {
+    it('settles two transactions queued behind the same rows, one after the other', async () => {
       const classroom = uniqueClassroom();
       const students = await createImportedStudents(6, { classroom });
       const scope: IssueScope = { grade: SHARED_GRADE, classroom, onlyUnissued: false };
@@ -473,7 +473,8 @@ describe('admin initial passwords', () => {
         preparePasswords(pool, scope, limit),
         preparePasswords(pool, scope, limit),
       ]);
-      // A third transaction holds the rows so both commits are queued on the same locks.
+      // A third transaction holds the rows so both commits are queued: the first on the row
+      // locks, the second on the import lock the first holds (initial-passwords.ts).
       const holder = await pool.connect();
       try {
         await holder.query('BEGIN');
@@ -490,11 +491,13 @@ describe('admin initial passwords', () => {
         const commits = Promise.all([commitOf(preparedA), commitOf(preparedB)]);
         await vi.waitFor(
           async () => {
-            const { rows } = await pool.query<{ waiting: number }>(
-              `SELECT count(*)::int AS waiting FROM pg_stat_activity
-               WHERE wait_event_type = 'Lock' AND query LIKE '%FOR NO KEY UPDATE OF u%'`,
+            const { rows } = await pool.query<{ on_rows: number; on_import_lock: number }>(
+              `SELECT count(*) FILTER (WHERE query LIKE '%FOR NO KEY UPDATE OF u%')::int AS on_rows,
+                      count(*) FILTER (WHERE wait_event = 'advisory')::int AS on_import_lock
+               FROM pg_stat_activity
+               WHERE wait_event_type = 'Lock' AND datname = current_database()`,
             );
-            expect(rows[0]?.waiting).toBe(2);
+            expect(rows[0]).toEqual({ on_rows: 1, on_import_lock: 1 });
           },
           { timeout: 5_000, interval: 20 },
         );

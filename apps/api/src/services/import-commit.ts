@@ -7,19 +7,16 @@ import { AppError } from '../errors.js';
 import type { ParsedImport } from '../import/parse.js';
 import { planImport } from './import-plan.js';
 import type { ImportPlan } from './import-plan.js';
-import { lockRoundsForImport } from './round-lock.js';
+import { lockImport, lockRoundsForImport } from './round-lock.js';
 
-// Every import commit takes this transaction-scoped advisory lock before it reads anything, so
-// commits run one at a time and each plans against what the previous one committed: two racing
-// uploads of the same file end with one creating everything and the other finding it unchanged,
-// never with a half-merged mix. A fixed key (not per term) because students are shared across
-// terms. The two-int form lives in a key space separate from the one-bigint
-// pg_advisory_xact_lock(round_id) that in-round writes take (CLAUDE.md rule 3), so it can never
-// collide with a round id; commitImport takes those round locks too, right after this one. The
-// UNIQUE constraints used by ON CONFLICT below stay the backstop against writers that do not take
-// this lock.
-const IMPORT_LOCK_KEY: readonly [number, number] = Object.freeze([1, 1] as const);
-
+// Every import commit takes the import lock (lockImport) before it reads anything, so commits run
+// one at a time and each plans against what the previous one committed: two racing uploads of the
+// same file end with one creating everything and the other finding it unchanged, never with a
+// half-merged mix. The initial password issuance takes the same lock before its row locks, so the
+// two never hold users rows at once (they lock them in no common order, which could deadlock).
+// commitImport takes the round locks right after it (CLAUDE.md rule 3; round-lock.ts has the whole
+// order). The UNIQUE constraints used by ON CONFLICT below stay the backstop against writers that
+// do not take this lock.
 const conflict = () => new AppError(ERROR_CODES.importConflict);
 
 const upsertStudents = async (db: Queryable, plan: ImportPlan['students']) => {
@@ -161,7 +158,7 @@ export const commitImport = async (
   parsed: ParsedImport,
 ): Promise<CommitImportResult> =>
   await withTransaction(pool, async (client) => {
-    await client.query('SELECT pg_advisory_xact_lock($1, $2)', [...IMPORT_LOCK_KEY]);
+    await lockImport(client);
     await lockRoundsForImport(client, term);
     const plan = await planImport(client, term, parsed);
     // One error is enough to write nothing. Only reads have run, so committing releases the

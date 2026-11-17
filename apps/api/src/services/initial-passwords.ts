@@ -7,6 +7,7 @@ import { isPgError, PG_ERROR_CODES, withTransaction } from '../db.js';
 import type { Queryable } from '../db.js';
 import { AppError } from '../errors.js';
 import { compareClassrooms } from './classroom-order.js';
+import { lockImport } from './round-lock.js';
 
 // How an admin hands out initial passwords:
 //
@@ -17,20 +18,30 @@ import { compareClassrooms } from './classroom-order.js';
 //    idle_in_transaction_session_timeout and keep rows locked against the students' own logins.
 //    The caller's limit bounds how many hashes run at once, so the libuv threadpool keeps free
 //    threads for logins and other requests.
-// 3. One short transaction: lock the rows that are *still* eligible (SELECT … FOR NO KEY UPDATE
-//    re-checks the WHERE clause against the latest committed row once a lock is granted), write
-//    the hashes to exactly those, bump session_version (so sessions under an older issued password
-//    end) and record the issuance. Only students whose row was updated go into the file.
+// 3. One short transaction: take the import lock, then lock the rows that are *still* eligible
+//    (SELECT … FOR NO KEY UPDATE re-checks the WHERE clause against the latest committed row once
+//    a lock is granted), write the hashes to exactly those, bump session_version (so sessions
+//    under an older issued password end) and record the issuance. Only students whose row was
+//    updated go into the file.
 //
 // Races this settles:
 // - A student who changes their password between steps 1 and 3 has must_change_password = false
 //   by step 3 and is skipped, never overwritten. If the change is still in flight, its UPDATE
 //   (compare-and-set on session_version) waits for our lock and then finds a new version, so the
 //   student is told to sign in again with the issued password instead of half-succeeding.
-// - Two admins issuing the same scope: each request locks its rows in id order, so one gets every
-//   row first and the other waits, then re-checks and overwrites (or, with onlyUnissued, skips
-//   them because they are now issued). Each student ends with exactly one valid password, the one
-//   in the file of whichever request committed last for them; the other file's password is dead.
+// - Two admins issuing the same scope: the import lock below runs their transactions one after
+//   the other (each also locks its rows in id order), so the second waits, then re-checks and
+//   overwrites (or, with onlyUnissued, skips them because they are now issued). Each student ends
+//   with exactly one valid password, the one in the file of whichever request committed last;
+//   the other file's password is dead.
+// - An import commit at the same time: both lock many users (and student_profiles) rows, in no
+//   common order (the import in file order, this in id order), so without more they could
+//   deadlock and Postgres would abort one with 40P01, a 500 for the admin. Taking the import lock
+//   pg_advisory_xact_lock(1, 1) first, before any row lock, makes them never hold row locks at the
+//   same time: whichever comes second waits for the other to commit, then reads what it wrote
+//   (an issuance after an import sees new students and classrooms; an import after an issuance
+//   leaves passwords alone anyway). Only this short transaction waits, never the hashing. The
+//   full lock order, and why it stays deadlock-free with registrations, is in round-lock.ts.
 //
 // FOR NO KEY UPDATE rather than FOR UPDATE: foreign-key checks (e.g. a registration insert) take
 // FOR KEY SHARE on users, which this does not block. FOR SHARE on student_profiles keeps the
@@ -138,6 +149,7 @@ export const commitPasswords = async (
   { adminId, idempotencyKey, scope, prepared }: CommitInput,
 ): Promise<IssuedStudent[]> =>
   await withTransaction(pool, async (client) => {
+    await lockImport(client);
     const { rows: locked } = await client.query<LockedRow>(
       `SELECT u.id, u.login_id, u.full_name, sp.grade, sp.classroom, sp.seat_no
        FROM users u JOIN student_profiles sp ON sp.user_id = u.id
