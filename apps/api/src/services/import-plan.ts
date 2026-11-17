@@ -107,7 +107,10 @@ const findUsers = async (db: Queryable, loginIds: readonly string[]) => {
   return new Map(rows.map((row) => [row.login_id, toExistingUser(row)]));
 };
 
-// Grades each student holds a registration for in this term's rounds.
+// Grades each student holds a registration for in this term's rounds. The commit holds every
+// round lock of the term while it plans and writes, so no registration in the term can land
+// between this read and the grade update. Other terms are not looked at on purpose: a seat in an
+// earlier term's round is history (students move up a grade each year), not a reason to refuse.
 const findRegisteredGrades = async (db: Queryable, term: string, studentIds: readonly number[]) => {
   const { rows } = await db.query<{ student_id: number; grade: number }>(
     `SELECT DISTINCT r.student_id, ro.grade
