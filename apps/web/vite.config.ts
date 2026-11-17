@@ -10,6 +10,20 @@ export default defineConfig({
     alias: { '@': fileURLToPath(new URL('./src', import.meta.url)) },
     conditions: ['@club-registration/source', ...defaultClientConditions],
   },
+  build: {
+    rolldownOptions: {
+      output: {
+        codeSplitting: {
+          groups: [
+            // React is about 40% of the entry and changes only on an upgrade: in its own chunk it
+            // stays cached across deploys, and the entry keeps room under Vite's 500 kB warning.
+            // Both load in parallel on the first visit (Vite preloads it from index.html).
+            { name: 'react', test: /node_modules[\\/](react|react-dom|scheduler)[\\/]/ },
+          ],
+        },
+      },
+    },
+  },
   server: {
     // Mirrors production, where Caddy serves the SPA and proxies /api from one origin.
     proxy: { '/api': 'http://127.0.0.1:3000' },
