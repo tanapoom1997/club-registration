@@ -73,7 +73,7 @@ export const StudentClubsPage = () => {
 
   return (
     <section className="space-y-4">
-      <h1 className="text-xl font-semibold">ชุมนุมในชั้นของฉัน</h1>
+      <h1 className="text-2xl font-bold">ชุมนุมในชั้นของฉัน</h1>
 
       {!data ? (
         <StudentLoadState

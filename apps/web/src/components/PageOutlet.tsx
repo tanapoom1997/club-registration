@@ -27,7 +27,7 @@ export const PageOutlet = () => {
 // because a failed lazy import stays failed. Also covers a dropped connection mid-download.
 export const PageLoadError = () => (
   <section role="alert" className="space-y-3 rounded-lg border border-border bg-card p-4">
-    <h1 className="text-xl font-semibold">เปิดหน้านี้ไม่สำเร็จ</h1>
+    <h1 className="text-2xl font-bold">เปิดหน้านี้ไม่สำเร็จ</h1>
     <p className="text-sm">
       อาจเป็นเพราะการเชื่อมต่อขัดข้อง หรือระบบเพิ่งอัปเดตเป็นเวอร์ชันใหม่
       กรุณาโหลดหน้าใหม่แล้วลองอีกครั้ง

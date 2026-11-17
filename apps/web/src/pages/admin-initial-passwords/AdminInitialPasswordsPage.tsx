@@ -114,7 +114,7 @@ export const AdminInitialPasswordsPage = () => {
   return (
     <section className="space-y-6">
       <div className="space-y-2">
-        <h1 className="text-xl font-semibold">รหัสผ่านเริ่มต้น</h1>
+        <h1 className="text-2xl font-bold">รหัสผ่านเริ่มต้น</h1>
         <p className="text-sm text-muted-foreground">
           ระบบสุ่มรหัสผ่านให้นักเรียนรายคนและเก็บไว้เฉพาะแบบเข้ารหัส (hash) รหัสผ่านจริงมีอยู่ในไฟล์
           Excel ที่ดาวน์โหลดตอนกดออกรหัสเท่านั้น ดาวน์โหลดซ้ำไม่ได้ ถ้าไฟล์หายต้องออกรหัสใหม่

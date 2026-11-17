@@ -127,7 +127,7 @@ export const AdminRoundsPage = () => {
   return (
     <section className="space-y-6">
       <div className="space-y-1">
-        <h1 className="text-xl font-semibold">รอบลงทะเบียน</h1>
+        <h1 className="text-2xl font-bold">รอบลงทะเบียน</h1>
         <p className="text-sm text-muted-foreground">
           1 รอบต่อชั้นต่อภาคเรียน เวลาทั้งหมดเป็นเวลาประเทศไทย สถานะคำนวณจากเวลาของเซิร์ฟเวอร์
         </p>

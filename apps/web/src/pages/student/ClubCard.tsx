@@ -46,8 +46,8 @@ export const ClubCard = ({
     <article
       aria-labelledby={headingId}
       className={cn(
-        'space-y-3 rounded-lg border bg-card p-4',
-        held ? 'border-2 border-success-foreground' : 'border-border',
+        'space-y-3 rounded-2xl border bg-card p-5 shadow-card transition-shadow hover:shadow-card-hover',
+        held ? 'border-success-foreground ring-2 ring-success-foreground/20' : 'border-border',
       )}
     >
       <div className="flex items-start justify-between gap-3">
@@ -63,7 +63,7 @@ export const ClubCard = ({
             <Badge variant="warning">เต็ม</Badge>
           ) : (
             <p className="text-sm">
-              เหลือ <span className="text-lg font-semibold">{club.remaining}</span> ที่
+              เหลือ <span className="text-xl font-bold text-primary">{club.remaining}</span> ที่
             </p>
           )}
           <p className="text-xs text-muted-foreground">รับ {club.capacity} คน</p>

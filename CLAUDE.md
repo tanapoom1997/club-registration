@@ -34,7 +34,7 @@
 | Migration | `node-pg-migrate` | migration เป็น SQL ไฟล์ แยกจาก app |
 | Auth | `@fastify/jwt` (HS256) + `@fastify/cookie`, argon2id จาก `node:crypto` | session cookie + `session_version` ดู README หัวข้อ Security |
 | Router (FE) | `react-router` (SPA mode) | route ทั้งหมดอยู่ที่ `apps/web/src/routes.tsx` หน้าเมนูโหลดแยก chunk ด้วย `React.lazy` (ไม่ใช้ route `lazy` เพราะจะโหลดก่อน `RequireSession` ตรวจ role) |
-| Frontend | Vite + React + Tailwind + shadcn/ui | SPA ไม่ใช้ SSR |
+| Frontend | Vite + React + Tailwind + shadcn/ui | SPA ไม่ใช้ SSR ธีมพื้นขาว (light อย่างเดียว) สีเป็น token ใน `apps/web/src/index.css` ใช้ token ไม่ hardcode สี ฟอนต์ Anuphan self-host (`@fontsource-variable/anuphan`) ห้ามโหลดฟอนต์จาก CDN (CSP `font-src 'self'`) |
 | Data fetching | TanStack Query | polling คิว/สถานะ |
 | Excel | `exceljs` | import/export .xlsx |
 | PDF | `pdfkit` + ฟอนต์ Sarabun (SIL OFL 1.1) | export รายชื่อ ฟอนต์อยู่ที่ `apps/api/assets/fonts/` (มี `OFL.txt` คู่กัน) และต้องไปกับ `dist/` ตอน deploy ห้ามเปลี่ยนฟอนต์โดยไม่ลองชื่อที่มีสระบน/ล่างและวรรณยุกต์ก่อน (README หัวข้อ Export รายชื่อ) |

@@ -3,6 +3,7 @@ import { useMutation } from '@tanstack/react-query';
 import { useState } from 'react';
 import type { FormEvent } from 'react';
 import { Navigate, useNavigate } from 'react-router';
+import { BrandMark } from '@/components/BrandMark';
 import { FormError } from '@/components/FormError';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -54,11 +55,18 @@ export const LoginPage = () => {
     validationError ?? (mutation.isError ? loginErrorMessage(mutation.error) : undefined);
 
   return (
-    <main className="mx-auto flex min-h-dvh max-w-sm flex-col justify-center p-4">
-      <Card>
-        <CardHeader>
-          <CardTitle>เข้าสู่ระบบ</CardTitle>
-          <p className="text-sm text-muted-foreground">ระบบลงทะเบียนชุมนุม</p>
+    <main className="relative isolate flex min-h-dvh flex-col justify-center overflow-hidden p-4">
+      <div
+        aria-hidden="true"
+        className="absolute inset-x-0 top-0 -z-10 h-96 bg-[radial-gradient(60%_100%_at_50%_0%,color-mix(in_oklch,var(--primary)_14%,transparent),transparent)]"
+      />
+      <Card className="mx-auto w-full max-w-sm shadow-card-hover">
+        <CardHeader className="items-center space-y-3 text-center">
+          <BrandMark className="mx-auto size-12 rounded-2xl" />
+          <div className="space-y-1">
+            <CardTitle className="text-2xl">เข้าสู่ระบบ</CardTitle>
+            <p className="text-sm text-muted-foreground">ระบบลงทะเบียนชุมนุม</p>
+          </div>
         </CardHeader>
         <CardContent>
           <form className="space-y-4" onSubmit={handleSubmit} noValidate>
@@ -87,7 +95,7 @@ export const LoginPage = () => {
               />
             </div>
             <FormError message={errorMessage} />
-            <Button type="submit" className="w-full" disabled={mutation.isPending}>
+            <Button type="submit" className="h-11 w-full" disabled={mutation.isPending}>
               {mutation.isPending ? 'กำลังเข้าสู่ระบบ…' : 'เข้าสู่ระบบ'}
             </Button>
           </form>

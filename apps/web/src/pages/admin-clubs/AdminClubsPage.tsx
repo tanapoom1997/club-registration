@@ -91,7 +91,7 @@ export const AdminClubsPage = () => {
   return (
     <section className="space-y-6">
       <div className="space-y-1">
-        <h1 className="text-xl font-semibold">ชุมนุม</h1>
+        <h1 className="text-2xl font-bold">ชุมนุม</h1>
         <p className="text-sm text-muted-foreground">
           ดูจำนวนรับ จำนวนที่ลงแล้ว และครูที่ปรึกษาของแต่ละชุมนุมในรอบ แก้ชื่อ รายละเอียด
           และจำนวนรับได้ เพิ่มหรือลบชุมนุมและครูทำผ่านการนำเข้า Excel

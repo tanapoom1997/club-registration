@@ -136,7 +136,7 @@ export const AdminImportPage = () => {
   return (
     <section className="space-y-6">
       <div className="space-y-1">
-        <h1 className="text-xl font-semibold">นำเข้า Excel</h1>
+        <h1 className="text-2xl font-bold">นำเข้า Excel</h1>
         <p className="text-sm text-muted-foreground">
           อัปโหลดไฟล์ .xlsx ที่มีชีต students, clubs, advisors (มีชีตใดก็ได้)
           ระบบจะตรวจและสรุปให้ดูก่อนโดยยังไม่บันทึก เมื่อไม่มีข้อผิดพลาดจึงกดยืนยันเพื่อบันทึกลงระบบ

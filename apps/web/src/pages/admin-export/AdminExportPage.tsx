@@ -146,7 +146,7 @@ export const AdminExportPage = () => {
   return (
     <section className="space-y-6">
       <div className="space-y-2">
-        <h1 className="text-xl font-semibold">ส่งออกรายชื่อ</h1>
+        <h1 className="text-2xl font-bold">ส่งออกรายชื่อ</h1>
         <p className="text-sm text-muted-foreground">
           เลือกรอบ มุมมอง ขอบเขต และรูปแบบ แล้วดาวน์โหลดเป็นไฟล์ Excel หรือ PDF ไปส่งต่อให้ครู
           ไฟล์มีชื่อนักเรียนแต่ไม่มีเบอร์โทร อีเมล หรือ LINE ของครู

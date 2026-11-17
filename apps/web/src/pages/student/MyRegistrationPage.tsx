@@ -71,7 +71,7 @@ export const MyRegistrationPage = () => {
 
   return (
     <section className="space-y-4">
-      <h1 ref={headingRef} tabIndex={-1} className="text-xl font-semibold focus:outline-none">
+      <h1 ref={headingRef} tabIndex={-1} className="text-2xl font-bold focus:outline-none">
         ผลของฉัน
       </h1>
 
