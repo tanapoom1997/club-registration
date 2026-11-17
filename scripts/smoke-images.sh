@@ -162,7 +162,7 @@ check 'api image has the import template where the api looks for it' \
    await (await import('node:fs/promises')).access(IMPORT_TEMPLATE_PATH);"
 check 'api image has no sources, tests or dev dependencies' \
   in_api_image 'test ! -e src && test ! -e test && ! ls node_modules/.pnpm | grep -qE "^(typescript|vitest|tsx|testcontainers)@"'
-check 'api image has no development entry points (seed-dev, generate-template)' \
+check 'api image has no development entry points (seed-dev, generate-template, dist/dev/)' \
   in_api_image 'test ! -e dist/seed-dev.js && test ! -e dist/generate-template.js && test ! -e dist/dev'
 check 'web answers on its loopback health listener (compose healthcheck)' \
   docker exec "$web_container" wget -q -O /dev/null http://127.0.0.1:2020/health

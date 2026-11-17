@@ -12,7 +12,7 @@ export const IMPORT_TEMPLATE_PATH = fileURLToPath(
 
 // Text format keeps the leading zero of a phone number and stops Excel from turning a code
 // such as "1/2" into a date while the admin types.
-const TEXT_COLUMNS: ReadonlySet<string> = new Set([
+export const TEXT_COLUMNS: ReadonlySet<string> = new Set([
   'loginId',
   'classroom',
   'clubCode',
