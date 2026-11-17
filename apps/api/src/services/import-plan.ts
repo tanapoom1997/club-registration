@@ -107,22 +107,32 @@ const findUsers = async (db: Queryable, loginIds: readonly string[]) => {
   return new Map(rows.map((row) => [row.login_id, toExistingUser(row)]));
 };
 
-// Grades each student holds a registration for in this term's rounds. The commit holds every
-// round lock of the term while it plans and writes, so no registration in the term can land
-// between this read and the grade update. Other terms are not looked at on purpose: a seat in an
-// earlier term's round is history (students move up a grade each year), not a reason to refuse.
-const findRegisteredGrades = async (db: Queryable, term: string, studentIds: readonly number[]) => {
-  const { rows } = await db.query<{ student_id: number; grade: number }>(
-    `SELECT DISTINCT r.student_id, ro.grade
+type HeldSeat = { grade: number; term: string };
+
+// Seats that stop a student from changing grade: every registration in a round of this term, and
+// every registration in a round of another term that has not closed yet by the DB clock (open or
+// upcoming). A seat in a closed round of another term is history (students move up a grade each
+// year), not a reason to refuse. Per student, this term's seats come first, then the rest by
+// closing time, so the error names the most relevant one.
+//
+// The commit holds the round lock of every round this can return (lockRoundsForImport took them
+// by an earlier statement_timestamp(), and FOR SHARE keeps every window still), so no seat that
+// matters can land between this read and the grade update. The preview reads the same from its
+// snapshot without any lock.
+const findHeldSeats = async (db: Queryable, term: string, studentIds: readonly number[]) => {
+  const { rows } = await db.query<{ student_id: number; grade: number; term: string }>(
+    `SELECT r.student_id, ro.grade, ro.term
      FROM registrations r
      JOIN rounds ro ON ro.id = r.round_id
-     WHERE ro.term = $1 AND r.student_id = ANY($2::int[])`,
+     WHERE r.student_id = ANY($2::int[])
+       AND (ro.term = $1 OR ro.closes_at > statement_timestamp())
+     ORDER BY ro.term = $1 DESC, ro.closes_at, ro.id`,
     [term, studentIds],
   );
-  return rows.reduce((grades, { student_id: studentId, grade }) => {
-    grades.set(studentId, new Set([...(grades.get(studentId) ?? []), grade]));
-    return grades;
-  }, new Map<number, Set<number>>());
+  return rows.reduce((seats, { student_id: studentId, grade, term: seatTerm }) => {
+    seats.set(studentId, [...(seats.get(studentId) ?? []), { grade, term: seatTerm }]);
+    return seats;
+  }, new Map<number, HeldSeat[]>());
 };
 
 const findRounds = async (db: Queryable, term: string) => {
@@ -205,7 +215,7 @@ const planStudents = async (db: Queryable, term: string, rows: readonly StudentR
     db,
     rows.map(({ loginId }) => loginId),
   );
-  const registeredGrades = await findRegisteredGrades(
+  const heldSeats = await findHeldSeats(
     db,
     term,
     [...users.values()].map(({ id }) => id),
@@ -229,19 +239,22 @@ const planStudents = async (db: Queryable, term: string, rows: readonly StudentR
       });
       continue;
     }
-    // Moving a student out of the grade they already registered in would leave a registration
-    // in a round they no longer belong to.
+    // Moving a student out of the grade they hold a seat in would leave a registration in a round
+    // they no longer belong to; in a round still to close, one they could no longer see or cancel.
     const currentGrade = user.profile?.grade;
-    if (
-      currentGrade !== undefined &&
-      currentGrade !== row.grade &&
-      registeredGrades.get(user.id)?.has(currentGrade) === true
-    ) {
+    const seat =
+      currentGrade === undefined || currentGrade === row.grade
+        ? undefined
+        : heldSeats.get(user.id)?.find(({ grade }) => grade === currentGrade);
+    if (seat) {
       errors.push({
         sheet: 'students',
         row: row.row,
         column: column.grade,
-        message: `นักเรียนลงทะเบียนชุมนุมของ ม.${currentGrade} ในภาคเรียน ${term} แล้ว จึงเปลี่ยนชั้นไม่ได้`,
+        message:
+          seat.term === term
+            ? `นักเรียนลงทะเบียนชุมนุมของ ม.${seat.grade} ในภาคเรียน ${term} แล้ว จึงเปลี่ยนชั้นไม่ได้`
+            : `นักเรียนมีชุมนุมในรอบ ม.${seat.grade} ของภาคเรียน ${seat.term} ที่ยังไม่ปิด จึงเปลี่ยนชั้นไม่ได้ ให้ปิดรอบนั้นก่อนแล้วนำเข้าใหม่`,
       });
       continue;
     }

@@ -509,9 +509,33 @@ describe('admin import preview', () => {
       ]);
     });
 
-    it('allows the grade change when the registration belongs to another term', async () => {
+    it("refuses a grade change for a student holding a seat in another term's unclosed round", async () => {
       const lastTerm = uniqueTerm();
-      const roundId = await createRound(lastTerm, 1);
+      // Upcoming: it has not opened yet, but the seat is taken and could still be cancelled.
+      const upcomingId = await createRound(lastTerm, 1);
+      const clubId = await createClub(upcomingId, uniqueCode());
+      const student = await createStudent({ grade: 1 });
+      await register(upcomingId, student.id, clubId);
+      const workbook = await buildImportWorkbook({
+        students: [studentRow({ loginId: student.loginId, grade: 2 })],
+      });
+
+      const result = await previewOk(uniqueTerm(), workbook);
+
+      expect(result.errors).toEqual([
+        {
+          sheet: 'students',
+          row: 2,
+          column: COL.students.grade,
+          message: `นักเรียนมีชุมนุมในรอบ ม.1 ของภาคเรียน ${lastTerm} ที่ยังไม่ปิด จึงเปลี่ยนชั้นไม่ได้ ให้ปิดรอบนั้นก่อนแล้วนำเข้าใหม่`,
+        },
+      ]);
+      expect(result.students.update).toBe(0);
+    });
+
+    it("allows the grade change when the seat is in another term's closed round", async () => {
+      const lastTerm = uniqueTerm();
+      const roundId = await createRoundIn(pool, lastTerm, 1, { closedDaysAgo: 1 });
       const clubId = await createClub(roundId, uniqueCode());
       const student = await createStudent({ grade: 1 });
       await register(roundId, student.id, clubId);

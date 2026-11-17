@@ -116,13 +116,15 @@ const readPdfPages = (bytes: Buffer): PdfPage[] => {
 
 const FOOTER_TIME = /^ส่งออกเมื่อ \d{1,2} \S+ \d{4} \d{2}:\d{2} น\.$/;
 
-// Every page ends with the export time and "หน้า n/N".
-const expectFooters = (pages: readonly PdfPage[]) => {
-  pages.forEach(({ lines }, index) => {
-    expect(lines.slice(-2)).toEqual([
-      expect.stringMatching(FOOTER_TIME),
-      `หน้า ${index + 1}/${pages.length}`,
-    ]);
+// The page labels of one club or classroom that runs over `count` pages: numbered within it.
+const sectionPages = (count: number): string[] =>
+  Array.from({ length: count }, (_, index) => `หน้า ${index + 1}/${count}`);
+
+// Every page ends with the export time and its page label, in page order.
+const expectFooters = (pages: readonly PdfPage[], pageLabels: readonly string[]) => {
+  expect(pages.map(({ lines }) => lines.at(-1))).toEqual(pageLabels);
+  pages.forEach(({ lines }) => {
+    expect(lines.at(-2)).toMatch(FOOTER_TIME);
   });
 };
 
@@ -447,7 +449,8 @@ describe('admin name list export', () => {
       expect(
         pages.map(({ lines }) => tableRows(lines, Object.values(CLASSROOM_LIST_COLUMNS)).length),
       ).toEqual([1, 1, 1]);
-      expectFooters(pages);
+      // Numbered per classroom: each one's printout starts at page 1.
+      expectFooters(pages, [...sectionPages(1), ...sectionPages(1), ...sectionPages(1)]);
       expect(pdf.headers['content-disposition']).toBe(
         `attachment; filename="classroom-list-round-${roundId}-grade-4.pdf"`,
       );
@@ -632,7 +635,7 @@ describe('admin name list export', () => {
         ['1', first.loginId, 'เด็กหญิงฝ้าย ญุ่นฟื้นฟูสมมติ', `ม.1/${classroom}`, '2'],
         ['2', second.loginId, 'เด็กชายปุ๊ก ฐิติปัญญ์สมมติ', `ม.1/${classroom}`, '9'],
       ]);
-      expectFooters([page!]);
+      expectFooters([page!], sectionPages(1));
       // The glyphs drawn say the same as the text a viewer copies, wherever the glyph map can tell
       // (it cannot for sara am).
       expect(page!.glyphLines).toHaveLength(page!.lines.length);
@@ -669,10 +672,44 @@ describe('admin name list export', () => {
           tableRows(lines, Object.values(CLUB_LIST_COLUMNS)).map((row) => row[1]),
         ),
       ).toEqual([[], [student.loginId]]);
-      expectFooters(pages);
+      expectFooters(pages, [...sectionPages(1), ...sectionPages(1)]);
       expect(response.headers['content-disposition']).toBe(
         `attachment; filename="club-list-round-${roundId}-grade-1.pdf"`,
       );
+    });
+
+    it('numbers the pages of each club from 1 in a whole-round export', async () => {
+      const roundId = await newRound();
+      const [codeA, codeB, codeC] = ['A', 'B', 'C'].map((prefix) => `${prefix}${uniqueCode()}`);
+      const clubA = await createClub(pool, roundId, codeA!, { capacity: 100 });
+      const clubB = await createClub(pool, roundId, codeB!, { capacity: 10 });
+      await createClub(pool, roundId, codeC!, { capacity: 10 });
+      const classroom = uniqueClassroom();
+      const students = await Promise.all(
+        Array.from(
+          { length: 91 },
+          async (_, index) => await createStudent(pool, { classroom, seatNo: index + 1 }),
+        ),
+      );
+      await Promise.all(
+        students.map(
+          async ({ id }, index) => await register(pool, roundId, id, index < 90 ? clubA : clubB),
+        ),
+      );
+
+      const response = await exportOk(roundId, { view: 'club', format: 'pdf' });
+
+      // 90 students run over three pages, the other clubs fit on one each.
+      const pages = readPdfPages(response.rawPayload);
+      const titleA = `ชุมนุม ${codeA} ชุมนุมสมมติ`;
+      expect(pages.map(({ lines }) => lines[0])).toEqual([
+        titleA,
+        `${titleA} (ต่อ)`,
+        `${titleA} (ต่อ)`,
+        `ชุมนุม ${codeB} ชุมนุมสมมติ`,
+        `ชุมนุม ${codeC} ชุมนุมสมมติ`,
+      ]);
+      expectFooters(pages, ['หน้า 1/3', 'หน้า 2/3', 'หน้า 3/3', 'หน้า 1/1', 'หน้า 1/1']);
     });
 
     it('lists every student of a classroom, marking who has not registered', async () => {
@@ -731,7 +768,7 @@ describe('admin name list export', () => {
       pages.slice(1).forEach(({ lines }) => {
         expect(lines[0]).toBe(`ชั้น/ห้อง ม.1/${classroom} (ต่อ)`);
       });
-      expectFooters(pages);
+      expectFooters(pages, sectionPages(pages.length));
     });
 
     it('cuts text too wide for its cell with an ellipsis and keeps every value as plain text', async () => {

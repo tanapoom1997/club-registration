@@ -15,11 +15,21 @@ const firstId = (rows: { id: number }[]): number => {
   return id;
 };
 
-export const createRound = async (pool: Pool, term: string, grade: number): Promise<number> => {
+// Upcoming by default (opens tomorrow); closedDaysAgo makes it a round that has already closed.
+export const createRound = async (
+  pool: Pool,
+  term: string,
+  grade: number,
+  { closedDaysAgo }: { closedDaysAgo?: number } = {},
+): Promise<number> => {
   const { rows } = await pool.query<{ id: number }>(
-    `INSERT INTO rounds (term, grade, opens_at, closes_at)
-     VALUES ($1, $2, now() + interval '1 day', now() + interval '2 days') RETURNING id`,
-    [term, grade],
+    closedDaysAgo === undefined
+      ? `INSERT INTO rounds (term, grade, opens_at, closes_at)
+         VALUES ($1, $2, now() + interval '1 day', now() + interval '2 days') RETURNING id`
+      : `INSERT INTO rounds (term, grade, opens_at, closes_at)
+         VALUES ($1, $2, now() - ($3::int + 1) * interval '1 day', now() - $3::int * interval '1 day')
+         RETURNING id`,
+    closedDaysAgo === undefined ? [term, grade] : [term, grade, closedDaysAgo],
   );
   return firstId(rows);
 };
