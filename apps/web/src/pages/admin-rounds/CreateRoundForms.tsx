@@ -13,7 +13,8 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { createRound, createRoundBatch } from '@/lib/api';
 import { RoundWindowFields } from './RoundWindowFields';
-import { gradeLabel, roundErrorMessage, useRoundMutation, windowFromValues } from './round-ui';
+import { gradeLabel } from '@/lib/round-display';
+import { roundErrorMessage, useRoundMutation, windowFromValues } from './round-ui';
 import type { WindowValues } from './round-ui';
 
 const EMPTY_WINDOW: WindowValues = Object.freeze({

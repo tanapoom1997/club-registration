@@ -1,6 +1,6 @@
 import type { ClassroomPasswordStatus } from '@club-registration/shared';
 import { formatThaiDateTime } from '@/lib/thai-time';
-import { gradeLabel } from '@/pages/admin-rounds/round-ui';
+import { gradeLabel } from '@/lib/round-display';
 
 export const formatCount = (count: number) => count.toLocaleString('th-TH');
 

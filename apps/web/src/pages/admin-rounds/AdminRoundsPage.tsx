@@ -8,17 +8,12 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { deleteRound, fetchRounds } from '@/lib/api';
+import { STATUS_DISPLAY, gradeLabel } from '@/lib/round-display';
 import { formatThaiDateTime } from '@/lib/thai-time';
 import { ConfirmPanel } from './ConfirmPanel';
 import { CreateRoundBatchForm, CreateRoundForm } from './CreateRoundForms';
 import { EditRoundForm } from './EditRoundForm';
-import {
-  ROUNDS_QUERY_KEY,
-  STATUS_DISPLAY,
-  gradeLabel,
-  roundErrorMessage,
-  useRoundMutation,
-} from './round-ui';
+import { ROUNDS_QUERY_KEY, roundErrorMessage, useRoundMutation } from './round-ui';
 
 const roundName = ({ term, grade }: Round) => `${term} ${gradeLabel(grade)}`;
 

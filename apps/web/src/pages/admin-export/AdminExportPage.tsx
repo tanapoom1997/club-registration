@@ -17,7 +17,8 @@ import {
 import { saveFile } from '@/lib/download';
 import { useSetSession } from '@/lib/session';
 import { CLUBS_QUERY_KEY } from '@/pages/admin-clubs/club-ui';
-import { ROUNDS_QUERY_KEY, gradeLabel, roundOptionLabel } from '@/pages/admin-rounds/round-ui';
+import { gradeLabel, roundOptionLabel } from '@/lib/round-display';
+import { ROUNDS_QUERY_KEY } from '@/pages/admin-rounds/round-ui';
 import {
   CLASSROOMS_QUERY_KEY,
   FORMAT_OPTIONS,

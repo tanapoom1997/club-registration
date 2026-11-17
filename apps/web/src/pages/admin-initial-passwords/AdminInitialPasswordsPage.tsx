@@ -10,7 +10,7 @@ import { Label } from '@/components/ui/label';
 import { ApiError, fetchPasswordStatus, issueInitialPasswords } from '@/lib/api';
 import { saveFile } from '@/lib/download';
 import { useSetSession } from '@/lib/session';
-import { gradeLabel } from '@/pages/admin-rounds/round-ui';
+import { gradeLabel } from '@/lib/round-display';
 import { PasswordStatusTable, formatCount } from './PasswordStatusTable';
 
 const STATUS_QUERY_KEY = Object.freeze(['admin', 'password-status'] as const);
