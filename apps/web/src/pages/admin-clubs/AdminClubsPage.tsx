@@ -5,6 +5,7 @@ import { Link } from 'react-router';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
+import { Select } from '@/components/ui/select';
 import { fetchRoundClubs, fetchRounds } from '@/lib/api';
 import { STATUS_DISPLAY, roundOptionLabel } from '@/lib/round-display';
 import { refetchWhileOpen } from '@/lib/round-refetch';
@@ -15,9 +16,6 @@ import { CLUBS_POLL_INTERVAL_MS, CLUBS_QUERY_KEY, preferredRound } from './club-
 
 // The rounds page lists every term under the same key, so both pages share one cached list.
 const ALL_TERMS = '';
-
-const selectClassName =
-  'w-full rounded-md border border-input bg-card px-3 py-2 text-base focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring';
 
 const RoundSummary = ({ round }: { round: Round }) => {
   const status = STATUS_DISPLAY[round.status];
@@ -91,7 +89,7 @@ export const AdminClubsPage = () => {
   return (
     <section className="space-y-6">
       <div className="space-y-1">
-        <h1 className="text-xl font-semibold">ชุมนุม</h1>
+        <h1 className="text-2xl font-bold">ชุมนุม</h1>
         <p className="text-sm text-muted-foreground">
           ดูจำนวนรับ จำนวนที่ลงแล้ว และครูที่ปรึกษาของแต่ละชุมนุมในรอบ แก้ชื่อ รายละเอียด
           และจำนวนรับได้ เพิ่มหรือลบชุมนุมและครูทำผ่านการนำเข้า Excel
@@ -110,7 +108,10 @@ export const AdminClubsPage = () => {
       ) : rounds.length === 0 ? (
         <p className="text-muted-foreground">
           ยังไม่มีรอบลงทะเบียน ให้{' '}
-          <Link className="text-primary underline" to="/admin/rounds">
+          <Link
+            className="font-medium text-primary underline underline-offset-4"
+            to="/admin/rounds"
+          >
             สร้างรอบ
           </Link>{' '}
           ก่อน
@@ -118,9 +119,8 @@ export const AdminClubsPage = () => {
       ) : (
         <div className="max-w-md space-y-1.5">
           <Label htmlFor="clubs-round">รอบลงทะเบียน</Label>
-          <select
+          <Select
             id="clubs-round"
-            className={selectClassName}
             value={roundId ?? ''}
             onChange={(event) => chooseRound(event.target.value)}
           >
@@ -129,7 +129,7 @@ export const AdminClubsPage = () => {
                 {roundOptionLabel(round)}
               </option>
             ))}
-          </select>
+          </Select>
         </div>
       )}
 
@@ -153,7 +153,10 @@ export const AdminClubsPage = () => {
           {clubs.length === 0 ? (
             <p className="text-muted-foreground">
               รอบนี้ยังไม่มีชุมนุม เพิ่มได้จาก{' '}
-              <Link className="text-primary underline" to="/admin/import">
+              <Link
+                className="font-medium text-primary underline underline-offset-4"
+                to="/admin/import"
+              >
                 นำเข้า Excel
               </Link>
             </p>

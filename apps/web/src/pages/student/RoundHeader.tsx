@@ -2,6 +2,7 @@ import type { StudentRound } from '@club-registration/shared';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
+import { alertVariants } from '@/components/ui/alert';
 import { formatThaiDateTime } from '@/lib/thai-time';
 import { STATUS_DISPLAY, gradeLabel } from '@/lib/round-display';
 import { isProfileMissing } from './student-ui';
@@ -33,7 +34,7 @@ export const StudentLoadState = ({ error, isPending, onRetry }: LoadStateProps) 
   if (isPending) return <p className="text-muted-foreground">กำลังโหลด…</p>;
   if (isProfileMissing(error)) {
     return (
-      <p className="rounded-md bg-warning p-3 text-sm text-warning-foreground" role="alert">
+      <p className={alertVariants({ variant: 'warning' })} role="alert">
         บัญชีนี้ยังไม่มีข้อมูลชั้นเรียน จึงยังดูหรือลงชุมนุมไม่ได้
         กรุณาติดต่อผู้ดูแลระบบหรือครูที่ดูแลการลงทะเบียน
       </p>

@@ -1,4 +1,6 @@
 import { Button } from '@/components/ui/button';
+import { alertVariants } from '@/components/ui/alert';
+import { cn } from '@/lib/utils';
 
 type ConfirmPanelProps = {
   message: string;
@@ -21,7 +23,7 @@ export const ConfirmPanel = ({
   <div
     role="alertdialog"
     aria-label={message}
-    className="space-y-3 rounded-md border border-border bg-warning p-4 text-warning-foreground"
+    className={cn(alertVariants({ variant: 'warning' }), 'space-y-3 p-4')}
   >
     <p className="text-sm font-medium">{message}</p>
     <div className="flex flex-wrap gap-2">

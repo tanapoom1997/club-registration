@@ -11,6 +11,7 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { Select } from '@/components/ui/select';
 import { createRound, createRoundBatch } from '@/lib/api';
 import { RoundWindowFields } from './RoundWindowFields';
 import { gradeLabel } from '@/lib/round-display';
@@ -100,9 +101,8 @@ export const CreateRoundForm = () => {
           <TermField id="create-term" value={term} onChange={setTerm} />
           <div className="space-y-1.5">
             <Label htmlFor="create-grade">ชั้น</Label>
-            <select
+            <Select
               id="create-grade"
-              className="w-full rounded-md border border-input bg-card px-3 py-2 text-base focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
               value={grade}
               onChange={(event) => setGrade(event.target.value)}
             >
@@ -111,7 +111,7 @@ export const CreateRoundForm = () => {
                   {gradeLabel(value)}
                 </option>
               ))}
-            </select>
+            </Select>
           </div>
           <RoundWindowFields idPrefix="create" values={timeWindow} onChange={setTimeWindow} />
           <FormError message={errorMessage} />

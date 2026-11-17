@@ -60,6 +60,7 @@
 | Migration | `node-pg-migrate` | เบา ไม่ผูกกับ ORM |
 | Auth | `@fastify/jwt` + `@fastify/cookie`, argon2id จาก `node:crypto` | argon2id มีใน Node 24.7+ แล้ว ไม่ต้องพึ่ง native addon |
 | Frontend | Vite + React + Tailwind/shadcn/ui + `react-router` | SPA หลัง login ไม่ต้อง SSR |
+| ธีมหน้าเว็บ | พื้นขาว โทน indigo/violet (light อย่างเดียว) + ฟอนต์ Anuphan (`@fontsource-variable/anuphan`, SIL OFL 1.1) | สีทั้งหมดเป็น token ใน `apps/web/src/index.css` ที่เดียว ฟอนต์ self-host ผ่าน bundle ของ Vite จึงผ่าน CSP `font-src 'self'` และไม่ส่ง IP นักเรียนไป CDN ถ้าเปลี่ยนฟอนต์ให้ลองชื่อที่มีสระบน/ล่างและวรรณยุกต์ก่อน (เช่น ปิ่นฟ้า ญาณฐิติกุล น้ำ ปู่ญ้อ) |
 | Data fetching | TanStack Query | polling คิว/สถานะทำง่าย |
 | Excel | `exceljs` | อ่าน/เขียน .xlsx |
 | PDF | `pdfkit` + ฟอนต์ Sarabun (SIL OFL 1.1) | สร้างฝั่ง server ไม่ต้องมี browser, spike แล้ววางสระบน/ล่างและวรรณยุกต์ไทยถูก (รายการที่ยังเปิดอยู่ข้อ 6) |

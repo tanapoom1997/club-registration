@@ -7,6 +7,10 @@ import { Link } from 'react-router';
 import { FormError } from '@/components/FormError';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
+import { Select } from '@/components/ui/select';
+import { alertVariants } from '@/components/ui/alert';
+import { Card } from '@/components/ui/card';
+import { cn } from '@/lib/utils';
 import { ApiError, fetchPasswordStatus, issueInitialPasswords } from '@/lib/api';
 import { saveFile } from '@/lib/download';
 import { useSetSession } from '@/lib/session';
@@ -48,9 +52,6 @@ const scopeLabel = ({ grade, classroom }: Scope) =>
   classroom === ALL_CLASSROOMS
     ? `${gradeLabel(grade)} ทุกห้อง`
     : `${gradeLabel(grade)}/${classroom}`;
-
-const selectClassName =
-  'w-full rounded-md border border-input bg-card px-3 py-2 text-base focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring';
 
 export const AdminInitialPasswordsPage = () => {
   const [grade, setGrade] = useState<number>();
@@ -114,14 +115,14 @@ export const AdminInitialPasswordsPage = () => {
   return (
     <section className="space-y-6">
       <div className="space-y-2">
-        <h1 className="text-xl font-semibold">รหัสผ่านเริ่มต้น</h1>
+        <h1 className="text-2xl font-bold">รหัสผ่านเริ่มต้น</h1>
         <p className="text-sm text-muted-foreground">
           ระบบสุ่มรหัสผ่านให้นักเรียนรายคนและเก็บไว้เฉพาะแบบเข้ารหัส (hash) รหัสผ่านจริงมีอยู่ในไฟล์
           Excel ที่ดาวน์โหลดตอนกดออกรหัสเท่านั้น ดาวน์โหลดซ้ำไม่ได้ ถ้าไฟล์หายต้องออกรหัสใหม่
           นักเรียนต้องเปลี่ยนรหัสผ่านเมื่อเข้าสู่ระบบครั้งแรก
           และนักเรียนที่เปลี่ยนรหัสเองแล้วจะไม่ถูกออกรหัสทับ
         </p>
-        <p className="rounded-md bg-warning p-3 text-sm font-medium text-warning-foreground">
+        <p className={cn(alertVariants({ variant: 'warning' }), 'font-medium')}>
           คำเตือน: การออกรหัสผ่านซ้ำให้นักเรียนที่เคยได้รหัสแล้ว
           ทำให้รหัสผ่านเดิมที่พิมพ์แจกไปใช้ไม่ได้ทันที
           และนักเรียนที่เข้าสู่ระบบด้วยรหัสเดิมอยู่จะถูกออกจากระบบ
@@ -140,83 +141,87 @@ export const AdminInitialPasswordsPage = () => {
       ) : classrooms.length === 0 || !scope ? (
         <p className="text-muted-foreground">
           ยังไม่มีนักเรียนในระบบ ให้{' '}
-          <Link className="text-primary underline" to="/admin/import">
+          <Link
+            className="font-medium text-primary underline underline-offset-4"
+            to="/admin/import"
+          >
             นำเข้า Excel
           </Link>{' '}
           ก่อน
         </p>
       ) : (
         <>
-          <form
-            aria-label="ออกรหัสผ่านเริ่มต้น"
-            className="max-w-md space-y-4"
-            onSubmit={handleSubmit}
-            noValidate
-          >
-            <div className="space-y-1.5">
-              <Label htmlFor="issue-grade">ชั้น</Label>
-              <select
-                id="issue-grade"
-                className={selectClassName}
-                value={scope.grade}
-                disabled={mutation.isPending}
-                onChange={(event) =>
-                  changeScope(() => {
-                    setGrade(Number(event.target.value));
-                    setClassroom(ALL_CLASSROOMS);
-                  })
-                }
-              >
-                {grades.map((value) => (
-                  <option key={value} value={value}>
-                    {gradeLabel(value)}
-                  </option>
-                ))}
-              </select>
-            </div>
-            <div className="space-y-1.5">
-              <Label htmlFor="issue-classroom">ห้อง</Label>
-              <select
-                id="issue-classroom"
-                className={selectClassName}
-                value={classroom}
-                disabled={mutation.isPending}
-                onChange={(event) => changeScope(() => setClassroom(event.target.value))}
-              >
-                <option value={ALL_CLASSROOMS}>ทุกห้องในชั้นนี้</option>
-                {gradeClassrooms.map((row) => (
-                  <option key={row.classroom} value={row.classroom}>
-                    {row.classroom}
-                  </option>
-                ))}
-              </select>
-            </div>
-            <label className="flex items-start gap-2 text-sm">
-              <input
-                type="checkbox"
-                className="mt-1"
-                checked={onlyUnissued}
-                disabled={mutation.isPending}
-                onChange={(event) => changeScope(() => setOnlyUnissued(event.target.checked))}
-              />
-              <span>เฉพาะนักเรียนที่ยังไม่เคยได้รหัสผ่าน (ไม่แตะรหัสที่ออกไปแล้ว)</span>
-            </label>
-            <p className="text-sm text-muted-foreground" aria-live="polite">
-              {scopeLabel(scope)}: จะออกรหัสผ่านให้ {formatCount(expected)} คน
-              {invalidates > 0 && ` (ในนี้ ${formatCount(invalidates)} คนจะได้รหัสใหม่แทนรหัสเดิม)`}
-            </p>
-            {!confirming && (
-              <Button type="submit" disabled={expected === 0 || mutation.isPending}>
-                ออกรหัสผ่านและดาวน์โหลด
-              </Button>
-            )}
-          </form>
+          <Card className="max-w-md p-6">
+            <form
+              aria-label="ออกรหัสผ่านเริ่มต้น"
+              className="space-y-4"
+              onSubmit={handleSubmit}
+              noValidate
+            >
+              <div className="space-y-1.5">
+                <Label htmlFor="issue-grade">ชั้น</Label>
+                <Select
+                  id="issue-grade"
+                  value={scope.grade}
+                  disabled={mutation.isPending}
+                  onChange={(event) =>
+                    changeScope(() => {
+                      setGrade(Number(event.target.value));
+                      setClassroom(ALL_CLASSROOMS);
+                    })
+                  }
+                >
+                  {grades.map((value) => (
+                    <option key={value} value={value}>
+                      {gradeLabel(value)}
+                    </option>
+                  ))}
+                </Select>
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="issue-classroom">ห้อง</Label>
+                <Select
+                  id="issue-classroom"
+                  value={classroom}
+                  disabled={mutation.isPending}
+                  onChange={(event) => changeScope(() => setClassroom(event.target.value))}
+                >
+                  <option value={ALL_CLASSROOMS}>ทุกห้องในชั้นนี้</option>
+                  {gradeClassrooms.map((row) => (
+                    <option key={row.classroom} value={row.classroom}>
+                      {row.classroom}
+                    </option>
+                  ))}
+                </Select>
+              </div>
+              <label className="flex items-start gap-2 text-sm">
+                <input
+                  type="checkbox"
+                  className="mt-1"
+                  checked={onlyUnissued}
+                  disabled={mutation.isPending}
+                  onChange={(event) => changeScope(() => setOnlyUnissued(event.target.checked))}
+                />
+                <span>เฉพาะนักเรียนที่ยังไม่เคยได้รหัสผ่าน (ไม่แตะรหัสที่ออกไปแล้ว)</span>
+              </label>
+              <p className="text-sm text-muted-foreground" aria-live="polite">
+                {scopeLabel(scope)}: จะออกรหัสผ่านให้ {formatCount(expected)} คน
+                {invalidates > 0 &&
+                  ` (ในนี้ ${formatCount(invalidates)} คนจะได้รหัสใหม่แทนรหัสเดิม)`}
+              </p>
+              {!confirming && (
+                <Button type="submit" disabled={expected === 0 || mutation.isPending}>
+                  ออกรหัสผ่านและดาวน์โหลด
+                </Button>
+              )}
+            </form>
+          </Card>
 
           {confirming && (
             <div
               role="alertdialog"
               aria-label="ยืนยันการออกรหัสผ่าน"
-              className="max-w-xl space-y-3 rounded-md border border-border bg-warning p-4 text-warning-foreground"
+              className={cn(alertVariants({ variant: 'warning' }), 'max-w-xl space-y-3 p-4')}
             >
               <p className="text-sm font-medium">
                 ออกรหัสผ่านให้ {scopeLabel(scope)} ประมาณ {formatCount(expected)} คน?
@@ -252,7 +257,7 @@ export const AdminInitialPasswordsPage = () => {
 
           <FormError message={mutation.isError ? issueErrorMessage(mutation.error) : undefined} />
           {mutation.isSuccess && (
-            <p className="rounded-md bg-success p-3 text-sm text-success-foreground" role="status">
+            <p className={alertVariants({ variant: 'success' })} role="status">
               ออกรหัสผ่านให้ {formatCount(mutation.data.issuedCount)} คนแล้ว ดาวน์โหลดไฟล์{' '}
               {mutation.data.filename} แล้ว ไฟล์นี้ดาวน์โหลดซ้ำไม่ได้
               ถ้าไม่พบไฟล์ในเครื่องต้องออกรหัสใหม่ (รหัสในไฟล์เดิมจะใช้ไม่ได้)

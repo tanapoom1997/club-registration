@@ -3,6 +3,7 @@ import { useQuery } from '@tanstack/react-query';
 import { useState } from 'react';
 import { Link } from 'react-router';
 import { FormError } from '@/components/FormError';
+import { alertVariants } from '@/components/ui/alert';
 import { fetchStudentClubs, registerForClub } from '@/lib/api';
 import { formatThaiDateTime } from '@/lib/thai-time';
 import { ClubCard } from './ClubCard';
@@ -73,7 +74,7 @@ export const StudentClubsPage = () => {
 
   return (
     <section className="space-y-4">
-      <h1 className="text-xl font-semibold">ชุมนุมในชั้นของฉัน</h1>
+      <h1 className="text-2xl font-bold">ชุมนุมในชั้นของฉัน</h1>
 
       {!data ? (
         <StudentLoadState
@@ -93,7 +94,7 @@ export const StudentClubsPage = () => {
           )}
           <div role="status">
             {mutation.isSuccess && (
-              <p className="rounded-md bg-success p-3 text-sm text-success-foreground">
+              <p className={alertVariants({ variant: 'success' })}>
                 {registeredNotice(mutation.data)}
               </p>
             )}
@@ -110,7 +111,10 @@ export const StudentClubsPage = () => {
             <HeldClubCard registration={data.registration}>
               <p className="text-sm">
                 ลงได้ 1 ชุมนุมต่อรอบ ถ้าจะเปลี่ยนต้องยกเลิกชุมนุมนี้ก่อน{' '}
-                <Link className="text-primary underline" to={MY_REGISTRATION_PATH}>
+                <Link
+                  className="font-medium text-primary underline underline-offset-4"
+                  to={MY_REGISTRATION_PATH}
+                >
                   ดูผลของฉันและยกเลิก
                 </Link>
               </p>
