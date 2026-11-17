@@ -7,16 +7,44 @@
 #
 # No access log: it would hold every student's IP and path, and the api already logs requests
 # without personal data.
+{
+	# No admin API (by default a localhost-only listener inside the container that can rewrite the
+	# running config). Nothing here uses it: the config is baked into the image, so a change is a
+	# rebuild and `docker compose ... up -d`, which recreates the container; restarting the
+	# container reloads it too. Off is one less thing to listen.
+	admin off
+	# SITE_ADDRESS=localhost (the compose smoke test) uses Caddy's own local CA. Do not try to add
+	# its root to the container's trust store: nothing there needs it, and as a non-root user the
+	# attempt only logs an error. No effect with a real domain, whose certificate comes from ACME.
+	skip_install_trust
+}
+
+# Health check for compose (compose.prod.yml), plain HTTP on the container's own loopback
+# interface: it answers the same whether SITE_ADDRESS is :80 or a domain, and neither the host nor
+# other containers can reach it (bound to 127.0.0.1 inside the container, port not published).
+http://127.0.0.1:2020 {
+	bind 127.0.0.1
+	respond /health 200
+}
 
 {$SITE_ADDRESS::80} {
 	# Hashed JS/CSS and JSON compress well; Caddy leaves xlsx/pdf downloads alone (already zip/
 	# deflate compressed) because their types are not on its list.
 	encode zstd gzip
 
+	@https protocol https
+
 	handle /api/* {
+		# Cut oversized bodies here instead of streaming them into Node. 6 MiB is a little above the
+		# largest body the api accepts (a 5 MiB import upload plus multipart overhead, see
+		# routes/admin-import.ts); every other route still has the api's own 64 KiB limit.
+		request_body {
+			max_size 6MiB
+		}
 		# Caddy replaces any X-Forwarded-For the client sent (no trusted_proxies here), so the api
 		# can run with TRUST_PROXY=true and rate-limit on the real client IP without it being
-		# spoofable. Security headers for /api/* come from @fastify/helmet in the api, not here.
+		# spoofable. Security headers for /api/* come from @fastify/helmet in the api, not here
+		# (helmet already sends the same Strict-Transport-Security as below).
 		reverse_proxy {$API_UPSTREAM:api:3000}
 	}
 
@@ -39,6 +67,13 @@
 			# with ETag), so a deploy is picked up on the next page load.
 			Cache-Control no-cache
 		}
+
+		# HTTPS only: over plain HTTP (SITE_ADDRESS=:80) there is nothing to pin, and browsers
+		# ignore the header there anyway. One year, the same value helmet sends on /api/*, so the
+		# browser keeps one policy for the host whichever response it sees first. No preload: the
+		# preload list is built into browsers and takes months to leave if the domain ever has to
+		# serve plain HTTP again.
+		header @https Strict-Transport-Security "max-age=31536000; includeSubDomains"
 
 		handle /assets/* {
 			# Vite puts a content hash in every file name here, so a changed file is a new URL.

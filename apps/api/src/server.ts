@@ -1,9 +1,9 @@
 import { buildApp } from './app.js';
-import { loadConfig } from './config.js';
+import { loadConfig, poolSettingsFrom } from './config.js';
 import { createPool } from './db.js';
 
 const config = loadConfig();
-const pool = createPool(config.DATABASE_URL);
+const pool = createPool(config.DATABASE_URL, poolSettingsFrom(config));
 const app = await buildApp({
   pool,
   jwtSecret: config.JWT_SECRET,

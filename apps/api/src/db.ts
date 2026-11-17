@@ -1,17 +1,31 @@
 import pg from 'pg';
 
-const POOL_SIZE = 20;
-const CONNECTION_TIMEOUT_MS = 5_000;
-const STATEMENT_TIMEOUT_MS = 10_000;
-const IDLE_IN_TRANSACTION_TIMEOUT_MS = 10_000;
+export type PoolSettings = Readonly<{
+  max: number;
+  connectionTimeoutMs: number;
+  statementTimeoutMs: number;
+  idleInTransactionTimeoutMs: number;
+}>;
 
-export const createPool = (connectionString: string): pg.Pool =>
+// Starting points, not measurements: the load test on the real host (O5) decides the production
+// values, which come from env (DB_* in config.ts) so they can change without a rebuild.
+export const DEFAULT_POOL_SETTINGS: PoolSettings = Object.freeze({
+  max: 20,
+  connectionTimeoutMs: 5_000,
+  statementTimeoutMs: 10_000,
+  idleInTransactionTimeoutMs: 10_000,
+});
+
+export const createPool = (
+  connectionString: string,
+  settings: PoolSettings = DEFAULT_POOL_SETTINGS,
+): pg.Pool =>
   new pg.Pool({
     connectionString,
-    max: POOL_SIZE,
-    connectionTimeoutMillis: CONNECTION_TIMEOUT_MS,
-    statement_timeout: STATEMENT_TIMEOUT_MS,
-    idle_in_transaction_session_timeout: IDLE_IN_TRANSACTION_TIMEOUT_MS,
+    max: settings.max,
+    connectionTimeoutMillis: settings.connectionTimeoutMs,
+    statement_timeout: settings.statementTimeoutMs,
+    idle_in_transaction_session_timeout: settings.idleInTransactionTimeoutMs,
   });
 
 export const pingDatabase = async (pool: pg.Pool): Promise<void> => {

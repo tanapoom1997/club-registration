@@ -146,6 +146,8 @@ check '/ has X-Frame-Options' header_matches index x-frame-options DENY
 check '/ has Referrer-Policy' header_matches index referrer-policy no-referrer
 check '/ has Permissions-Policy' header_matches index permissions-policy 'camera=\(\)'
 check '/ is revalidated (no-cache)' header_matches index cache-control no-cache
+check '/ has no Strict-Transport-Security over plain HTTP' \
+  header_lacks index strict-transport-security '.*'
 
 fetch deeplink /student/clubs
 check '/student/clubs falls back to index.html' body_contains deeplink '<div id="root"></div>'
@@ -181,6 +183,15 @@ check 'api image has the import template where the api looks for it' \
    await (await import('node:fs/promises')).access(IMPORT_TEMPLATE_PATH);"
 check 'api image has no sources, tests or dev dependencies' \
   in_api_image 'test ! -e src && test ! -e test && ! ls node_modules/.pnpm | grep -qE "^(typescript|vitest|tsx|testcontainers)@"'
+check 'api image has no development entry points (seed-dev, generate-template)' \
+  in_api_image 'test ! -e dist/seed-dev.js && test ! -e dist/generate-template.js && test ! -e dist/dev'
+check 'web answers on its loopback health listener (compose healthcheck)' \
+  docker exec "$web_container" wget -q -O /dev/null http://127.0.0.1:2020/health
+# A CA key baked in at build time would be shared by every container and volume from the image.
+# shellcheck disable=SC2016 # expanded by sh inside the image, not here
+check 'web image ships empty /data and /config (no certificates or CA keys)' \
+  docker run --rm --user 0 --entrypoint sh "$WEB_IMAGE" -c \
+  'test -z "$(find /data /config -type f)"'
 # shellcheck disable=SC2016 # expanded by sh inside the image, not here
 no_secret_files='test -z "$(find / -xdev \( -name ".env" -o -name ".env.*" -o -name ".dev-credentials.txt" -o -name "*.dump" \) 2>/dev/null)"'
 check 'api image has no .env, credentials or dump files' \

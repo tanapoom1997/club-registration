@@ -1,0 +1,205 @@
+# Production stack on one host (README "Infra และ Deployment"). Always run with the env file:
+#
+#   docker compose -f compose.prod.yml --env-file deploy/production.env build
+#   docker compose -f compose.prod.yml --env-file deploy/production.env up -d --wait
+#
+# docker-compose.yml next to this file is the development database only; the two never share
+# containers or volumes because this file has its own project name.
+#
+# Memory budget for a t4g.small (2 GiB, no swap), as container limits. These are estimates until
+# the load test on the real host (O5); docker stats during that test decides the final numbers.
+#   postgres  512 MiB   shared_buffers 128 MB + ~20 pooled backends + work_mem
+#   api       512 MiB   V8 old space 320 MiB (NODE_OPTIONS) + code, buffers, argon2 (19 MiB each
+#                       on at most 4 libuv threads), the 5 MB import upload and PDF/Excel exports
+#   web       192 MiB   Caddy; GOMEMLIMIT 160 MiB makes Go collect before the limit is reached
+#   migrate   192 MiB   only while `up` runs, then exits
+#   --------
+#   1216 MiB long-running (1408 MiB during `up`), leaving ~600 MiB of the 2 GiB for the kernel,
+#   dockerd/containerd, sshd and page cache. Builds (`docker compose build`) run outside these
+#   limits and need several hundred MB of their own.
+name: club-registration-prod
+
+# Bounded per container: 5 files of 10 MB, so a busy registration day cannot fill the disk.
+x-logging: &logging
+  driver: json-file
+  options:
+    max-size: 10m
+    max-file: '5'
+
+services:
+  postgres:
+    # Same major as the tests (Testcontainers, postgres:18-alpine). Tag for people, digest for
+    # Docker: a multi-arch index, so the arm64 host and amd64 CI pull the same pin. Bump together.
+    image: postgres:18.7-alpine@sha256:b6972e1115a4ff8eba5d7f7d19184926d1e16d7d1136ae1e1a7ebf286da0f015
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:?set POSTGRES_USER in the env file}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in the env file}
+      POSTGRES_DB: ${POSTGRES_DB:?set POSTGRES_DB in the env file}
+    # Sized for a 2 GiB host shared with Node and Caddy, and for a database of a few tens of MB
+    # (2,500 students, a few hundred clubs, the event log). Estimates until O5.
+    command:
+      - postgres
+      # The whole database fits in the default 128 MB many times over; more would only take
+      # memory from Node.
+      - -c
+      - shared_buffers=128MB
+      # Planner hint only (allocates nothing): roughly what the OS can cache for Postgres.
+      - -c
+      - effective_cache_size=512MB
+      # The api pool (DB_POOL_MAX, default 20) + one-off create-admin/migrate + psql/pg_dump from
+      # the operator, with room for O5 to raise the pool. Keep it well above DB_POOL_MAX.
+      - -c
+      - max_connections=50
+      # Per sort/hash node per backend. Exports sort a few hundred rows, so 4 MB never spills;
+      # 50 backends x 4 MB is still inside the container limit.
+      - -c
+      - work_mem=4MB
+      - -c
+      - maintenance_work_mem=64MB
+      # Slow statements are logged for the load test, without their parameter values (student
+      # ids, names). Terse errors leave out DETAIL, which can quote a row's values.
+      - -c
+      - log_min_duration_statement=1000
+      - -c
+      - log_parameter_max_length=0
+      - -c
+      - log_error_verbosity=terse
+    # Docker's default /dev/shm is 64 MB; Postgres puts parallel-query shared memory there.
+    shm_size: 128mb
+    volumes:
+      - postgres-data:/var/lib/postgresql
+    networks:
+      - backend
+    # No ports: only the api and migrate reach it, over the internal backend network.
+    healthcheck:
+      # Over TCP: during first start the entrypoint's temporary init server listens on the socket
+      # only, and must not count as ready.
+      test: ['CMD-SHELL', 'pg_isready -h 127.0.0.1 -U "$${POSTGRES_USER}" -d "$${POSTGRES_DB}"']
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 60s
+      start_interval: 2s
+    # The image stops with SIGINT (fast shutdown) and writes a checkpoint; Docker's default 10 s
+    # before SIGKILL could cut that short and force crash recovery on the next start.
+    stop_grace_period: 1m
+    deploy:
+      resources:
+        limits:
+          memory: 512m
+    logging: *logging
+
+  # Runs the migrations on every `up` and exits; the api starts only after it exits with 0.
+  # Already-applied migrations are skipped, so a deploy without new ones is a no-op.
+  migrate:
+    # The image the api service builds, not a build of its own: building only the api can never
+    # leave migrate on older migrations than the server it prepares the database for.
+    image: ${COMPOSE_PROJECT_NAME:-club-registration-prod}-api
+    pull_policy: never
+    command: ['node', 'dist/migrate.js']
+    restart: 'no'
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: ${DATABASE_URL:?set DATABASE_URL in the env file}
+    networks:
+      - backend
+    deploy:
+      resources:
+        limits:
+          memory: 192m
+    logging: *logging
+
+  api:
+    image: ${COMPOSE_PROJECT_NAME:-club-registration-prod}-api
+    build:
+      context: .
+      target: api
+    restart: unless-stopped
+    # tini as PID 1 reaps zombies and passes docker stop's SIGTERM on to node, which then closes
+    # Fastify and the pool (server.ts).
+    init: true
+    depends_on:
+      postgres:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+    environment:
+      NODE_ENV: production
+      # Caddy is the only client and overwrites X-Forwarded-For, so the rate limits see the real
+      # client IP and a client cannot spoof it (Caddyfile).
+      TRUST_PROXY: 'true'
+      DATABASE_URL: ${DATABASE_URL:?set DATABASE_URL in the env file}
+      JWT_SECRET: ${JWT_SECRET:?set JWT_SECRET in the env file (openssl rand -base64 48)}
+      # Optional; empty means the api's default (config.ts).
+      DB_POOL_MAX: ${DB_POOL_MAX:-}
+      DB_CONNECTION_TIMEOUT_MS: ${DB_CONNECTION_TIMEOUT_MS:-}
+      DB_STATEMENT_TIMEOUT_MS: ${DB_STATEMENT_TIMEOUT_MS:-}
+      DB_IDLE_IN_TRANSACTION_TIMEOUT_MS: ${DB_IDLE_IN_TRANSACTION_TIMEOUT_MS:-}
+      # V8 old space well under the container limit (see the budget above), so a heavy request
+      # ends in a JavaScript heap error the log can show, not a silent kill by the kernel.
+      NODE_OPTIONS: --max-old-space-size=320
+    # No ports: Caddy is the only way in. The healthcheck comes from the image (GET /api/health).
+    networks:
+      - backend
+      - frontend
+    stop_grace_period: 15s
+    deploy:
+      resources:
+        limits:
+          memory: 512m
+    logging: *logging
+
+  web:
+    build:
+      context: .
+      target: web
+    restart: unless-stopped
+    depends_on:
+      api:
+        condition: service_healthy
+    environment:
+      # A domain: Caddy gets and renews the certificate itself (ports 80 and 443 must be open to
+      # the internet). :80: plain HTTP, no certificate (local tests only).
+      SITE_ADDRESS: ${SITE_ADDRESS:?set SITE_ADDRESS in the env file (a domain, or :80)}
+      GOMEMLIMIT: 160MiB
+    ports:
+      # Host ports are configurable only so the compose smoke test can run next to something that
+      # already holds 80/443; production leaves them unset.
+      - '${HTTP_PORT:-80}:80'
+      - '${HTTPS_PORT:-443}:443'
+      # HTTP/3
+      - '${HTTPS_PORT:-443}:443/udp'
+    volumes:
+      # Certificates and the ACME account. Losing them means issuing again, and a few lost volumes
+      # in a row run into the CA's rate limits (a week-long wait), so `down -v` is never routine.
+      - caddy-data:/data
+      - caddy-config:/config
+    networks:
+      - frontend
+    healthcheck:
+      # The Caddyfile's loopback-only health listener, the same whatever SITE_ADDRESS is.
+      test: ['CMD', 'wget', '-q', '-O', '/dev/null', 'http://127.0.0.1:2020/health']
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+      start_interval: 2s
+    deploy:
+      resources:
+        limits:
+          memory: 192m
+    logging: *logging
+
+networks:
+  # Postgres has no route to or from the internet, and Caddy has no route to Postgres.
+  backend:
+    internal: true
+  frontend:
+
+volumes:
+  postgres-data:
+  caddy-data:
+  caddy-config:

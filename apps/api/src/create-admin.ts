@@ -1,7 +1,7 @@
 import { parseArgs } from 'node:util';
 import { loginIdSchema } from '@club-registration/shared';
 import { createAdmin } from './auth/service.js';
-import { loadDatabaseConfig } from './config.js';
+import { loadDatabaseConfig, poolSettingsFrom } from './config.js';
 import { createPool } from './db.js';
 
 const USAGE = 'Usage: pnpm --filter api create-admin <login_id>';
@@ -15,7 +15,8 @@ if (positionals.length !== 1 || !parsedLoginId.success) {
   process.exitCode = 2;
 } else {
   const loginId = parsedLoginId.data;
-  const pool = createPool(loadDatabaseConfig().DATABASE_URL);
+  const databaseConfig = loadDatabaseConfig();
+  const pool = createPool(databaseConfig.DATABASE_URL, poolSettingsFrom(databaseConfig));
   try {
     const result = await createAdmin(pool, loginId);
     if (result.status === 'created') {
