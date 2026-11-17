@@ -2,7 +2,7 @@
 
 ระบบลงทะเบียนชุมนุมโรงเรียน (นักเรียน ~2,500 คน, รอบละ ~450 concurrent) แผนเต็ม สถาปัตยกรรม data model และ roadmap อยู่ใน [README.md](README.md) อ่านก่อนเริ่มงานทุกครั้ง ไฟล์นี้เก็บเฉพาะกติกาการทำงานที่ต้องไม่หลุด
 
-**สถานะ:** Phase 1 ข้อ 1 (Auth + role guard) และข้อ 3 (admin จัดการรอบ: `apps/api/src/routes/admin-rounds.ts` + `services/rounds.ts`, หน้า `/admin/rounds` และดู/แก้ชุมนุมรายรอบ: `routes/admin-clubs.ts` + `services/clubs.ts`, หน้า `/admin/clubs`) เสร็จแล้ว ข้อ 2 (import Excel: dry run + ยืนยัน, `routes/admin-import.ts`, `import/`, `services/import-plan.ts`, `services/import-commit.ts`, หน้า `/admin/import`) เสร็จแล้ว รวมขั้นออกรหัสผ่านเริ่มต้น (`routes/admin-students.ts`, `services/initial-passwords.ts`, หน้า `/admin/initial-passwords`) และขั้นยืนยัน import ถือ round lock ทุกรอบของภาคเรียน (I1, เทสต์ `apps/api/test/import-commit-round-locks.test.ts`) ข้อ 7 export รายชื่อเสร็จแล้วทั้ง Excel และ PDF (`routes/admin-export.ts`, `services/name-lists.ts`, `export/name-list-content.ts`, `export/name-list-workbook.ts`, `export/name-list-pdf.ts`, ฟอนต์ `apps/api/assets/fonts/`, หน้า `/admin/export`) ข้อ 4 ฝั่ง API ของนักเรียนเสร็จแล้วทั้งส่วนอ่าน (S1: `routes/student.ts` + `services/student-round.ts`, `GET /api/student/round` และ `GET /api/student/clubs` นักเรียนเห็นแค่ชื่อครู) และลง/ยกเลิก (S2: `POST /api/student/registration`, `POST /api/student/registration/cancel`, `services/registrations.ts` + `services/round-lock.ts`) schema ใน `packages/shared/src/student.ts` พร้อม concurrency test (`apps/api/test/registration-concurrency.test.ts`) และตัวตรวจ invariant (`apps/api/test/support/registration.ts`) ซึ่งครอบคลุมข้อ 5, 6, 9 และหน้าเว็บนักเรียนเสร็จแล้ว (S3: `apps/web/src/pages/student/`, หน้า `/student/clubs` ลงชุมนุม และ `/student/my-registration` ยกเลิก, key ใหม่ต่อการยืนยันและ retry ใช้ key เดิมเมื่อไม่รู้ผล) Phase 1 เหลือข้อ 8 Ops และ load test ต่อจาก scaffold (monorepo, migration แรกครบทุกตาราง, `GET /api/health`) มี login/เปลี่ยนรหัส/logout, `create-admin` และหน้า FE ตาม role
+**สถานะ:** Phase 1 ข้อ 1 (Auth + role guard) และข้อ 3 (admin จัดการรอบ: `apps/api/src/routes/admin-rounds.ts` + `services/rounds.ts`, หน้า `/admin/rounds` และดู/แก้ชุมนุมรายรอบ: `routes/admin-clubs.ts` + `services/clubs.ts`, หน้า `/admin/clubs`) เสร็จแล้ว ข้อ 2 (import Excel: dry run + ยืนยัน, `routes/admin-import.ts`, `import/`, `services/import-plan.ts`, `services/import-commit.ts`, หน้า `/admin/import`) เสร็จแล้ว รวมขั้นออกรหัสผ่านเริ่มต้น (`routes/admin-students.ts`, `services/initial-passwords.ts`, หน้า `/admin/initial-passwords`) และขั้นยืนยัน import ถือ round lock ทุกรอบของภาคเรียน (I1, เทสต์ `apps/api/test/import-commit-round-locks.test.ts`) ข้อ 7 export รายชื่อเสร็จแล้วทั้ง Excel และ PDF (`routes/admin-export.ts`, `services/name-lists.ts`, `export/name-list-content.ts`, `export/name-list-workbook.ts`, `export/name-list-pdf.ts`, ฟอนต์ `apps/api/assets/fonts/`, หน้า `/admin/export`) ข้อ 4 ฝั่ง API ของนักเรียนเสร็จแล้วทั้งส่วนอ่าน (S1: `routes/student.ts` + `services/student-round.ts`, `GET /api/student/round` และ `GET /api/student/clubs` นักเรียนเห็นแค่ชื่อครู) และลง/ยกเลิก (S2: `POST /api/student/registration`, `POST /api/student/registration/cancel`, `services/registrations.ts` + `services/round-lock.ts`) schema ใน `packages/shared/src/student.ts` พร้อม concurrency test (`apps/api/test/registration-concurrency.test.ts`) และตัวตรวจ invariant (`apps/api/test/support/registration.ts`) ซึ่งครอบคลุมข้อ 5, 6, 9 และหน้าเว็บนักเรียนเสร็จแล้ว (S3: `apps/web/src/pages/student/`, หน้า `/student/clubs` ลงชุมนุม และ `/student/my-registration` ยกเลิก, key ใหม่ต่อการยืนยันและ retry ใช้ key เดิมเมื่อไม่รู้ผล) Phase 1 เหลือข้อ 8 Ops และ load test โดย Ops ทำ O1 production image เสร็จแล้ว (`Dockerfile` target `api`/`web`, `Caddyfile`, `.dockerignore`, `scripts/smoke-images.sh`, CI job `images`) เหลือ O2 compose production + Caddy HTTPS/limits → O3 backup/restore → O4 runbook EC2 → O5 load test ต่อจาก scaffold (monorepo, migration แรกครบทุกตาราง, `GET /api/health`) มี login/เปลี่ยนรหัส/logout, `create-admin` และหน้า FE ตาม role
 
 ## กฎที่ห้ามละเมิด
 
@@ -39,7 +39,7 @@
 | Excel | `exceljs` | import/export .xlsx |
 | PDF | `pdfkit` + ฟอนต์ Sarabun (SIL OFL 1.1) | export รายชื่อ ฟอนต์อยู่ที่ `apps/api/assets/fonts/` (มี `OFL.txt` คู่กัน) และต้องไปกับ `dist/` ตอน deploy ห้ามเปลี่ยนฟอนต์โดยไม่ลองชื่อที่มีสระบน/ล่างและวรรณยุกต์ก่อน (README หัวข้อ Export รายชื่อ) |
 | Test | Vitest + Testcontainers | Postgres จริง ไม่ mock |
-| Deploy | Docker image เดียว + Docker Compose + Caddy | เครื่องเดียวบน EC2 |
+| Deploy | Docker image 2 ตัว (`api` = Node, `web` = Caddy + ไฟล์ build ของ React) + Docker Compose | เครื่องเดียวบน EC2 (t4g = arm64) build บนเครื่องเอง ไม่มี registry Caddy เสิร์ฟหน้าเว็บ + SPA fallback และ proxy `/api/*` ไม่ใช้ `@fastify/static` base image pin ทั้ง tag และ digest ใน `Dockerfile` |
 
 **ไม่ใช้:** Next.js, Redis, ORM (Prisma/Drizzle), serverless, แยก repo FE/BE
 
@@ -69,9 +69,10 @@ pnpm lint
 pnpm format
 pnpm test               # Vitest + Testcontainers (ต้องเปิด Docker)
 pnpm build
+scripts/smoke-images.sh   # build image api + web แล้วรันกับ Postgres จริง ตรวจ health/headers/non-root/shutdown (ต้องเปิด Docker)
 ```
 
-บัญชี demo (`demo-admin`, `demo1001`, `demo1002`, `demo2001`) เป็นข้อมูลสมมติ ไม่บังคับเปลี่ยนรหัส รหัสสุ่มตอนสร้างครั้งแรกแล้วเก็บใน `.dev-credentials.txt` (gitignored, 600) รัน `pnpm dev` ซ้ำไม่เปลี่ยนรหัส `seed-dev` ไม่ยอมรันเมื่อ `NODE_ENV=production` ส่วน production สร้าง admin ด้วย `node dist/create-admin.js <login_id>` หลัง `pnpm build`
+บัญชี demo (`demo-admin`, `demo1001`, `demo1002`, `demo2001`) เป็นข้อมูลสมมติ ไม่บังคับเปลี่ยนรหัส รหัสสุ่มตอนสร้างครั้งแรกแล้วเก็บใน `.dev-credentials.txt` (gitignored, 600) รัน `pnpm dev` ซ้ำไม่เปลี่ยนรหัส `seed-dev` ไม่ยอมรันเมื่อ `NODE_ENV=production` ส่วน production สร้าง admin ด้วย `node dist/create-admin.js <login_id>` หลัง `pnpm build` หรือใน image `docker run --rm -it -e DATABASE_URL club-registration-api node dist/create-admin.js <login_id>` (migration ก็เช่นกัน: `node dist/migrate.js`)
 
 `packages/shared` ไม่ต้อง build ตอน dev และ test เพราะ export condition `@club-registration/source` ชี้ไปที่ `src/` (Vitest ของ api ใช้ alias แทน) ส่วน production ใช้ `dist/` จาก `pnpm build`
 
@@ -140,7 +141,7 @@ pnpm build
 ### TypeScript / Lint
 - `tsconfig`: `strict`, `noUncheckedIndexedAccess`, `exactOptionalPropertyTypes`, `noImplicitOverride`, `verbatimModuleSyntax`, `isolatedModules`
 - ESLint เปิดอย่างน้อย: `@typescript-eslint/no-floating-promises`, `no-misused-promises`, `no-explicit-any`, `consistent-type-imports`, `eqeqeq`, `no-restricted-imports` (กัน web↔api import กัน)
-- CI/ก่อน commit ต้องผ่าน `typecheck` + `lint` + `test` ห้าม merge ถ้าแดง CI อยู่ที่ `.github/workflows/ci.yml` (format:check, typecheck, lint, test, build) รันทุก PR และทุก push เข้า `main` action pin ด้วย commit SHA ถ้าเพิ่มขั้นตอนให้รันซ้ำในเครื่องได้ด้วยคำสั่ง `pnpm` เดียวกัน
+- CI/ก่อน commit ต้องผ่าน `typecheck` + `lint` + `test` ห้าม merge ถ้าแดง CI อยู่ที่ `.github/workflows/ci.yml` (job `check`: format:check, typecheck, lint, test, build และ job `images`: `scripts/smoke-images.sh` ซึ่งรันในเครื่องด้วยคำสั่งเดียวกันได้) รันทุก PR และทุก push เข้า `main` action pin ด้วย commit SHA ถ้าเพิ่มขั้นตอนให้รันซ้ำในเครื่องได้ด้วยคำสั่ง `pnpm` เดียวกัน
 
 ### Security
 - Password hash ด้วย **argon2id** (`crypto.argon2` ของ Node, เก็บเป็น PHC string) ห้าม MD5/SHA ธรรมดา เทียบด้วย `timingSafeEqual`

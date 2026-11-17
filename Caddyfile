@@ -1,0 +1,59 @@
+# Caddy in the web image (Dockerfile target "web"): serves the React build from /srv and passes
+# /api/* to the api container, so the browser sees one origin and no CORS is needed.
+#
+# SITE_ADDRESS: plain HTTP on :80 until there is a domain. Set it to the domain (from the
+# environment, never committed) and Caddy obtains and renews the certificate itself.
+# API_UPSTREAM: host:port of the api container.
+#
+# No access log: it would hold every student's IP and path, and the api already logs requests
+# without personal data.
+
+{$SITE_ADDRESS::80} {
+	# Hashed JS/CSS and JSON compress well; Caddy leaves xlsx/pdf downloads alone (already zip/
+	# deflate compressed) because their types are not on its list.
+	encode zstd gzip
+
+	handle /api/* {
+		# Caddy replaces any X-Forwarded-For the client sent (no trusted_proxies here), so the api
+		# can run with TRUST_PROXY=true and rate-limit on the real client IP without it being
+		# spoofable. Security headers for /api/* come from @fastify/helmet in the api, not here.
+		reverse_proxy {$API_UPSTREAM:api:3000}
+	}
+
+	handle {
+		root * /srv
+
+		header {
+			# The build has no inline script or style and loads nothing from other origins (checked
+			# in a browser: no CSP violations). React sets style through the DOM, which CSP allows,
+			# and downloads are blob: links the page clicks, which CSP does not govern. If a later
+			# change needs an exception, add the narrowest source rather than 'unsafe-inline'.
+			Content-Security-Policy "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self'; font-src 'self'; connect-src 'self'; object-src 'none'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'"
+			X-Content-Type-Options nosniff
+			# Older browsers ignore frame-ancestors.
+			X-Frame-Options DENY
+			# Same as helmet's default on the api.
+			Referrer-Policy no-referrer
+			Permissions-Policy "camera=(), microphone=(), geolocation=(), payment=(), usb=()"
+			# index.html and anything else without a hash in its name: revalidate every time (cheap
+			# with ETag), so a deploy is picked up on the next page load.
+			Cache-Control no-cache
+		}
+
+		handle /assets/* {
+			# Vite puts a content hash in every file name here, so a changed file is a new URL.
+			# Only existing files get the long lifetime; a 404 for an old hash must not be cached.
+			@found file
+			header @found Cache-Control "public, max-age=31536000, immutable"
+			# No SPA fallback here: a missing script answered with index.html would fail with a
+			# confusing MIME error instead of a plain 404.
+			file_server
+		}
+
+		handle {
+			# Client-side routes such as /student/clubs have no file; the SPA router handles them.
+			try_files {path} /index.html
+			file_server
+		}
+	}
+}

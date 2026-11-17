@@ -11,7 +11,7 @@ export default defineConfig({
     conditions: ['@club-registration/source', ...defaultClientConditions],
   },
   server: {
-    // Mirrors production, where Fastify serves the SPA and /api from one origin.
+    // Mirrors production, where Caddy serves the SPA and proxies /api from one origin.
     proxy: { '/api': 'http://127.0.0.1:3000' },
   },
   test: {

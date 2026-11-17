@@ -2,7 +2,7 @@
 
 ระบบลงทะเบียนชุมนุมของโรงเรียน สำหรับนักเรียน ~2,500 คน แบ่งรอบตามชั้น ม.1–ม.6 รอบละ ~400–450 คน
 
-> **สถานะ:** Phase 1 ทำ Auth + role guard เสร็จแล้ว (login, บังคับเปลี่ยนรหัสครั้งแรก, logout, `create-admin`, หน้า FE ตาม role) admin จัดการรอบลงทะเบียนได้แล้ว (`/api/admin/rounds` + หน้า `/admin/rounds`) นำเข้า Excel ได้แล้วทั้งขั้นตรวจ (dry run) และขั้นยืนยัน (`/api/admin/import/preview`, `/api/admin/import/commit` + หน้า `/admin/import`) ออกรหัสผ่านเริ่มต้นให้นักเรียนเป็นไฟล์ Excel ได้แล้ว (`/api/admin/students/password-status`, `/api/admin/students/initial-passwords` + หน้า `/admin/initial-passwords`) ดู/แก้ชุมนุมรายรอบได้แล้ว (`/api/admin/rounds/:roundId/clubs`, `/api/admin/clubs/:id` + หน้า `/admin/clubs`) ส่งออกรายชื่อรายชุมนุม/รายห้องเป็น Excel และ PDF ได้แล้ว (`/api/admin/rounds/:roundId/export` + หน้า `/admin/export`) นักเรียนอ่านรอบกับรายการชุมนุมของชั้นตัวเองผ่าน API ได้แล้ว (`/api/student/round`, `/api/student/clubs`) และ**ลง/ยกเลิกชุมนุมผ่าน API ได้แล้ว** (`POST /api/student/registration`, `POST /api/student/registration/cancel`) พร้อม concurrency test 500 request กับ Postgres จริง และ**มีหน้าเว็บนักเรียนแล้ว** (`/student/clubs` ดูชุมนุมและลง, `/student/my-registration` ดูผลและยกเลิก) ต่อจาก monorepo, migration แรก และ `GET /api/health` เอกสารนี้คือแผนและข้อกำหนดของโปรเจกต์
+> **สถานะ:** Phase 1 ทำ Auth + role guard เสร็จแล้ว (login, บังคับเปลี่ยนรหัสครั้งแรก, logout, `create-admin`, หน้า FE ตาม role) admin จัดการรอบลงทะเบียนได้แล้ว (`/api/admin/rounds` + หน้า `/admin/rounds`) นำเข้า Excel ได้แล้วทั้งขั้นตรวจ (dry run) และขั้นยืนยัน (`/api/admin/import/preview`, `/api/admin/import/commit` + หน้า `/admin/import`) ออกรหัสผ่านเริ่มต้นให้นักเรียนเป็นไฟล์ Excel ได้แล้ว (`/api/admin/students/password-status`, `/api/admin/students/initial-passwords` + หน้า `/admin/initial-passwords`) ดู/แก้ชุมนุมรายรอบได้แล้ว (`/api/admin/rounds/:roundId/clubs`, `/api/admin/clubs/:id` + หน้า `/admin/clubs`) ส่งออกรายชื่อรายชุมนุม/รายห้องเป็น Excel และ PDF ได้แล้ว (`/api/admin/rounds/:roundId/export` + หน้า `/admin/export`) นักเรียนอ่านรอบกับรายการชุมนุมของชั้นตัวเองผ่าน API ได้แล้ว (`/api/student/round`, `/api/student/clubs`) และ**ลง/ยกเลิกชุมนุมผ่าน API ได้แล้ว** (`POST /api/student/registration`, `POST /api/student/registration/cancel`) พร้อม concurrency test 500 request กับ Postgres จริง และ**มีหน้าเว็บนักเรียนแล้ว** (`/student/clubs` ดูชุมนุมและลง, `/student/my-registration` ดูผลและยกเลิก) งาน Ops เริ่มแล้ว: **มี production Docker image แล้ว** (O1: `api` และ `web` จาก `Dockerfile` ที่ root พร้อม `scripts/smoke-images.sh` ใน CI ดูหัวข้อ [Infra และ Deployment](#infra-และ-deployment)) ต่อจาก monorepo, migration แรก และ `GET /api/health` เอกสารนี้คือแผนและข้อกำหนดของโปรเจกต์
 >
 > **หมายเหตุ:** ตัวเลข performance ทั้งหมดเป็นการประเมินจากหลักการ ยังไม่ได้วัดจริง ต้อง load test ก่อนใช้งาน
 
@@ -16,7 +16,7 @@
 - **Waitlist ที่ promote อัตโนมัติ** เรียงตามลำดับเข้าคิว รองรับการ promote เป็นทอด
 - **Concurrency test กับ Postgres จริง** (Testcontainers) ยิง 500 request แย่ง 1 ชุมนุมแล้วตรวจ invariant ว่าไม่เกิน capacity และไม่มีลงซ้ำ
 - **Event log แบบ append-only** ตรวจย้อนหลังได้ว่าใครทำอะไรเมื่อไร
-- **ดูแลง่าย ต้นทุนต่ำ** Docker image เดียวบน EC2 เครื่องเดียว คาดว่าไม่เกิน ~$40 ต่อปี (ประเมิน ยังไม่ได้ตรวจราคาจริง)
+- **ดูแลง่าย ต้นทุนต่ำ** Docker image 2 ตัว (api และ Caddy ที่มีหน้าเว็บอยู่ข้างใน) บน EC2 เครื่องเดียว คาดว่าไม่เกิน ~$40 ต่อปี (ประเมิน ยังไม่ได้ตรวจราคาจริง)
 
 > การกันลงเกินที่ระดับ DB, idempotency, concurrency test และ event log ทำแล้วสำหรับการลง/ยกเลิก (Phase 1) ส่วนเปลี่ยนชุมนุมแบบ atomic และ waitlist ยังเป็นดีไซน์ตามแผน ดูความคืบหน้าที่หัวข้อ [Roadmap](#roadmap)
 
@@ -65,7 +65,7 @@
 | PDF | `pdfkit` + ฟอนต์ Sarabun (SIL OFL 1.1) | สร้างฝั่ง server ไม่ต้องมี browser, spike แล้ววางสระบน/ล่างและวรรณยุกต์ไทยถูก (รายการที่ยังเปิดอยู่ข้อ 6) |
 | Test | Vitest + Testcontainers | concurrency test ต้องใช้ Postgres จริง ห้าม mock |
 | Repo | pnpm workspaces (monorepo เดียว) | แชร์ Zod/type, PR เดียวแก้ได้ทั้งระบบ |
-| Deploy | Docker image เดียว + Compose + Caddy บน EC2 | เครื่องเดียว ดูแลง่าย |
+| Deploy | Docker image 2 ตัว (`api` = Node, `web` = Caddy + ไฟล์ build ของ React) + Compose บน EC2 | เครื่องเดียว ดูแลง่าย Caddy เสิร์ฟไฟล์ static เก่งกว่าและทำ HTTPS อยู่แล้ว api จึงไม่ต้องเสิร์ฟหน้าเว็บ |
 
 **ที่เลือกไม่ใช้**
 
@@ -84,10 +84,12 @@ club-registration/
 │   └── web/        # Vite + React
 ├── packages/
 │   └── shared/     # Zod schema + type ที่ใช้ร่วมกัน
+├── scripts/        # smoke-images.sh ทดสอบ image จริง (CI job images)
 ├── templates/      # Excel template เปล่า (ไม่มีข้อมูลจริง)
-├── Dockerfile
+├── Dockerfile      # target api และ web
+├── .dockerignore   # allowlist ของ build context
 ├── docker-compose.yml
-├── Caddyfile
+├── Caddyfile       # อยู่ใน image web
 ├── .env.example
 └── pnpm-workspace.yaml
 ```
@@ -177,7 +179,8 @@ COMMIT;
 5. ~~**กติกาที่ DB:** 1 คน 1 ชุมนุม, ห้ามเกิน capacity, เฉพาะชั้นตัวเอง, เฉพาะช่วงเปิดรอบ~~ เสร็จแล้ว (S2): `UNIQUE(round_id, student_id)`, `CHECK` + `UPDATE ... WHERE registered < capacity`, ชั้นและช่วงเปิดเป็นเงื่อนไขของ `INSERT ... SELECT`/`DELETE` ตามนาฬิกา DB
 6. ~~**Idempotency + event log**~~ เสร็จแล้ว (S2): ทุกการลง/ยกเลิกเขียน `registration_events` พร้อม `idempotency_key` ใน transaction เดียวกัน (ตาราง append-only ด้วย trigger)
 7. **Admin export:** รายชื่อแบบ **รายชุมนุม** และ **รายห้อง** เลือกได้ทั้ง **Excel** และ **PDF** (รายละเอียดดูหัวข้อ [Export รายชื่อ](#export-รายชื่อ)) ทั้ง Excel (A6a) และ PDF (A6b) **เสร็จแล้ว**
-8. **Ops:** Dockerfile, `docker-compose.yml`, Caddy HTTPS, `/api/health`, migration script แยก, graceful shutdown, backup `pg_dump` ไป S3, runbook (deploy/backup/restore/เปิด-ปิดเครื่อง)
+8. **Ops:** Dockerfile, `docker-compose.yml`, Caddy HTTPS, `/api/health`, migration script แยก, graceful shutdown, backup `pg_dump` ไป S3, runbook (deploy/backup/restore/เปิด-ปิดเครื่อง) แบ่งเป็น O1 image → O2 compose production + Caddy HTTPS/limits → O3 backup/restore → O4 runbook EC2 → O5 load test
+   - ~~**O1 image**~~ เสร็จแล้ว: `Dockerfile` (target `api`, `web`), `Caddyfile`, `.dockerignore`, `scripts/smoke-images.sh` และ CI job `images` รายละเอียดดู [Infra และ Deployment](#infra-และ-deployment)
 9. ~~**Test:** concurrency test + invariant `clubs.registered` = จำนวน registration จริง~~ เสร็จแล้ว (S2): `apps/api/test/registration-concurrency.test.ts` (500 นักเรียนแย่ง 30 ที่ → 200 พอดี 30 ที่เหลือ `club_full` 470, คนเดียวกดหลายชุมนุมพร้อมกันได้ชุมนุมเดียว, key เดียวกันพร้อมกันเกิดผลครั้งเดียว, ยกเลิกแข่งกับลง, ยกเลิกแล้วคนอื่นแย่งที่ว่าง) และตัวตรวจ invariant `registrationInvariantViolations` (`apps/api/test/support/registration.ts`: `registered` = จำนวนแถว, อยู่ใน 0..capacity, 1 คน 1 แถวต่อรอบ, ชั้นนักเรียน = ชั้นรอบ, ชุมนุมอยู่ในรอบเดียวกัน, register − cancel ตรงกับที่นั่งทั้งรายคนและรายชุมนุม, event ล่าสุดตรงกับชุมนุมที่ถือ) รันหลังทุกเทสต์ของไฟล์ลง/ยกเลิก
    - **วัดจริงในเทสต์** (เครื่องพัฒนา 4 vCPU ไม่ใช่สเปค production, pool 20, ผ่าน `app.inject` ใน process เดียว ไม่มี network, 4 รอบ): 500 request พร้อมกันจบทั้งหมดใน 2.4–2.6 วินาที (เฉลี่ย ~5 ms ต่อ request เพราะเรียงกันด้วย lock ของรอบ) ต้อง load test บนเครื่องจริง ข้อควรระวัง: ทุก transaction ในรอบเรียงกันด้วย lock และ request ที่รอ connection จาก pool เกิน 5 วินาที (`connectionTimeoutMillis`) จะได้ 500 ถ้าเครื่องจริงช้ากว่านี้หลายเท่า ต้องปรับ pool/timeout หรือเปิด queue (Phase 3)
 
@@ -303,7 +306,7 @@ Admin เลือก **รอบ** → เลือก **มุมมอง** (
 - **รูปแบบ PDF** (`apps/api/src/export/name-list-pdf.ts`, สร้างทั้งไฟล์ใน memory แล้วตอบทีเดียวเหมือน Excel): หัวเอกสารและคอลัมน์ชุดเดียวกับ Excel ชื่อชุมนุม/ห้องตัวหนาเป็นบรรทัดแรก ตารางมีเส้นและหัวตารางพื้นเทา ตัวอักษร 11pt แถวละ 17pt (ห้อง 38–40 คนจบใน 1 หน้า) รายชื่อยาวต่อหน้าถัดไปโดยขึ้นบรรทัด "<ชื่อชุมนุม/ห้อง> (ต่อ)" และพิมพ์หัวตารางซ้ำ ท้ายทุกหน้ามี "ส่งออกเมื่อ <วันเวลาไทย> น." และ "หน้า n/N" (นับทั้งไฟล์)
   - **ข้อความไม่ล้นช่อง:** `pdfkit` ตัดบรรทัดได้แค่ที่ช่องว่าง ซึ่งชื่อไทยไม่มี จึงไม่พึ่งการตัดบรรทัด ทุกช่องเป็นบรรทัดเดียว ถ้ากว้างเกินช่องจะตัดท้ายแล้วใส่ "…" ตัดที่ขอบ grapheme (พยัญชนะไม่แยกจากสระบน/ล่างหรือวรรณยุกต์) และไม่จบด้วยสระหน้า (เ แ โ ใ ไ) เลือกตัดแทนการย่อตัวอักษรเพราะทุกแถวสูงเท่ากันและอ่านง่ายกว่า ชื่อที่ถูกตัดยังดูเต็มได้ในไฟล์ Excel บรรทัดหัวเอกสาร (เช่นรายชื่อครูหลายคน) ตัดบรรทัดที่ช่องว่างได้ไม่เกิน 3 บรรทัด (ชื่อชุมนุม 2 บรรทัด) แล้วตัดด้วย "…" แบบเดียวกัน
   - **ข้อความล้วน:** วาดเป็น glyph ไม่มีอะไรถูกตีความเป็น markup หรือสูตร (ไม่ต้อง escape แบบ Excel) ทุกข้อความอยู่ใน marked content `/Span` ที่มี `ActualText` เพื่อให้ copy/ค้นหาในโปรแกรมอ่าน PDF ได้ข้อความตรงตามที่เขียน (Sarabun วาด "ำ" เป็นนิคหิต + glyph สระอาที่ไม่มีรหัสอักษร ถ้าไม่มี `ActualText` ตัว "า" ทั้งไฟล์อาจ copy ออกมาหาย)
-  - **ฟอนต์:** `apps/api/assets/fonts/Sarabun-Regular.ttf` และ `Sarabun-Bold.ttf` (SIL Open Font License 1.1, ข้อความ license อยู่ที่ `apps/api/assets/fonts/OFL.txt` ต้องแจกไปพร้อมฟอนต์) ฝังเฉพาะ glyph ที่ใช้ (subset) โมดูลหาฟอนต์จากตำแหน่งของตัวเอง (`import.meta.url` → `../../assets/fonts/`) จึงใช้ได้ทั้ง `src/` ตอน dev/test และ `dist/` หลัง `pnpm build` อ่านไฟล์ตอนโหลดโมดูล ถ้าหาไม่เจอ server ไม่ start (fail fast) **Docker image ต้อง copy `apps/api/assets/` ไปข้าง `dist/` ด้วย**
+  - **ฟอนต์:** `apps/api/assets/fonts/Sarabun-Regular.ttf` และ `Sarabun-Bold.ttf` (SIL Open Font License 1.1, ข้อความ license อยู่ที่ `apps/api/assets/fonts/OFL.txt` ต้องแจกไปพร้อมฟอนต์) ฝังเฉพาะ glyph ที่ใช้ (subset) โมดูลหาฟอนต์จากตำแหน่งของตัวเอง (`import.meta.url` → `../../assets/fonts/`) จึงใช้ได้ทั้ง `src/` ตอน dev/test และ `dist/` หลัง `pnpm build` อ่านไฟล์ตอนโหลดโมดูล ถ้าหาไม่เจอ server ไม่ start (fail fast) Docker image `api` จึง copy `apps/api/assets/` ไปข้าง `dist/` (smoke script ตรวจทั้งไฟล์และว่า server start ได้)
   - **วัดจริงในเทสต์** (เครื่องพัฒนา 4 vCPU ไม่ใช่สเปค production, 4 รอบ): รายห้องทั้งรอบ 450 คน 12 ห้อง ได้ 12 หน้า ~99 KB ใช้ 195–300 ms ต่อ request (รวมอ่าน DB) ต้องวัดซ้ำบนเครื่องจริง
 - **Spike PDF (ปิดรายการที่ยังเปิดอยู่ข้อ 6):** `pdfkit` 0.20.2 + Sarabun วางวรรณยุกต์ซ้อนบนสระบน, ป/ฝ/ฟ กับสระบน, ญ/ฐ กับสระล่าง และ "น้ำ" ถูกตำแหน่ง (ตรวจด้วยตาจากไฟล์ที่ render เป็นภาพ) จึงไม่ต้องถอยไปใช้หน้า print ของเบราว์เซอร์ ถ้าจะเปลี่ยนฟอนต์หรืออัปเกรด `pdfkit` ต้องลองกับชื่อสมมติแบบนี้ซ้ำ
 
@@ -330,23 +333,57 @@ Admin เลือก **รอบ** → เลือก **มุมมอง** (
 
 ## Infra และ Deployment
 
-Docker image ก้อนเดียว (multi-stage: build web → build api → runtime `node:24-slim`) Fastify เสิร์ฟ `/api/*` และ static ของ React ไม่ต้องมี CORS
+Docker image 2 ตัวจาก `Dockerfile` เดียวที่ root (multi-stage) ทั้งสอง target ใช้ขั้น `pnpm install` ร่วมกัน BuildKit จึงลงครั้งเดียวและ cache ให้ทั้งคู่ และ pin base image ไว้ที่เดียว
+
+- **`api`** (Node): Fastify ตอบเฉพาะ `/api/*` ไม่เสิร์ฟหน้าเว็บ (ไม่ใช้ `@fastify/static`)
+- **`web`** (Caddy): เสิร์ฟไฟล์ build ของ React (static + SPA fallback) และ reverse proxy `/api/*` ไปที่ api browser เห็น origin เดียว จึงไม่ต้องมี CORS
 
 ```
-EC2 (t4g.small) ──► Caddy (HTTPS อัตโนมัติ)
-                      ├─► api (Fastify + static React)
-                      └─► postgres (container + volume)
+EC2 (t4g.small) ──► web: Caddy (HTTPS อัตโนมัติเมื่อมี domain)
+                      ├─ ไฟล์ React ใน /srv + SPA fallback
+                      └─► api: Fastify (/api/*) ──► postgres (container + volume)
 ```
+
+**Image (O1)**
+
+| | `api` | `web` |
+|---|---|---|
+| Base | `node:24.22.3-slim` (Debian bookworm) | `caddy:2.11.9-alpine` |
+| ข้างใน | `/app/apps/api/` = `dist/`, `migrations/`, `assets/fonts/` (Sarabun + `OFL.txt`), `package.json`, `node_modules` เฉพาะ production (จาก `pnpm --filter api deploy --prod` ซึ่งใส่ `dist/` ของ `packages/shared` มาเป็นโฟลเดอร์จริง) และ `/app/templates/import-template.xlsx` | ไฟล์ build ของ `apps/web` ใน `/srv` และ `Caddyfile` ใน `/etc/caddy/` (ตรวจด้วย `caddy validate` ตอน build) |
+| User | `node` (uid 1000) ไฟล์ทั้งหมดเป็นของ root app แก้โค้ดตัวเองไม่ได้ | `caddy` (uid 1000) สร้างเองเพราะ image ทางการรันเป็น root ยัง bind พอร์ต 80/443 ได้เพราะ Docker ตั้ง `net.ipv4.ip_unprivileged_port_start=0` ให้ container |
+| ขนาด (amd64, วัดจาก smoke) | 479 MB บนดิสก์ (base `node:24-slim` 333 MB) | 92.5 MB |
+
+- **Pin ทั้ง tag และ digest** (`ARG NODE_IMAGE`, `ARG CADDY_IMAGE` บนสุดของ `Dockerfile`) digest เป็น index หลาย arch จึงใช้ได้ทั้ง amd64 และ arm64 อัปเกรดต้องเปลี่ยน tag กับ digest พร้อมกัน
+- **pnpm:** `corepack install` ใช้เวอร์ชันจาก `packageManager` เหมือนเครื่องพัฒนา `pnpm fetch` ใช้แค่ lockfile (แก้โค้ดไม่ทำให้ต้องโหลดใหม่) แล้ว `pnpm install --frozen-lockfile --offline` ไม่มี flag หรือข้อยกเว้นที่ข้ามการตรวจ supply-chain policy ของ pnpm (เช่น `minimumReleaseAge`) store อยู่ใน cache mount ไม่อยู่ใน layer
+- **โครงไดเรกทอรีเหมือน repo** (`/app/apps/api`) ไม่ใช่ `/app` เฉยๆ เพราะ `dist/import/template.js` หา template ที่ `../../../../templates/` จากตัวเอง เหมือนตอน dev
+- **ไม่มี secret ใน image:** `.dockerignore` เป็น allowlist ส่งเข้า build เฉพาะ manifest, lockfile, `tsconfig.base.json`, `Caddyfile`, `apps/`, `packages/` และ template เปล่า แล้วตัด `node_modules`, `dist`, `.env*`, `.dev-credentials.txt`, `*.dump`, `*.xlsx` (ยกเว้น template) และเทสต์ออกอีกชั้น smoke script ตรวจว่าไม่มีไฟล์ `.env*`/`.dev-credentials.txt`/`*.dump` ทั้ง image
+- **Build หลัง proxy ที่ดักถอด TLS:** ส่ง CA เป็น build secret `docker build --secret id=extra_ca,src=<pem> …` (ไม่ถูกเขียนลง layer) ปกติไม่ต้องใช้
+- **api:** `CMD ["node", "dist/server.js"]` แบบ exec form node ได้ SIGTERM จาก `docker stop` เองแล้วปิด Fastify กับ pool ก่อนออก (smoke วัดได้ไม่ถึง 1 วินาที exit code 0) `HEALTHCHECK` ใช้ node ยิง `GET /api/health` (slim ไม่มี curl, DB ล่ม = 503 = unhealthy) ทุก 30 วินาที ช่วงเริ่มทุก 2 วินาที (`--start-interval` ต้องใช้ Docker Engine ≥ 25) migration และสร้าง admin เป็นคำสั่งแยกใน image เดียวกัน
+- **web:** `Caddyfile` ที่ root อ่าน env 2 ตัว (ตารางข้างล่าง) cache: ไฟล์ใน `/assets/` มี hash ในชื่อ ได้ `Cache-Control: public, max-age=31536000, immutable` เฉพาะไฟล์ที่มีจริง (ไฟล์ที่ไม่มี = 404 ไม่ fallback เป็น `index.html`) ที่เหลือรวม `index.html` เป็น `no-cache` (revalidate ด้วย ETag deploy ใหม่จึงเห็นทันที) บีบอัด zstd/gzip ไม่เขียน access log (จะมี IP และ path ของนักเรียนทุกคน) Caddy เขียนทับ `X-Forwarded-For` ที่ client ส่งมาเอง api จึงตั้ง `TRUST_PROXY=true` ได้โดยปลอม IP ไม่ได้
+- **Security headers ของหน้าเว็บ** (เฉพาะที่ไม่ใช่ `/api/*` ซึ่งใช้ของ `@fastify/helmet` ใน api อยู่แล้ว ไม่ซ้ำกัน): `Content-Security-Policy: default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self'; font-src 'self'; connect-src 'self'; object-src 'none'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'` (ไม่มี `'unsafe-inline'`/`'unsafe-eval'`), `X-Content-Type-Options: nosniff`, `X-Frame-Options: DENY`, `Referrer-Policy: no-referrer`, `Permissions-Policy` ปิดกล้อง ไมค์ ตำแหน่ง การจ่ายเงิน USB ตรวจใน Chromium จริงแล้วว่าไม่มี CSP violation (login, เปลี่ยนรหัส, หน้า admin, ดาวน์โหลด template และดาวน์โหลดแบบ blob) zod ทดสอบ eval ด้วย `new Function` ตอนสร้าง schema ซึ่ง CSP รายงานเป็น violation ทุกหน้า หน้าเว็บจึง import `@club-registration/shared/zod-jitless` เป็นอันแรกใน `main.tsx` เพื่อปิด JIT ของ zod ก่อน (api ไม่ import จึงยังใช้ JIT) `upgrade-insecure-requests` และ HSTS ยังไม่ใส่เพราะยังเป็น HTTP จนกว่าจะมี domain (O2)
+- **Multi-arch:** เครื่องจริงเป็น t4g (arm64) และ build บนเครื่องเองด้วย `docker compose build` ไม่มี registry ส่วน CI build แค่ amd64 เพื่อพิสูจน์ว่า Dockerfile ใช้ได้ **arm64 ยังไม่ได้ทดสอบ** (native binary ของ rolldown, lightningcss, Tailwind ที่ใช้ตอน build เว็บต้องมีของ arm64 ใน lockfile) ต้องรัน smoke script บนเครื่องจริงครั้งแรก
+- **Smoke test:** `scripts/smoke-images.sh` (ต้องมีแค่ Docker และ curl) build ทั้งสอง image สร้าง network แล้วรัน postgres → `node dist/migrate.js` → `create-admin` → api → web บนพอร์ตว่าง แล้วตรวจผ่าน Caddy: `/api/health` 200 และ DB up, `/` เป็น SPA พร้อม security headers, deep link (`/student/clubs`) ได้ `index.html`, asset ที่มี hash ได้ 200 + immutable + บีบอัด, asset ที่ไม่มีได้ 404, `/api/nonexistent` ได้ JSON 404 ของ api, `/api/*` มี CSP ของ helmet ตัวเดียว, admin ที่สร้าง login ผ่าน Caddy ได้ (argon2id ใน image), ทั้งสอง container รันเป็น non-root, image api มีฟอนต์ OFL และ template ตรงที่ api หา ไม่มี `src`/เทสต์/dev dependency และ `docker stop` api จบเองภายใน 5 วินาทีด้วย exit code 0 ลบ container/network เสมอด้วย `trap` secret ทุกตัวสุ่มต่อรอบและไม่พิมพ์ออกมา CI รันเป็น job `images` ทุก PR และทุก push เข้า `main`
+
+```bash
+docker build --target api -t club-registration-api .
+docker build --target web -t club-registration-web .
+docker run --rm -e DATABASE_URL club-registration-api node dist/migrate.js
+docker run --rm -it -e DATABASE_URL club-registration-api node dist/create-admin.js <login_id>
+```
+
+Compose ของ production, HTTPS กับ domain, จำกัด resource และ log rotation เป็นงาน O2
 
 **Environment variables**
 
-| Env | ความหมาย |
-|---|---|
-| `DATABASE_URL` | connection string |
-| `JWT_SECRET` | secret สำหรับ sign token (≥ 32 ตัวอักษร สร้างด้วย `openssl rand -base64 48`) ขาดหรือสั้นไป = server ไม่ start |
-| `PORT` | default 3000 |
-| `NODE_ENV` | `production` |
-| `TRUST_PROXY` | เมื่ออยู่หลัง proxy/LB |
+| Env | ใช้ที่ | ความหมาย |
+|---|---|---|
+| `DATABASE_URL` | api | connection string |
+| `JWT_SECRET` | api | secret สำหรับ sign token (≥ 32 ตัวอักษร สร้างด้วย `openssl rand -base64 48`) ขาดหรือสั้นไป = server ไม่ start |
+| `PORT` | api | default 3000 |
+| `NODE_ENV` | api | `production` (ตั้งไว้ใน image แล้ว) |
+| `TRUST_PROXY` | api | `true` เมื่ออยู่หลัง Caddy/LB |
+| `SITE_ADDRESS` | web | site address ของ Caddy default `:80` (HTTP ไม่มี TLS) ตั้งเป็น domain แล้ว Caddy ขอใบรับรองเอง ค่าจริงอยู่ใน env ห้าม commit |
+| `API_UPSTREAM` | web | `host:port` ของ api default `api:3000` |
 
 **ออกแบบให้ portable:** migration เป็นคำสั่งแยก (`node dist/migrate.js`), `GET /api/health` เช็ค DB, graceful shutdown (SIGTERM), log JSON ออก stdout, ไม่เก็บ state บน disk ของ app
 
@@ -355,7 +392,7 @@ EC2 (t4g.small) ──► Caddy (HTTPS อัตโนมัติ)
 | Infra | วิธี |
 |---|---|
 | EC2 / VPS อื่น | Compose ไฟล์เดิม |
-| PaaS (Render/Railway/Fly) | ชี้ Dockerfile + Postgres ของ platform (ไม่แนะนำสำหรับวันจริง) |
+| PaaS (Render/Railway/Fly) | ชี้ Dockerfile (target `api`/`web`) + Postgres ของ platform (ไม่แนะนำสำหรับวันจริง) |
 | ECS/App Runner | push image ไป ECR + RDS + ALB, `TRUST_PROXY=true` |
 
 **ค่าใช้จ่าย (ประมาณ ต้องเช็คราคาจริง)**
@@ -375,7 +412,7 @@ EC2 (t4g.small) ──► Caddy (HTTPS อัตโนมัติ)
 
 **Runbook การใช้งาน**
 
-1. 1–2 วันก่อนเปิดรอบ: start เครื่อง → `apt upgrade` + `docker compose pull` → smoke test
+1. 1–2 วันก่อนเปิดรอบ: start เครื่อง → `apt upgrade` + `git pull` + `docker compose build` (build บนเครื่องเอง ไม่มี registry) → smoke test
 2. วันจริง: เฝ้า log/CPU/RAM
 3. หลังปิดรอบ: export รายชื่อ → `pg_dump` ไป S3 → stop เครื่อง
 4. Compose ตั้ง `restart: unless-stopped`
@@ -404,4 +441,4 @@ EC2 (t4g.small) ──► Caddy (HTTPS อัตโนมัติ)
 
 ## ขั้นตอนถัดไป
 
-ทำต่อใน **Phase 1**: Ops → load test บนสเปคเครื่องจริง (scaffold, migration แรก, auth + role guard, จัดการรอบ, import Excel, รหัสผ่านเริ่มต้น, หน้าชุมนุม, export Excel/PDF, API อ่านของนักเรียน, API ลง/ยกเลิกพร้อม concurrency test และหน้าเว็บนักเรียน เสร็จแล้ว)
+ทำต่อใน **Phase 1**: Ops ต่อจาก O1 (O2 compose production + Caddy HTTPS/limits → O3 backup/restore → O4 runbook EC2) → load test บนสเปคเครื่องจริง (production image, scaffold, migration แรก, auth + role guard, จัดการรอบ, import Excel, รหัสผ่านเริ่มต้น, หน้าชุมนุม, export Excel/PDF, API อ่านของนักเรียน, API ลง/ยกเลิกพร้อม concurrency test และหน้าเว็บนักเรียน เสร็จแล้ว)
