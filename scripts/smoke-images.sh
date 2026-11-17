@@ -13,6 +13,8 @@
 set -euo pipefail
 
 cd "$(dirname "${BASH_SOURCE[0]}")/.."
+# shellcheck source=lib/smoke-common.sh
+source scripts/lib/smoke-common.sh
 
 # Same image as the Testcontainers tests (apps/api/test/support/postgres.ts).
 readonly POSTGRES_IMAGE='postgres:18-alpine'
@@ -28,27 +30,14 @@ pg_container="${run_id}-postgres"
 api_container="${run_id}-api"
 web_container="${run_id}-web"
 work_dir="$(mktemp -d)"
-failures=0
 
 cleanup() {
-  docker rm -f "$web_container" "$api_container" "$pg_container" >/dev/null 2>&1 || true
+  # -v: postgres keeps its data in an anonymous volume, which would otherwise outlive the run.
+  docker rm -f -v "$web_container" "$api_container" "$pg_container" >/dev/null 2>&1 || true
   docker network rm "$network" >/dev/null 2>&1 || true
   rm -rf "$work_dir"
 }
 trap cleanup EXIT
-
-log() { printf '==> %s\n' "$*"; }
-pass() { printf '  ok    %s\n' "$*"; }
-fail() {
-  printf '  FAIL  %s\n' "$*"
-  failures=$((failures + 1))
-}
-check() {
-  local description="$1"
-  shift
-  if "$@"; then pass "$description"; else fail "$description"; fi
-}
-random_secret() { head -c 48 /dev/urandom | base64 | tr -d '\n/+='; }
 
 # fetch <name> <path> [curl args...]: saves status, headers and body under $work_dir/<name>.*
 fetch() {
@@ -66,16 +55,6 @@ body_contains() { grep -qF -- "$2" "$work_dir/$1.body"; }
 in_api_image() { docker run --rm --entrypoint sh "$API_IMAGE" -c "$1"; }
 pid1_uid() { docker exec "$1" cat /proc/1/status | awk '/^Uid:/ { print $2 }'; }
 
-wait_for() {
-  local description="$1" attempts="$2"
-  shift 2
-  for _ in $(seq "$attempts"); do
-    if "$@" >/dev/null 2>&1; then return 0; fi
-    sleep 1
-  done
-  echo "Timed out waiting for $description" >&2
-  return 1
-}
 api_healthy() {
   [[ "$(docker inspect -f '{{.State.Health.Status}}' "$api_container")" == healthy ]]
 }
