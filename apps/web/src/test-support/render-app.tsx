@@ -4,7 +4,8 @@ import { createMemoryRouter, RouterProvider } from 'react-router';
 import { vi } from 'vitest';
 import { routes } from '@/routes';
 
-export type Handler = (init: RequestInit | undefined) => Response;
+// A Promise lets a test hold a request open or fail it the way a lost connection does.
+export type Handler = (init: RequestInit | undefined) => Response | Promise<Response>;
 
 // Routes requests by "METHOD /path" so each test states exactly what the API answers.
 export const mockApi = (handlers: Record<string, Handler>) => {

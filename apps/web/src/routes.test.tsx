@@ -90,6 +90,23 @@ describe('auth routes', () => {
     expect(nav.textContent).not.toContain('นำเข้า Excel');
   });
 
+  it.each([
+    ['/student/clubs', 'ชุมนุมในชั้นของฉัน'],
+    ['/student/my-registration', 'ผลของฉัน'],
+  ])('renders the real student page at %s, not a placeholder', async (path, heading) => {
+    mockApi({
+      'GET /api/auth/me': () => Response.json({ user: STUDENT }),
+      'GET /api/student/clubs': () => Response.json({ round: null, registration: null, clubs: [] }),
+      'GET /api/student/round': () => Response.json({ round: null, registration: null }),
+    });
+
+    renderAt(path);
+
+    expect(await screen.findByRole('heading', { level: 1, name: heading })).toBeTruthy();
+    expect(await screen.findByText(/ยังไม่มีรอบลงทะเบียนของชั้นนี้/)).toBeTruthy();
+    expect(screen.queryByText('ยังไม่เปิดใช้งาน')).toBeNull();
+  });
+
   it('redirects a student who opens an admin page back to the student home', async () => {
     mockApi({ 'GET /api/auth/me': () => Response.json({ user: STUDENT }) });
 

@@ -11,9 +11,13 @@ import {
   roundClubsResponseSchema,
   roundResponseSchema,
   sessionResponseSchema,
+  studentClubsResponseSchema,
+  studentRegistrationResponseSchema,
+  studentRoundResponseSchema,
 } from '@club-registration/shared';
 import type {
   AdminClub,
+  CancelRegistrationRequest,
   ChangePasswordRequest,
   ClassroomPasswordStatus,
   CreateRoundBatchRequest,
@@ -24,10 +28,14 @@ import type {
   ImportPreviewResponse,
   IssueInitialPasswordsRequest,
   LoginRequest,
+  RegisterRequest,
   Round,
   RoundClassroomsResponse,
   RoundClubsResponse,
   SessionUser,
+  StudentClubsResponse,
+  StudentRegistrationResponse,
+  StudentRoundResponse,
   UpdateClubRequest,
   UpdateRoundRequest,
 } from '@club-registration/shared';
@@ -230,3 +238,27 @@ export const downloadNameList = async (
     ),
   };
 };
+
+// The student, grade and round come from the session cookie, so these calls take no parameters.
+export const fetchStudentRound = async (): Promise<StudentRoundResponse> =>
+  await sendJson('/api/student/round', 'GET', studentRoundResponseSchema);
+
+export const fetchStudentClubs = async (): Promise<StudentClubsResponse> =>
+  await sendJson('/api/student/clubs', 'GET', studentClubsResponseSchema);
+
+// Both writes answer with the student's registration as it stands afterwards. Sending the same
+// idempotencyKey again replays the first request instead of acting twice.
+export const registerForClub = async (
+  request: RegisterRequest,
+): Promise<StudentRegistrationResponse> =>
+  await sendJson('/api/student/registration', 'POST', studentRegistrationResponseSchema, request);
+
+export const cancelRegistration = async (
+  request: CancelRegistrationRequest,
+): Promise<StudentRegistrationResponse> =>
+  await sendJson(
+    '/api/student/registration/cancel',
+    'POST',
+    studentRegistrationResponseSchema,
+    request,
+  );

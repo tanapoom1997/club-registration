@@ -2,8 +2,7 @@ import type { Role } from '@club-registration/shared';
 
 export type MenuItem = { path: string; label: string; description: string };
 
-// Phase 1 menus only; each is a placeholder until its feature lands. Later phases add their own
-// entries rather than shipping dead links now.
+// Phase 1 menus only. Later phases add their own entries rather than shipping dead links now.
 export const MENUS: Readonly<Record<Role, readonly MenuItem[]>> = Object.freeze({
   student: [
     {
@@ -14,7 +13,7 @@ export const MENUS: Readonly<Record<Role, readonly MenuItem[]>> = Object.freeze(
     {
       path: 'my-registration',
       label: 'ผลของฉัน',
-      description: 'ดูชุมนุมที่ลงทะเบียนไว้ และยกเลิก',
+      description: 'ดูชุมนุมที่ลงทะเบียนไว้ และยกเลิกระหว่างที่รอบเปิดอยู่',
     },
   ],
   admin: [
