@@ -16,6 +16,7 @@ import { TEST_JWT_SECRET, createTestUser } from './support/app.js';
 import type { TestUser } from './support/app.js';
 import { createClub, createRound, uniqueCode, uniqueTerm } from './support/import-db.js';
 import { startMigratedPostgres, stopPostgres } from './support/postgres.js';
+import { waitForAdvisoryLockWaiter } from './support/registration.js';
 
 type InjectResponse = Awaited<ReturnType<FastifyInstance['inject']>>;
 
@@ -66,8 +67,8 @@ describe('admin clubs', () => {
   const patchClub = async (id: number | string, payload: Record<string, unknown>) =>
     await request({ method: 'PATCH', url: `/api/admin/clubs/${id}`, payload });
 
-  // registered is set directly: registration logic does not exist yet, and these tests only need
-  // the counter that the clubs CHECK compares capacity with.
+  // registered is set directly: these tests only need the counter that the clubs CHECK compares
+  // capacity with, not real registrations.
   const setRegistered = async (clubId: number, registered: number) => {
     await pool.query('UPDATE clubs SET registered = $2 WHERE id = $1', [clubId, registered]);
   };
@@ -335,6 +336,37 @@ describe('admin clubs', () => {
       const stored = await storedClub(clubId);
       expect(stored).toMatchObject({ capacity: 10, registered: 6 });
       expect(stored.registered).toBeLessThanOrEqual(stored.capacity);
+    });
+
+    it('waits for the round advisory lock held by a registration in flight', async () => {
+      const { roundId, clubId } = await newClub({ capacity: 10 });
+      await setRegistered(clubId, 5);
+      const registration = await pool.connect();
+      let committed = false;
+      try {
+        // A registration that holds the round lock (CLAUDE.md rule 3) but has not yet touched the
+        // club row: only the advisory lock can make the edit wait for it.
+        await registration.query('BEGIN');
+        await registration.query('SELECT pg_advisory_xact_lock($1::bigint)', [roundId]);
+
+        const pending = patchClub(clubId, { capacity: 5 });
+        await waitForAdvisoryLockWaiter(pool);
+        expect(await storedClub(clubId)).toMatchObject({ capacity: 10 });
+        await registration.query(
+          'UPDATE clubs SET registered = registered + 1 WHERE id = $1 AND registered < capacity',
+          [clubId],
+        );
+        await registration.query('COMMIT');
+        committed = true;
+        const response = await pending;
+
+        expect(response.statusCode).toBe(409);
+        expect(errorOf(response).code).toBe('capacity_below_registered');
+      } finally {
+        if (!committed) await registration.query('ROLLBACK');
+        registration.release();
+      }
+      expect(await storedClub(clubId)).toMatchObject({ capacity: 10, registered: 6 });
     });
 
     it('raises capacity while the round is open', async () => {

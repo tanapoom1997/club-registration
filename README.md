@@ -2,7 +2,7 @@
 
 ระบบลงทะเบียนชุมนุมของโรงเรียน สำหรับนักเรียน ~2,500 คน แบ่งรอบตามชั้น ม.1–ม.6 รอบละ ~400–450 คน
 
-> **สถานะ:** Phase 1 ทำ Auth + role guard เสร็จแล้ว (login, บังคับเปลี่ยนรหัสครั้งแรก, logout, `create-admin`, หน้า FE ตาม role) admin จัดการรอบลงทะเบียนได้แล้ว (`/api/admin/rounds` + หน้า `/admin/rounds`) นำเข้า Excel ได้แล้วทั้งขั้นตรวจ (dry run) และขั้นยืนยัน (`/api/admin/import/preview`, `/api/admin/import/commit` + หน้า `/admin/import`) ออกรหัสผ่านเริ่มต้นให้นักเรียนเป็นไฟล์ Excel ได้แล้ว (`/api/admin/students/password-status`, `/api/admin/students/initial-passwords` + หน้า `/admin/initial-passwords`) ดู/แก้ชุมนุมรายรอบได้แล้ว (`/api/admin/rounds/:roundId/clubs`, `/api/admin/clubs/:id` + หน้า `/admin/clubs`) ส่งออกรายชื่อรายชุมนุม/รายห้องเป็น Excel และ PDF ได้แล้ว (`/api/admin/rounds/:roundId/export` + หน้า `/admin/export`) และนักเรียนอ่านรอบกับรายการชุมนุมของชั้นตัวเองผ่าน API ได้แล้ว (`/api/student/round`, `/api/student/clubs` ยังไม่มีหน้าเว็บ) ต่อจาก monorepo, migration แรก และ `GET /api/health` ยังไม่มี logic ลงทะเบียน เอกสารนี้คือแผนและข้อกำหนดของโปรเจกต์
+> **สถานะ:** Phase 1 ทำ Auth + role guard เสร็จแล้ว (login, บังคับเปลี่ยนรหัสครั้งแรก, logout, `create-admin`, หน้า FE ตาม role) admin จัดการรอบลงทะเบียนได้แล้ว (`/api/admin/rounds` + หน้า `/admin/rounds`) นำเข้า Excel ได้แล้วทั้งขั้นตรวจ (dry run) และขั้นยืนยัน (`/api/admin/import/preview`, `/api/admin/import/commit` + หน้า `/admin/import`) ออกรหัสผ่านเริ่มต้นให้นักเรียนเป็นไฟล์ Excel ได้แล้ว (`/api/admin/students/password-status`, `/api/admin/students/initial-passwords` + หน้า `/admin/initial-passwords`) ดู/แก้ชุมนุมรายรอบได้แล้ว (`/api/admin/rounds/:roundId/clubs`, `/api/admin/clubs/:id` + หน้า `/admin/clubs`) ส่งออกรายชื่อรายชุมนุม/รายห้องเป็น Excel และ PDF ได้แล้ว (`/api/admin/rounds/:roundId/export` + หน้า `/admin/export`) นักเรียนอ่านรอบกับรายการชุมนุมของชั้นตัวเองผ่าน API ได้แล้ว (`/api/student/round`, `/api/student/clubs`) และ**ลง/ยกเลิกชุมนุมผ่าน API ได้แล้ว** (`POST /api/student/registration`, `POST /api/student/registration/cancel`) พร้อม concurrency test 500 request กับ Postgres จริง ยังไม่มีหน้าเว็บนักเรียน ต่อจาก monorepo, migration แรก และ `GET /api/health` เอกสารนี้คือแผนและข้อกำหนดของโปรเจกต์
 >
 > **หมายเหตุ:** ตัวเลข performance ทั้งหมดเป็นการประเมินจากหลักการ ยังไม่ได้วัดจริง ต้อง load test ก่อนใช้งาน
 
@@ -18,7 +18,7 @@
 - **Event log แบบ append-only** ตรวจย้อนหลังได้ว่าใครทำอะไรเมื่อไร
 - **ดูแลง่าย ต้นทุนต่ำ** Docker image เดียวบน EC2 เครื่องเดียว คาดว่าไม่เกิน ~$40 ต่อปี (ประเมิน ยังไม่ได้ตรวจราคาจริง)
 
-> ทั้งหมดเป็นดีไซน์ตามแผน ยังไม่ได้ implement ดูความคืบหน้าที่หัวข้อ [Roadmap](#roadmap)
+> การกันลงเกินที่ระดับ DB, idempotency, concurrency test และ event log ทำแล้วสำหรับการลง/ยกเลิก (Phase 1) ส่วนเปลี่ยนชุมนุมแบบ atomic และ waitlist ยังเป็นดีไซน์ตามแผน ดูความคืบหน้าที่หัวข้อ [Roadmap](#roadmap)
 
 > **เกี่ยวกับ repo นี้:** เป็น Public เพื่อแสดงงาน จะไม่มีข้อมูลนักเรียน ครู หรือ secret จริงอยู่ใน repo เด็ดขาด ตัวอย่างและข้อมูลทดสอบทั้งหมดเป็นข้อมูลสมมติ
 
@@ -121,19 +121,28 @@ password_issuances  -- บันทึกการออกรหัสผ่า
 - `UNIQUE(round_id, club_code)` บน `clubs` → ใช้เป็น key ตอน upsert จาก Excel
 - `UNIQUE(actor_id, idempotency_key)` บน `registration_events` → retry ไม่เกิดซ้ำ
 
-**จุดวิกฤต: การจองที่นั่ง**
+**จุดวิกฤต: การจองที่นั่ง** (ทำแล้วใน `apps/api/src/services/registrations.ts` ทีละ statement ตามลำดับ ใน transaction สั้นๆ เดียว)
 
 ```sql
 BEGIN;
-INSERT INTO registrations (round_id, student_id, club_id) VALUES (...);  -- ซ้ำ → unique_violation
+SELECT round_id, pg_advisory_xact_lock(round_id::bigint) FROM clubs WHERE id = $club;  -- ไม่มี → 404
+SELECT ... FROM registration_events WHERE actor_id = $student AND idempotency_key = $key;  -- เคยทำแล้ว → ตอบซ้ำ
+SELECT grade FROM student_profiles WHERE user_id = $student FOR SHARE;
+WITH target AS (  -- ชั้นตรงกับรอบ + เป็นรอบที่นักเรียนเห็น + อยู่ในช่วงเปิดตามนาฬิกา DB
+  SELECT ... statement_timestamp() >= opens_at AND statement_timestamp() < closes_at AS is_open ...
+), inserted AS (
+  INSERT INTO registrations (round_id, student_id, club_id)
+  SELECT ... FROM target WHERE is_open
+  ON CONFLICT (round_id, student_id) DO NOTHING RETURNING created_at                  -- มีแล้ว → อ่านว่าชุมนุมไหน
+) SELECT ...;
 UPDATE clubs SET registered = registered + 1
-WHERE id = $club AND round_id = $round AND registered < capacity;        -- 0 rows → ROLLBACK "เต็ม"
-INSERT INTO registration_events (...);
+WHERE id = $club AND round_id = $round AND registered < capacity;        -- 0 rows → ROLLBACK 409 club_full
+INSERT INTO registration_events (..., 'register', actor_id = $student, idempotency_key = $key);
 COMMIT;
 ```
 
-- **Idempotent:** client retry เจอ unique violation → ถ้าเป็นชุมนุมเดิมตอบ 200 พร้อมผลเดิม
-- ต้องเช็คใน app ด้วยว่าอยู่ในช่วง `opens_at`–`closes_at` และ `student.grade = round.grade`
+- **Idempotent:** ส่ง key เดิมซ้ำ → ตอบ 200 ไม่เขียนซ้ำ ส่งลงชุมนุมเดิมซ้ำด้วย key ใหม่ (ชนกับ `UNIQUE(round_id, student_id)`) → 200 พร้อม registration เดิม ไม่เขียน event เพิ่ม
+- ช่วงเปิดรอบ (`opens_at` ≤ เวลา < `closes_at`) และ `student.grade = round.grade` เป็นเงื่อนไขของ `INSERT ... SELECT` เอง ไม่ใช่การเช็คใน app ก่อนเขียน (รายละเอียดดู Phase 1 ข้อ 4)
 
 ## Roadmap
 
@@ -145,19 +154,29 @@ COMMIT;
 2. ~~**Admin import Excel:** students, clubs, advisors → dry run → ยืนยัน → upsert ใน transaction เดียว~~ เสร็จแล้ว รวมขั้นออกรหัสผ่านเริ่มต้นให้นักเรียนที่นำเข้า (ดูหัวข้อ [Security](#security))
 3. ~~**Admin จัดการรอบ:** สร้างรอบต่อชั้น กำหนด `opens_at`/`closes_at`~~ เสร็จแล้ว (สร้างทีละชั้นหรือครบ ม.1–ม.6, แก้เวลา/`max_active`, ลบรอบที่ยังไม่มีชุมนุม, สถานะคำนวณตอนอ่าน) และ**หน้าชุมนุมรายรอบ**เสร็จแล้ว:
    - `GET /api/admin/rounds/:roundId/clubs` คืนรอบ (สถานะ + ยอดรวม) และชุมนุมเรียงตามรหัส: ชื่อ, รายละเอียด, จำนวนรับ, ลงแล้ว, เหลือ, ครู (รวมเบอร์/อีเมล/LINE เฉพาะ admin และไม่ log)
-   - `PATCH /api/admin/clubs/:id` แก้ได้เฉพาะชื่อ รายละเอียด จำนวนรับ (รหัสชุมนุมและ `registered` แก้ไม่ได้) ลดจำนวนรับต่ำกว่าที่ลงแล้ว → `409 capacity_below_registered` ซึ่งมาจาก `CHECK` ของ DB ไม่ใช่การเช็คใน app (UPDATE เดียว รอ row lock เดียวกับการลง จึงนับคนที่เพิ่ง commit เสมอ) เพิ่มจำนวนรับระหว่างรอบเปิดได้ (Phase 2 ต้อง promote waitlist ใน transaction เดียวกัน) ไม่รับ `idempotency_key` เหมือน endpoint ของรอบ เพราะส่งซ้ำได้ผลเดิม
+   - `PATCH /api/admin/clubs/:id` แก้ได้เฉพาะชื่อ รายละเอียด จำนวนรับ (รหัสชุมนุมและ `registered` แก้ไม่ได้) ลดจำนวนรับต่ำกว่าที่ลงแล้ว → `409 capacity_below_registered` ซึ่งมาจาก `CHECK` ของ DB ไม่ใช่การเช็คใน app (ใน transaction ที่เริ่มด้วย `pg_advisory_xact_lock(round_id)` ของรอบชุมนุมนั้นเหมือนการลง/ยกเลิก จึงรอการลงที่กำลังทำอยู่ให้ commit ก่อน แล้ว UPDATE เดียวที่ `CHECK` ตัดสินด้วยค่าล่าสุดเสมอ) เพิ่มจำนวนรับระหว่างรอบเปิดได้ (Phase 2 ต้อง promote waitlist ใน transaction เดียวกัน) ไม่รับ `idempotency_key` เหมือน endpoint ของรอบ เพราะส่งซ้ำได้ผลเดิม
    - หน้า `/admin/clubs` เลือกรอบ → ตาราง → แก้ในฟอร์มโดยส่งเฉพาะช่องที่เปลี่ยน poll ทุก 5 วินาทีเฉพาะรอบที่เปิดอยู่ (รอบที่เพิ่งเปิดระหว่างดูหน้าอยู่ต้องโหลดหน้าใหม่) รายละเอียดแสดงเป็นข้อความล้วน
-4. **นักเรียน:** ดูรายการชุมนุมในชั้นตัวเอง (ชื่อครู, ที่เหลือ), ลง, ยกเลิก, ดูผลของฉัน **ส่วนอ่านเสร็จแล้ว** (S1) ส่วนลง/ยกเลิก (S2) และหน้าเว็บนักเรียน (S3) ยังไม่ทำ:
+4. **นักเรียน:** ดูรายการชุมนุมในชั้นตัวเอง (ชื่อครู, ที่เหลือ), ลง, ยกเลิก, ดูผลของฉัน **ฝั่ง API เสร็จแล้ว** ทั้งส่วนอ่าน (S1) และลง/ยกเลิก (S2) เหลือหน้าเว็บนักเรียน (S3):
    - `GET /api/student/round` คืน `{ round, registration }` โดย `round` มี id, ภาคเรียน, ชั้น, เวลาเปิด/ปิด และสถานะ (`upcoming`/`open`/`closed` คำนวณตอนอ่านแบบเดียวกับฝั่ง admin) ไม่มี `maxActive` และยอดรวมที่เป็นของ admin ส่วน `registration` คือชุมนุมที่ตัวเองลงในรอบนั้น (id, รหัส, ชื่อ, เวลาที่ลง) หรือ `null` ชั้นที่ไม่มีรอบเลย = `round: null` ไม่ใช่ error
    - `GET /api/student/clubs` คืน `{ round, registration, clubs }` ชุมนุมของรอบเดียวกันเรียงตามรหัส: ชื่อ, รายละเอียด (ข้อความล้วน), จำนวนรับ, ลงแล้ว, เหลือ และ**ชื่อครูเท่านั้น** (`advisorNames` ลำดับเดียวกับฝั่ง admin) แนบรอบและชุมนุมที่ลงมาด้วยเพื่อให้หน้าเว็บ poll endpoint เดียว ไม่มีรอบ = `clubs: []`
    - **เลือกรอบ:** จากรอบของชั้นตัวเองเท่านั้น เอารอบที่เปิดอยู่ตอนนี้ ถ้าไม่มีเอารอบที่ยังไม่เปิดที่จะเปิดเร็วสุด ถ้าไม่มีอีกเอารอบที่ปิดล่าสุด (ไว้ดูผลของตัวเอง) ได้รอบเดียวหรือไม่มีเลย ถ้า admin ตั้งช่วงเวลาของสองภาคเรียนทับกันจนเปิดพร้อมกัน เลือกรอบที่ปิดเร็วสุด เลือกด้วย `ORDER BY … LIMIT 1` โดยใช้เวลาเดียวกับที่คำนวณสถานะ
    - นักเรียน ชั้น และรอบมาจาก session เท่านั้น ไม่มีพารามิเตอร์ใน path และใส่ query ใดๆ = `400` (query เป็น strict เหมือน export) admin = `403`, ไม่มี session = `401`, ยังไม่เปลี่ยนรหัสครั้งแรก = `403 password_change_required` บัญชีนักเรียนที่ไม่มี `student_profiles` = `403 student_profile_missing` (import สร้างคู่กันเสมอ จึงเกิดได้แค่บัญชีที่สร้างทางอื่น ตอบแบบนี้แทน `round: null` เพื่อไม่ให้นักเรียนเข้าใจว่าชั้นตัวเองไม่มีรอบ และรู้ว่าต้องติดต่อ admin บัญชีแบบนี้ลงทะเบียนไม่ได้อยู่แล้วเพราะ `registrations` อ้าง `student_profiles`)
    - อ่านทั้งหมดใน read-only snapshot เดียวต่อ request รอบ ชุมนุมที่ลง และยอดของทุกชุมนุมจึงเป็นเวลาเดียวกัน ไม่มี side effect ไม่ log ชื่อนักเรียน ชุมนุม หรือครู
-5. **กติกาที่ DB:** 1 คน 1 ชุมนุม, ห้ามเกิน capacity, เฉพาะชั้นตัวเอง, เฉพาะช่วงเปิดรอบ
-6. **Idempotency + event log**
+   - **ลง (S2):** `POST /api/student/registration` body `{ "clubId": 12, "idempotencyKey": "<16–128 ตัว A-Z a-z 0-9 _ ->" }` ตอบ `200 { "registration": { "club": { "id", "clubCode", "name" }, "registeredAt" } }` (รูปเดียวกับ S1) ลำดับใน transaction ดูหัวข้อ [จุดวิกฤต](#data-model) ชุมนุมที่ไม่มี ชุมนุมของชั้นอื่น และชุมนุมของรอบอื่นในชั้นตัวเองที่ไม่ใช่รอบที่นักเรียนเห็น (เลือกแบบเดียวกับ S1 ด้วยนาฬิกา DB ใน statement เดียวกับ INSERT) ตอบ `404 not_found` เหมือนกันหมด ไม่บอกว่ามีอยู่จริง
+   - **ยกเลิก (S2):** `POST /api/student/registration/cancel` body `{ "idempotencyKey": "..." }` ยกเลิกชุมนุมของตัวเองในรอบที่นักเรียนเห็น (เลือกรอบแบบ S1 ด้วยนาฬิกา DB) → lock รอบ → idempotency → `DELETE` ที่มีเงื่อนไขช่วงเปิดรอบใน statement เดียวกัน → `registered = registered - 1` (`CHECK registered >= 0` กันติดลบ) → event `cancel` พร้อม `club_id` ตอบ `200 { "registration": null }`
+   - **Error (409 ทั้งหมด):** `club_full` (UPDATE เงื่อนไข `registered < capacity` ได้ 0 แถว ROLLBACK ทั้งหมดรวมแถวที่เพิ่ง INSERT), `already_registered` (มีชุมนุมอื่นในรอบนี้แล้ว ต้องยกเลิกก่อน ตรวจก่อน `club_full`), `round_not_open` (ก่อนเปิด หลังปิด หรือชั้นนี้ไม่มีรอบเลย ตอนยกเลิก), `not_registered` (ยกเลิกทั้งที่ไม่มีชุมนุม), `idempotency_key_reused` ส่วน `404 not_found` ตามข้อบน, `400` body ไม่ตรง schema (strict: ใส่ `studentId`, `roundId` หรือ field อื่น = `400`, `clubId` ต้องเป็นตัวเลข JSON ไม่ใช่ข้อความ), `401` ไม่มี session, `403` admin / ยังไม่เปลี่ยนรหัสครั้งแรก / ไม่มี `student_profiles`, `415` ไม่ใช่ JSON, `429` เกิน rate limit
+   - **Idempotency:** key อยู่ใน `registration_events` (`UNIQUE(actor_id, idempotency_key)`, actor = นักเรียนเอง) ส่ง key เดิมซ้ำเป็นคำขอเดียวกัน (ชนิดเดียวกัน และชุมนุมเดียวกันสำหรับการลง) → `200` ไม่เขียนอะไรเพิ่ม และตอบด้วย**สถานะปัจจุบัน**ของนักเรียนในรอบที่คำขอแรกทำ ไม่ใช่สำเนาคำตอบเดิม (เช่น ลงด้วย key A → ยกเลิก → ส่งการลงด้วย key A ซ้ำ ได้ `200 { "registration": null }`) ตอบซ้ำได้แม้รอบปิดไปแล้ว ใช้ key เดิมกับคำขออื่น (ชุมนุมอื่น หรือใช้ key ของการลงไปยกเลิก) → `409 idempotency_key_reused` คำขอที่ถูกปฏิเสธ (เช่น `club_full`) ไม่ทิ้ง event จึงส่ง key เดิมซ้ำทีหลังได้และจะถูกประมวลผลใหม่ key แยกต่อนักเรียน (คนละคนใช้ key ซ้ำกันได้) ส่งลงชุมนุมที่ถืออยู่แล้วด้วย key ใหม่ → `200` registration เดิม ไม่เขียน event (ตอบได้แม้รอบปิด เพราะไม่ได้เขียนอะไร)
+   - **นาฬิกา:** การเขียนตัดสินช่วงเปิดด้วยนาฬิกา DB (`statement_timestamp()` ของ statement ที่เขียน ซึ่งรันหลังได้ lock แล้ว) request ที่รอ lock ข้าม `closes_at` จึงถูกปฏิเสธ และทุก process ใช้นาฬิกาเดียวกัน ส่วนสถานะที่ S1 แสดงคำนวณจากนาฬิกาของ app ซึ่งบนเครื่องเดียวที่ deploy คือนาฬิการะบบเดียวกัน ต่างกันแค่ช่วงเวลาระหว่างอ่านกับเขียน ถ้าหน้าเว็บเห็น "เปิด" อยู่เสี้ยววินาทีก่อนปิดแล้วได้ `round_not_open` ให้ถือผลของการเขียน
+   - **Lock:** ทุก transaction ลง/ยกเลิกเริ่มด้วย `pg_advisory_xact_lock(round_id)` (แบบ bigint ตัวเดียว ซึ่งเป็นคนละ key space กับ `pg_advisory_xact_lock(1, 1)` แบบ int4 สองตัวของ import จึงไม่ชนกัน) และล็อกแถว `student_profiles` ของตัวเองแบบ `FOR SHARE` ก่อน INSERT เพื่อไม่ให้ import ที่กำลังย้ายชั้นนักเรียนคนนั้นแทรกกลาง
+   - **Rate limit:** 30 ครั้ง/นาที ต่อนักเรียน นับรวมการลงและยกเลิก (คลิกจริงไม่กี่ครั้งบวก retry อัตโนมัติ) store ใน memory ตามเครื่องเดียว นับเฉพาะ request ที่ผ่าน guard และ validation แล้ว
+   - **Log:** เฉพาะ student id, round id, club id และผล (`registered`/`already_held`/`replayed`/`cancelled` หรือรหัส error) ไม่ log ชื่อนักเรียน ชุมนุม หรือครู
+   - logic เป็นฟังก์ชันที่รับ DB client ของ transaction (`registerForClub`, `cancelRegistration`) route เป็นคนเปิด transaction Phase 2 จึงประกอบหลายขั้นใน transaction เดียวได้
+5. ~~**กติกาที่ DB:** 1 คน 1 ชุมนุม, ห้ามเกิน capacity, เฉพาะชั้นตัวเอง, เฉพาะช่วงเปิดรอบ~~ เสร็จแล้ว (S2): `UNIQUE(round_id, student_id)`, `CHECK` + `UPDATE ... WHERE registered < capacity`, ชั้นและช่วงเปิดเป็นเงื่อนไขของ `INSERT ... SELECT`/`DELETE` ตามนาฬิกา DB
+6. ~~**Idempotency + event log**~~ เสร็จแล้ว (S2): ทุกการลง/ยกเลิกเขียน `registration_events` พร้อม `idempotency_key` ใน transaction เดียวกัน (ตาราง append-only ด้วย trigger)
 7. **Admin export:** รายชื่อแบบ **รายชุมนุม** และ **รายห้อง** เลือกได้ทั้ง **Excel** และ **PDF** (รายละเอียดดูหัวข้อ [Export รายชื่อ](#export-รายชื่อ)) ทั้ง Excel (A6a) และ PDF (A6b) **เสร็จแล้ว**
 8. **Ops:** Dockerfile, `docker-compose.yml`, Caddy HTTPS, `/api/health`, migration script แยก, graceful shutdown, backup `pg_dump` ไป S3, runbook (deploy/backup/restore/เปิด-ปิดเครื่อง)
-9. **Test:** concurrency test + invariant `clubs.registered` = จำนวน registration จริง
+9. ~~**Test:** concurrency test + invariant `clubs.registered` = จำนวน registration จริง~~ เสร็จแล้ว (S2): `apps/api/test/registration-concurrency.test.ts` (500 นักเรียนแย่ง 30 ที่ → 200 พอดี 30 ที่เหลือ `club_full` 470, คนเดียวกดหลายชุมนุมพร้อมกันได้ชุมนุมเดียว, key เดียวกันพร้อมกันเกิดผลครั้งเดียว, ยกเลิกแข่งกับลง, ยกเลิกแล้วคนอื่นแย่งที่ว่าง) และตัวตรวจ invariant `registrationInvariantViolations` (`apps/api/test/support/registration.ts`: `registered` = จำนวนแถว, อยู่ใน 0..capacity, 1 คน 1 แถวต่อรอบ, ชั้นนักเรียน = ชั้นรอบ, ชุมนุมอยู่ในรอบเดียวกัน, register − cancel ตรงกับที่นั่งทั้งรายคนและรายชุมนุม, event ล่าสุดตรงกับชุมนุมที่ถือ) รันหลังทุกเทสต์ของไฟล์ลง/ยกเลิก
+   - **วัดจริงในเทสต์** (เครื่องพัฒนา 4 vCPU ไม่ใช่สเปค production, pool 20, ผ่าน `app.inject` ใน process เดียว ไม่มี network, 4 รอบ): 500 request พร้อมกันจบทั้งหมดใน 2.4–2.6 วินาที (เฉลี่ย ~5 ms ต่อ request เพราะเรียงกันด้วย lock ของรอบ) ต้อง load test บนเครื่องจริง ข้อควรระวัง: ทุก transaction ในรอบเรียงกันด้วย lock และ request ที่รอ connection จาก pool เกิน 5 วินาที (`connectionTimeoutMillis`) จะได้ 500 ถ้าเครื่องจริงช้ากว่านี้หลายเท่า ต้องปรับ pool/timeout หรือเปิด queue (Phase 3)
 
 **ยังไม่อยู่ใน Phase 1:** queue, waitlist, เปลี่ยนชุมนุมแบบ atomic, admin เพิ่ม/ลบ/ย้ายนักเรียนแทน
 
@@ -167,7 +186,7 @@ COMMIT;
 
 ### Phase 2: เปลี่ยนชุมนุม + Waitlist + Admin แก้แทน
 
-**Locking:** ทุก write transaction ในรอบเริ่มด้วย `SELECT pg_advisory_xact_lock($round_id)` → serialize ต่อรอบ ไม่มี deadlock และ logic ง่าย (แลกกับการไม่ขนานข้ามชุมนุม ซึ่งที่ ~450 คนต่อรอบน่าจะรับได้ ต้อง load test)
+**Locking:** ทุก write transaction ในรอบเริ่มด้วย `SELECT pg_advisory_xact_lock($round_id)` → serialize ต่อรอบ ไม่มี deadlock และ logic ง่าย (แลกกับการไม่ขนานข้ามชุมนุม ซึ่งที่ ~450 คนต่อรอบน่าจะรับได้ ต้อง load test) **ใช้ตั้งแต่ Phase 1 แล้ว** กับการลง/ยกเลิกและ admin แก้ชุมนุม (`apps/api/src/services/round-lock.ts`) endpoint ของ Phase 2 ต้องใช้ helper เดียวกัน
 
 **เปลี่ยนชุมนุมแบบ atomic:** transaction เดียว: `+1` ที่ใหม่ (เงื่อนไข `registered < capacity`), `-1` ที่เดิม, อัปเดต registration, เขียน event ถ้าที่ใหม่เต็ม → ROLLBACK นักเรียนยังอยู่ที่เดิม
 
@@ -289,7 +308,7 @@ Admin เลือก **รอบ** → เลือก **มุมมอง** (
   - log เฉพาะ admin id, ขอบเขต, จำนวน และเวลา ไม่ log ชื่อ รหัสนักเรียน หรือรหัสผ่าน rate limit 20 ครั้ง/10 นาที ต่อ admin
   - วัดจริงในเทสต์ (เครื่องพัฒนา 4 vCPU ไม่ใช่สเปค production, 4 รอบ): ออกรหัส 450 คนใช้ 6.6–7.1 วินาทีต่อ request เกือบทั้งหมดคือ hash ส่วน transaction + สร้างไฟล์ใช้ไม่ถึง 0.1 วินาที ต้องวัดซ้ำบนเครื่องจริง
 - **ตรวจสิทธิ์ที่ server ทุก endpoint** ไม่เชื่อ role/`student_id` จาก client ใช้ค่าจาก JWT เท่านั้น
-- **Rate limit** ที่ `/auth/login` และ endpoint เขียน
+- **Rate limit** ที่ `/auth/login` และ endpoint เขียน (ลง/ยกเลิกของนักเรียน 30 ครั้ง/นาที ต่อนักเรียน)
 - **Session:** JWT (HS256, อายุ 2 ชม.) อยู่ใน cookie `HttpOnly; Secure; SameSite=Strict; Path=/api` ไม่เก็บใน `localStorage` ทุก request เช็ค `users.session_version` กับค่าใน token → logout หรือเปลี่ยนรหัส = token เก่าทุกเครื่องใช้ไม่ได้ทันที (สำคัญกับคอมห้องแล็บที่ใช้ร่วมกัน) และถ้า role ใน DB เปลี่ยน token เดิมก็ใช้ไม่ได้
 - **บังคับเปลี่ยนรหัสครั้งแรก:** ถ้า `must_change_password` ทุก route ตอบ `403 password_change_required` ยกเว้น `/auth/me`, `/auth/change-password`, `/auth/logout`
 - **CSRF:** `SameSite=Strict` + endpoint เขียนรับเฉพาะ JSON (form ข้ามเว็บส่ง `application/json` ไม่ได้ถ้าไม่ผ่าน CORS preflight ซึ่งเราไม่เปิด) ส่วน route อัปโหลด (multipart ซึ่ง form ข้ามเว็บส่งได้) ตรวจเพิ่มว่า `Sec-Fetch-Site` เป็น `same-origin`/`none` หรือถ้าไม่มี header นี้ `Origin` (ถ้าส่งมา) ต้องตรงกับ host (`apps/api/src/http/same-origin.ts`) ไม่ผ่าน = `403`
@@ -378,4 +397,4 @@ EC2 (t4g.small) ──► Caddy (HTTPS อัตโนมัติ)
 
 ## ขั้นตอนถัดไป
 
-ทำต่อใน **Phase 1**: endpoint ลง/ยกเลิก **พร้อม concurrency test** (S2) และหน้านักเรียน (S3) → Ops (scaffold, migration แรก, auth + role guard, จัดการรอบ, import Excel, รหัสผ่านเริ่มต้น, หน้าชุมนุม, export Excel/PDF และ API อ่านของนักเรียนเสร็จแล้ว)
+ทำต่อใน **Phase 1**: หน้านักเรียน (S3) → Ops (scaffold, migration แรก, auth + role guard, จัดการรอบ, import Excel, รหัสผ่านเริ่มต้น, หน้าชุมนุม, export Excel/PDF, API อ่านของนักเรียน และ API ลง/ยกเลิกพร้อม concurrency test เสร็จแล้ว)

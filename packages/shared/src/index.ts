@@ -30,6 +30,7 @@ export {
   TERM_MAX_LENGTH,
   createRoundBatchRequestSchema,
   createRoundRequestSchema,
+  dbIdBodySchema,
   dbIdSchema,
   gradeSchema,
   listRoundsQuerySchema,
@@ -148,18 +149,24 @@ export type {
   RoundExportParams,
 } from './export.js';
 export {
+  cancelRegistrationRequestSchema,
+  registerRequestSchema,
   studentClubSchema,
   studentClubsResponseSchema,
   studentQuerySchema,
+  studentRegistrationResponseSchema,
   studentRegistrationSchema,
   studentRoundResponseSchema,
   studentRoundSchema,
 } from './student.js';
 export type {
+  CancelRegistrationRequest,
+  RegisterRequest,
   StudentClub,
   StudentClubsResponse,
   StudentQuery,
   StudentRegistration,
+  StudentRegistrationResponse,
   StudentRound,
   StudentRoundResponse,
 } from './student.js';
