@@ -2,7 +2,7 @@
 
 ระบบลงทะเบียนชุมนุมของโรงเรียน สำหรับนักเรียน ~2,500 คน แบ่งรอบตามชั้น ม.1–ม.6 รอบละ ~400–450 คน
 
-> **สถานะ:** Phase 1 ทำ Auth + role guard เสร็จแล้ว (login, บังคับเปลี่ยนรหัสครั้งแรก, logout, `create-admin`, หน้า FE ตาม role) admin จัดการรอบลงทะเบียนได้แล้ว (`/api/admin/rounds` + หน้า `/admin/rounds`) นำเข้า Excel ได้แล้วทั้งขั้นตรวจ (dry run) และขั้นยืนยัน (`/api/admin/import/preview`, `/api/admin/import/commit` + หน้า `/admin/import`) ออกรหัสผ่านเริ่มต้นให้นักเรียนเป็นไฟล์ Excel ได้แล้ว (`/api/admin/students/password-status`, `/api/admin/students/initial-passwords` + หน้า `/admin/initial-passwords`) ดู/แก้ชุมนุมรายรอบได้แล้ว (`/api/admin/rounds/:roundId/clubs`, `/api/admin/clubs/:id` + หน้า `/admin/clubs`) ส่งออกรายชื่อรายชุมนุม/รายห้องเป็น Excel และ PDF ได้แล้ว (`/api/admin/rounds/:roundId/export` + หน้า `/admin/export`) นักเรียนอ่านรอบกับรายการชุมนุมของชั้นตัวเองผ่าน API ได้แล้ว (`/api/student/round`, `/api/student/clubs`) และ**ลง/ยกเลิกชุมนุมผ่าน API ได้แล้ว** (`POST /api/student/registration`, `POST /api/student/registration/cancel`) พร้อม concurrency test 500 request กับ Postgres จริง และ**มีหน้าเว็บนักเรียนแล้ว** (`/student/clubs` ดูชุมนุมและลง, `/student/my-registration` ดูผลและยกเลิก) งาน Ops เริ่มแล้ว: **มี production Docker image แล้ว** (O1: `api` และ `web` จาก `Dockerfile` ที่ root พร้อม `scripts/smoke-images.sh` ใน CI ดูหัวข้อ [Infra และ Deployment](#infra-และ-deployment)) ต่อจาก monorepo, migration แรก และ `GET /api/health` เอกสารนี้คือแผนและข้อกำหนดของโปรเจกต์
+> **สถานะ:** Phase 1 ทำ Auth + role guard เสร็จแล้ว (login, บังคับเปลี่ยนรหัสครั้งแรก, logout, `create-admin`, หน้า FE ตาม role) admin จัดการรอบลงทะเบียนได้แล้ว (`/api/admin/rounds` + หน้า `/admin/rounds`) นำเข้า Excel ได้แล้วทั้งขั้นตรวจ (dry run) และขั้นยืนยัน (`/api/admin/import/preview`, `/api/admin/import/commit` + หน้า `/admin/import`) ออกรหัสผ่านเริ่มต้นให้นักเรียนเป็นไฟล์ Excel ได้แล้ว (`/api/admin/students/password-status`, `/api/admin/students/initial-passwords` + หน้า `/admin/initial-passwords`) ดู/แก้ชุมนุมรายรอบได้แล้ว (`/api/admin/rounds/:roundId/clubs`, `/api/admin/clubs/:id` + หน้า `/admin/clubs`) ส่งออกรายชื่อรายชุมนุม/รายห้องเป็น Excel และ PDF ได้แล้ว (`/api/admin/rounds/:roundId/export` + หน้า `/admin/export`) นักเรียนอ่านรอบกับรายการชุมนุมของชั้นตัวเองผ่าน API ได้แล้ว (`/api/student/round`, `/api/student/clubs`) และ**ลง/ยกเลิกชุมนุมผ่าน API ได้แล้ว** (`POST /api/student/registration`, `POST /api/student/registration/cancel`) พร้อม concurrency test 500 request กับ Postgres จริง และ**มีหน้าเว็บนักเรียนแล้ว** (`/student/clubs` ดูชุมนุมและลง, `/student/my-registration` ดูผลและยกเลิก) งาน Ops เริ่มแล้ว: **มี production Docker image แล้ว** (O1: `api` และ `web` จาก `Dockerfile` ที่ root พร้อม `scripts/smoke-images.sh` ใน CI) และ**มี Compose ของ production แล้ว** (O2: `compose.prod.yml` + `deploy/production.env.example` HTTPS อัตโนมัติด้วย Caddy เมื่อมี domain พร้อม `scripts/smoke-compose.sh` ใน CI) ดูหัวข้อ [Infra และ Deployment](#infra-และ-deployment) ต่อจาก monorepo, migration แรก และ `GET /api/health` เอกสารนี้คือแผนและข้อกำหนดของโปรเจกต์
 >
 > **หมายเหตุ:** ตัวเลข performance ทั้งหมดเป็นการประเมินจากหลักการ ยังไม่ได้วัดจริง ต้อง load test ก่อนใช้งาน
 
@@ -84,11 +84,13 @@ club-registration/
 │   └── web/        # Vite + React
 ├── packages/
 │   └── shared/     # Zod schema + type ที่ใช้ร่วมกัน
-├── scripts/        # smoke-images.sh ทดสอบ image จริง (CI job images)
+├── deploy/         # production.env.example (template ของ env file production ไม่มีค่าจริง)
+├── scripts/        # smoke-images.sh, smoke-compose.sh ทดสอบ image และ compose จริง (CI job images)
 ├── templates/      # Excel template เปล่า (ไม่มีข้อมูลจริง)
 ├── Dockerfile      # target api และ web
 ├── .dockerignore   # allowlist ของ build context
-├── docker-compose.yml
+├── docker-compose.yml  # Postgres สำหรับ dev เท่านั้น
+├── compose.prod.yml    # stack ของ production (postgres, migrate, api, web)
 ├── Caddyfile       # อยู่ใน image web
 ├── .env.example
 └── pnpm-workspace.yaml
@@ -181,8 +183,9 @@ COMMIT;
 7. **Admin export:** รายชื่อแบบ **รายชุมนุม** และ **รายห้อง** เลือกได้ทั้ง **Excel** และ **PDF** (รายละเอียดดูหัวข้อ [Export รายชื่อ](#export-รายชื่อ)) ทั้ง Excel (A6a) และ PDF (A6b) **เสร็จแล้ว**
 8. **Ops:** Dockerfile, `docker-compose.yml`, Caddy HTTPS, `/api/health`, migration script แยก, graceful shutdown, backup `pg_dump` ไป S3, runbook (deploy/backup/restore/เปิด-ปิดเครื่อง) แบ่งเป็น O1 image → O2 compose production + Caddy HTTPS/limits → O3 backup/restore → O4 runbook EC2 → O5 load test
    - ~~**O1 image**~~ เสร็จแล้ว: `Dockerfile` (target `api`, `web`), `Caddyfile`, `.dockerignore`, `scripts/smoke-images.sh` และ CI job `images` รายละเอียดดู [Infra และ Deployment](#infra-และ-deployment)
+   - ~~**O2 compose production**~~ เสร็จแล้ว: `compose.prod.yml` (postgres, migrate, api, web พร้อม healthcheck, memory limit, log rotation, network แยก), `deploy/production.env.example`, Caddy HTTPS + HSTS + จำกัดขนาด body, ตั้ง pool/timeout ของ DB ผ่าน env (`DB_*`), `scripts/smoke-compose.sh` ใน CI job `images` รายละเอียดดู [Compose ของ production (O2)](#compose-ของ-production-o2)
 9. ~~**Test:** concurrency test + invariant `clubs.registered` = จำนวน registration จริง~~ เสร็จแล้ว (S2): `apps/api/test/registration-concurrency.test.ts` (500 นักเรียนแย่ง 30 ที่ → 200 พอดี 30 ที่เหลือ `club_full` 470, คนเดียวกดหลายชุมนุมพร้อมกันได้ชุมนุมเดียว, key เดียวกันพร้อมกันเกิดผลครั้งเดียว, ยกเลิกแข่งกับลง, ยกเลิกแล้วคนอื่นแย่งที่ว่าง) และตัวตรวจ invariant `registrationInvariantViolations` (`apps/api/test/support/registration.ts`: `registered` = จำนวนแถว, อยู่ใน 0..capacity, 1 คน 1 แถวต่อรอบ, ชั้นนักเรียน = ชั้นรอบ, ชุมนุมอยู่ในรอบเดียวกัน, register − cancel ตรงกับที่นั่งทั้งรายคนและรายชุมนุม, event ล่าสุดตรงกับชุมนุมที่ถือ) รันหลังทุกเทสต์ของไฟล์ลง/ยกเลิก
-   - **วัดจริงในเทสต์** (เครื่องพัฒนา 4 vCPU ไม่ใช่สเปค production, pool 20, ผ่าน `app.inject` ใน process เดียว ไม่มี network, 4 รอบ): 500 request พร้อมกันจบทั้งหมดใน 2.4–2.6 วินาที (เฉลี่ย ~5 ms ต่อ request เพราะเรียงกันด้วย lock ของรอบ) ต้อง load test บนเครื่องจริง ข้อควรระวัง: ทุก transaction ในรอบเรียงกันด้วย lock และ request ที่รอ connection จาก pool เกิน 5 วินาที (`connectionTimeoutMillis`) จะได้ 500 ถ้าเครื่องจริงช้ากว่านี้หลายเท่า ต้องปรับ pool/timeout หรือเปิด queue (Phase 3)
+   - **วัดจริงในเทสต์** (เครื่องพัฒนา 4 vCPU ไม่ใช่สเปค production, pool 20, ผ่าน `app.inject` ใน process เดียว ไม่มี network, 4 รอบ): 500 request พร้อมกันจบทั้งหมดใน 2.4–2.6 วินาที (เฉลี่ย ~5 ms ต่อ request เพราะเรียงกันด้วย lock ของรอบ) ต้อง load test บนเครื่องจริง ข้อควรระวัง: ทุก transaction ในรอบเรียงกันด้วย lock และ request ที่รอ connection จาก pool เกิน 5 วินาที (`connectionTimeoutMillis`) จะได้ 500 ถ้าเครื่องจริงช้ากว่านี้หลายเท่า ต้องปรับ pool/timeout (ตั้งได้ด้วย env `DB_POOL_MAX`, `DB_CONNECTION_TIMEOUT_MS` ฯลฯ ไม่ต้อง build ใหม่) หรือเปิด queue (Phase 3)
 
 **ยังไม่อยู่ใน Phase 1:** queue, waitlist, เปลี่ยนชุมนุมแบบ atomic, admin เพิ่ม/ลบ/ย้ายนักเรียนแทน
 
@@ -325,7 +328,7 @@ Admin เลือก **รอบ** → เลือก **มุมมอง** (
 - **Rate limit login:** 10 ครั้ง/15 นาที ต่อ IP + รหัสผู้ใช้ (คนอื่นแกล้งล็อกบัญชีนักเรียนจากที่อื่นไม่ได้) และ 600 ครั้ง/นาที ต่อ IP ที่ตั้งสูงเพราะทั้งโรงเรียนอาจออก NAT IP เดียว **ต้องปรับตอน load test** store อยู่ใน memory ใช้ได้เพราะเป็นเครื่องเดียว และหลัง Caddy ต้องตั้ง `TRUST_PROXY=true` ไม่อย่างนั้นทุก request จะมี IP ของ Caddy และนับรวมเป็นก้อนเดียว
 - **Login ที่ไม่มีผู้ใช้** ยังคำนวณ argon2 หนึ่งรอบ เวลาตอบจึงไม่บอกว่ารหัสนักเรียนไหนมีอยู่จริง
 - **Admin คนแรก:** `pnpm --filter api create-admin <login_id>` สุ่มรหัส 16 ตัว แสดงครั้งเดียว เก็บแค่ hash และต้องเปลี่ยนตอน login แรก
-- **Secret:** `JWT_SECRET`, DB password อยู่ใน env / SSM Parameter Store ห้ามอยู่ใน repo หรือ image
+- **Secret:** `JWT_SECRET`, DB password อยู่ใน env / SSM Parameter Store ห้ามอยู่ใน repo หรือ image บนเครื่องเก็บใน `deploy/production.env` (`chmod 600`, gitignored ด้วย `*.env`) ที่ทำจาก `deploy/production.env.example` ซึ่งไม่มีค่าจริง
 - **ข้อมูลติดต่อครู** (เบอร์, อีเมล, LINE ID ทุกช่องเป็น optional): เห็นเฉพาะ admin (หน้า `/admin/clubs`) **นักเรียนเห็นแค่ชื่อครู** query ฝั่งนักเรียนไม่ SELECT คอลัมน์ติดต่อเลย (ใช้ `ADVISOR_NAMES_JOIN` ใน `services/clubs.ts` ตัวเดียวกับ export รายชุมนุม) และ response schema ของนักเรียนไม่มีช่องเหล่านี้ (serializer ตัดช่องที่ไม่อยู่ใน schema ทิ้งอีกชั้น) ถ้าวันหนึ่งจะให้นักเรียน ~2,500 คนเห็นช่องทางติดต่อ ต้องให้ครูยินยอมก่อน และใช้ช่องทางกลางของโรงเรียนถ้ามี
 - **Frontend:** ห้าม `dangerouslySetInnerHTML` กับ `description` ที่ admin กรอก
 - **Log:** ไม่ใส่ secret/PII พอสำหรับ debug
@@ -344,12 +347,12 @@ EC2 (t4g.small) ──► web: Caddy (HTTPS อัตโนมัติเมื
                       └─► api: Fastify (/api/*) ──► postgres (container + volume)
 ```
 
-**Image (O1)**
+### Image (O1)
 
 | | `api` | `web` |
 |---|---|---|
 | Base | `node:24.22.3-slim` (Debian bookworm) | `caddy:2.11.9-alpine` |
-| ข้างใน | `/app/apps/api/` = `dist/`, `migrations/`, `assets/fonts/` (Sarabun + `OFL.txt`), `package.json`, `node_modules` เฉพาะ production (จาก `pnpm --filter api deploy --prod` ซึ่งใส่ `dist/` ของ `packages/shared` มาเป็นโฟลเดอร์จริง) และ `/app/templates/import-template.xlsx` | ไฟล์ build ของ `apps/web` ใน `/srv` และ `Caddyfile` ใน `/etc/caddy/` (ตรวจด้วย `caddy validate` ตอน build) |
+| ข้างใน | `/app/apps/api/` = `dist/`, `migrations/`, `assets/fonts/` (Sarabun + `OFL.txt`), `package.json`, `node_modules` เฉพาะ production (จาก `pnpm --filter api deploy --prod` ซึ่งใส่ `dist/` ของ `packages/shared` มาเป็นโฟลเดอร์จริง) และ `/app/templates/import-template.xlsx` ไม่มี entry point ของ dev (`seed-dev`, `generate-template`, `dist/dev/`) ซึ่งถูกลบตอน build | ไฟล์ build ของ `apps/web` ใน `/srv` และ `Caddyfile` ใน `/etc/caddy/` (ตรวจด้วย `caddy validate` ตอน build ในโฟลเดอร์ชั่วคราว `/data` ของ image จึงว่างเสมอ ไม่มี CA หรือ key ติดไป) |
 | User | `node` (uid 1000) ไฟล์ทั้งหมดเป็นของ root app แก้โค้ดตัวเองไม่ได้ | `caddy` (uid 1000) สร้างเองเพราะ image ทางการรันเป็น root ยัง bind พอร์ต 80/443 ได้เพราะ Docker ตั้ง `net.ipv4.ip_unprivileged_port_start=0` ให้ container |
 | ขนาด (amd64, วัดจาก smoke) | 479 MB บนดิสก์ (base `node:24-slim` 333 MB) | 92.5 MB |
 
@@ -360,9 +363,11 @@ EC2 (t4g.small) ──► web: Caddy (HTTPS อัตโนมัติเมื
 - **Build หลัง proxy ที่ดักถอด TLS:** ส่ง CA เป็น build secret `docker build --secret id=extra_ca,src=<pem> …` (ไม่ถูกเขียนลง layer) ปกติไม่ต้องใช้
 - **api:** `CMD ["node", "dist/server.js"]` แบบ exec form node ได้ SIGTERM จาก `docker stop` เองแล้วปิด Fastify กับ pool ก่อนออก (smoke วัดได้ไม่ถึง 1 วินาที exit code 0) `HEALTHCHECK` ใช้ node ยิง `GET /api/health` (slim ไม่มี curl, DB ล่ม = 503 = unhealthy) ทุก 30 วินาที ช่วงเริ่มทุก 2 วินาที (`--start-interval` ต้องใช้ Docker Engine ≥ 25) migration และสร้าง admin เป็นคำสั่งแยกใน image เดียวกัน
 - **web:** `Caddyfile` ที่ root อ่าน env 2 ตัว (ตารางข้างล่าง) cache: ไฟล์ใน `/assets/` มี hash ในชื่อ ได้ `Cache-Control: public, max-age=31536000, immutable` เฉพาะไฟล์ที่มีจริง (ไฟล์ที่ไม่มี = 404 ไม่ fallback เป็น `index.html`) ที่เหลือรวม `index.html` เป็น `no-cache` (revalidate ด้วย ETag deploy ใหม่จึงเห็นทันที) บีบอัด zstd/gzip ไม่เขียน access log (จะมี IP และ path ของนักเรียนทุกคน) Caddy เขียนทับ `X-Forwarded-For` ที่ client ส่งมาเอง api จึงตั้ง `TRUST_PROXY=true` ได้โดยปลอม IP ไม่ได้
-- **Security headers ของหน้าเว็บ** (เฉพาะที่ไม่ใช่ `/api/*` ซึ่งใช้ของ `@fastify/helmet` ใน api อยู่แล้ว ไม่ซ้ำกัน): `Content-Security-Policy: default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self'; font-src 'self'; connect-src 'self'; object-src 'none'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'` (ไม่มี `'unsafe-inline'`/`'unsafe-eval'`), `X-Content-Type-Options: nosniff`, `X-Frame-Options: DENY`, `Referrer-Policy: no-referrer`, `Permissions-Policy` ปิดกล้อง ไมค์ ตำแหน่ง การจ่ายเงิน USB ตรวจใน Chromium จริงแล้วว่าไม่มี CSP violation (login, เปลี่ยนรหัส, หน้า admin, ดาวน์โหลด template และดาวน์โหลดแบบ blob) zod ทดสอบ eval ด้วย `new Function` ตอนสร้าง schema ซึ่ง CSP รายงานเป็น violation ทุกหน้า หน้าเว็บจึง import `@club-registration/shared/zod-jitless` เป็นอันแรกใน `main.tsx` เพื่อปิด JIT ของ zod ก่อน (api ไม่ import จึงยังใช้ JIT) `upgrade-insecure-requests` และ HSTS ยังไม่ใส่เพราะยังเป็น HTTP จนกว่าจะมี domain (O2)
+- **Security headers ของหน้าเว็บ** (เฉพาะที่ไม่ใช่ `/api/*` ซึ่งใช้ของ `@fastify/helmet` ใน api อยู่แล้ว ไม่ซ้ำกัน): `Content-Security-Policy: default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self'; font-src 'self'; connect-src 'self'; object-src 'none'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'` (ไม่มี `'unsafe-inline'`/`'unsafe-eval'`), `X-Content-Type-Options: nosniff`, `X-Frame-Options: DENY`, `Referrer-Policy: no-referrer`, `Permissions-Policy` ปิดกล้อง ไมค์ ตำแหน่ง การจ่ายเงิน USB ตรวจใน Chromium จริงแล้วว่าไม่มี CSP violation (login, เปลี่ยนรหัส, หน้า admin, ดาวน์โหลด template และดาวน์โหลดแบบ blob) zod ทดสอบ eval ด้วย `new Function` ตอนสร้าง schema ซึ่ง CSP รายงานเป็น violation ทุกหน้า หน้าเว็บจึง import `@club-registration/shared/zod-jitless` เป็นอันแรกใน `main.tsx` เพื่อปิด JIT ของ zod ก่อน (api ไม่ import จึงยังใช้ JIT) HSTS ใส่เฉพาะตอนเป็น HTTPS (ดู [O2](#compose-ของ-production-o2)) ส่วน `upgrade-insecure-requests` ไม่ใส่ เพราะหน้าเว็บโหลดทุกอย่างแบบ relative จาก origin เดียวกันอยู่แล้ว
 - **Multi-arch:** เครื่องจริงเป็น t4g (arm64) และ build บนเครื่องเองด้วย `docker compose build` ไม่มี registry ส่วน CI build แค่ amd64 เพื่อพิสูจน์ว่า Dockerfile ใช้ได้ **arm64 ยังไม่ได้ทดสอบ** (native binary ของ rolldown, lightningcss, Tailwind ที่ใช้ตอน build เว็บต้องมีของ arm64 ใน lockfile) ต้องรัน smoke script บนเครื่องจริงครั้งแรก
-- **Smoke test:** `scripts/smoke-images.sh` (ต้องมีแค่ Docker และ curl) build ทั้งสอง image สร้าง network แล้วรัน postgres → `node dist/migrate.js` → `create-admin` → api → web บนพอร์ตว่าง แล้วตรวจผ่าน Caddy: `/api/health` 200 และ DB up, `/` เป็น SPA พร้อม security headers, deep link (`/student/clubs`) ได้ `index.html`, asset ที่มี hash ได้ 200 + immutable + บีบอัด, asset ที่ไม่มีได้ 404, `/api/nonexistent` ได้ JSON 404 ของ api, `/api/*` มี CSP ของ helmet ตัวเดียว, admin ที่สร้าง login ผ่าน Caddy ได้ (argon2id ใน image), ทั้งสอง container รันเป็น non-root, image api มีฟอนต์ OFL และ template ตรงที่ api หา ไม่มี `src`/เทสต์/dev dependency และ `docker stop` api จบเองภายใน 5 วินาทีด้วย exit code 0 ลบ container/network เสมอด้วย `trap` secret ทุกตัวสุ่มต่อรอบและไม่พิมพ์ออกมา CI รันเป็น job `images` ทุก PR และทุก push เข้า `main`
+- **Smoke test:** `scripts/smoke-images.sh` (ต้องมีแค่ Docker และ curl) build ทั้งสอง image สร้าง network แล้วรัน postgres → `node dist/migrate.js` → `create-admin` → api → web บนพอร์ตว่าง แล้วตรวจผ่าน Caddy: `/api/health` 200 และ DB up, `/` เป็น SPA พร้อม security headers, deep link (`/student/clubs`) ได้ `index.html`, asset ที่มี hash ได้ 200 + immutable + บีบอัด, asset ที่ไม่มีได้ 404, `/api/nonexistent` ได้ JSON 404 ของ api, `/api/*` มี CSP ของ helmet ตัวเดียว, admin ที่สร้าง login ผ่าน Caddy ได้ (argon2id ใน image), ทั้งสอง container รันเป็น non-root, image api มีฟอนต์ OFL และ template ตรงที่ api หา ไม่มี `src`/เทสต์/dev dependency และ `docker stop` api จบเองภายใน 5 วินาทีด้วย exit code 0, ไม่มี entry point ของ dev ใน image api, `/data` กับ `/config` ของ image web ว่าง, ไม่มี HSTS บน HTTP ธรรมดา, health listener ของ Caddy ตอบใน container ลบ container/network เสมอด้วย `trap` secret ทุกตัวสุ่มต่อรอบและไม่พิมพ์ออกมา CI รันเป็น job `images` ทุก PR และทุก push เข้า `main`
+
+image เดี่ยวๆ นอก compose (เช่นตอนแก้ `Dockerfile`):
 
 ```bash
 docker build --target api -t club-registration-api .
@@ -371,21 +376,114 @@ docker run --rm -e DATABASE_URL club-registration-api node dist/migrate.js
 docker run --rm -it -e DATABASE_URL club-registration-api node dist/create-admin.js <login_id>
 ```
 
-Compose ของ production, HTTPS กับ domain, จำกัด resource และ log rotation เป็นงาน O2
+### Compose ของ production (O2)
 
-**Environment variables**
+`compose.prod.yml` คือ stack ของเครื่องจริง ใช้คู่กับ env file ที่ทำจาก `deploy/production.env.example` เสมอ ส่วน `docker-compose.yml` เป็น Postgres ของ dev อย่างเดียว (ใช้กับ `pnpm dev`/เทสต์ ไม่เปลี่ยน) ไฟล์ production ตั้ง project name เป็น `club-registration-prod` container, volume และ network จึงไม่ชนกับของ dev
+
+| Service | Image | ทำอะไร | Port บน host | Network | Restart | Memory limit |
+|---|---|---|---|---|---|---|
+| `postgres` | `postgres:18.7-alpine@sha256:…` (major เดียวกับเทสต์ pin tag + digest แบบหลาย arch) | DB + volume `postgres-data` healthcheck `pg_isready` ผ่าน TCP | ไม่มี | `backend` | `unless-stopped` | 512 MiB |
+| `migrate` | image ของ `api` (ตัวเดียวกัน ไม่ build แยก) | `node dist/migrate.js` แล้วจบ | ไม่มี | `backend` | `"no"` | 192 MiB |
+| `api` | build target `api` | Fastify รอ postgres healthy และ migrate จบด้วย 0 ก่อน start, `init: true`, `NODE_ENV=production`, `TRUST_PROXY=true`, healthcheck จาก image | ไม่มี | `backend` + `frontend` | `unless-stopped` | 512 MiB |
+| `web` | build target `web` | Caddy (HTTPS, SPA, proxy `/api/*`) รอ api healthy | 80, 443, 443/udp (HTTP/3) | `frontend` | `unless-stopped` | 192 MiB |
+
+- **Network:** `backend` เป็น `internal` (ไม่มีทางออก internet) Postgres จึงออกนอกเครื่องไม่ได้ และ Caddy อยู่แค่ `frontend` จึงไม่เห็น Postgres เลย มีแค่ `web` ที่เปิดพอร์ตบน host
+- **Volume:** `postgres-data` (ข้อมูลทั้งหมด), `caddy-data` (`/data`: ใบรับรองและ ACME account) และ `caddy-config` (`/config`) อยู่ใน `/var/lib/docker/volumes/club-registration-prod_*` **ห้าม `down -v`** เป็นกิจวัตร: ลบ DB ทั้งก้อน และถ้าใบรับรองหายต้องขอใหม่ ขอใหม่ซ้ำหลายครั้งติด rate limit ของ Let's Encrypt (รอเป็นสัปดาห์) backup ของ DB เป็นงาน O3
+- **Fail fast:** ตัวแปรที่จำเป็น (`SITE_ADDRESS`, `POSTGRES_*`, `DATABASE_URL`, `JWT_SECRET`) ใช้ `${VAR:?…}` ขาดตัวไหน compose ไม่ยอมรันและบอกชื่อ ส่วน `DB_*` ไม่ตั้งได้ (ค่าว่าง = default ของ api)
+- **Log rotation:** ทุก service ใช้ `json-file` ไฟล์ละ 10 MB เก็บ 5 ไฟล์ (สูงสุด ~50 MB ต่อ container) วันที่คนเยอะดิสก์ไม่เต็มเพราะ log
+- **Migrate:** รันทุกครั้งที่ `up` migration ที่ใช้แล้วถูกข้าม จึงไม่มีผลถ้าไม่มีของใหม่ ถ้า migrate ล้ม api ไม่ start (container เดิมของ api ยังรันต่อถ้ามี) ดูสาเหตุด้วย `logs migrate` ใช้ image เดียวกับ api เสมอ (`image: club-registration-prod-api`) build แค่ api ก็ไม่มีทางได้ migration เก่ากว่า server
+- **หลัง reboot:** Docker start `postgres`, `api`, `web` เองตาม `unless-stopped` (ไม่ผ่าน compose จึงไม่รอกันตาม `depends_on`) ไม่เป็นไรเพราะ api ไม่ต่อ DB ตอน start: `/api/health` ตอบ 503 จน Postgres พร้อม แล้วกลับมาเอง `migrate` ไม่รันซ้ำ (ไม่จำเป็น เพราะ migration ทำไปแล้วตอน deploy)
+
+**ตั้งค่าครั้งแรกบนเครื่อง** (การเตรียม EC2, DNS และ firewall อยู่ใน O4)
+
+```bash
+cp deploy/production.env.example deploy/production.env   # gitignored (*.env)
+chmod 600 deploy/production.env
+# แก้ไฟล์: SITE_ADDRESS=<domain จริง>, POSTGRES_PASSWORD=$(openssl rand -hex 24), JWT_SECRET=$(openssl rand -base64 48)
+# เก็บสำเนา secret ไว้นอกเครื่องด้วย (เช่น password manager) ไม่มี POSTGRES_PASSWORD = เปิด DB ไม่ได้
+alias dcp='docker compose -f compose.prod.yml --env-file deploy/production.env'
+dcp build                       # build บนเครื่องเอง ไม่มี registry
+dcp up -d --wait                # postgres → migrate → api → web รอจน healthy ทุกตัว
+dcp run --rm --no-deps api node dist/create-admin.js <login_id>   # admin คนแรก แสดงรหัสครั้งเดียว
+```
+
+- password ของ DB ใช้ hex เพราะถูกใส่ลงใน `DATABASE_URL` (ตัวอย่างใน template ประกอบ URL จาก `POSTGRES_*` ให้เองด้วย `${…}` ของ env file) อักษรอย่าง `@ / : #` จะทำให้ URL เสีย
+- `run --no-deps` สำคัญ: ไม่อย่างนั้น compose จะ start `migrate` ซ้ำก่อน
+- ค่า `POSTGRES_*` มีผลแค่ตอนสร้าง volume ครั้งแรก เปลี่ยนใน env file ทีหลังไม่เปลี่ยนรหัสใน DB (ต้อง `ALTER ROLE` เองแล้วแก้ env file ให้ตรง)
+
+**ใช้งานประจำ**
+
+```bash
+dcp ps                          # สถานะ + health (migrate ควรเป็น Exited (0))
+dcp logs -f api                 # log JSON ของ api (ไม่มี secret/PII), web ไม่มี access log
+dcp logs migrate
+dcp restart api                 # ข้อมูลอยู่ใน postgres-data ไม่หาย
+dcp stop                        # หยุดทั้งหมด ข้อมูลและใบรับรองอยู่ใน volume
+dcp down                        # ลบ container/network แต่เก็บ volume (ไม่ใส่ -v)
+```
+
+**อัปเดต (deploy เวอร์ชันใหม่)**
+
+```bash
+git pull
+dcp build
+dcp up -d --wait                # สร้างเฉพาะ container ที่ image/ค่าเปลี่ยน, migrate รันก่อน api ใหม่
+docker image prune -f           # ลบ image เก่าที่ไม่มี tag แล้ว (ดิสก์ EBS เล็ก)
+```
+
+ระหว่าง `up` api ถูกสร้างใหม่ หน้าเว็บสะดุดไม่กี่วินาที จึงควรอัปเดตตอนไม่มีรอบเปิด แก้ `Caddyfile` = build image `web` ใหม่แล้ว `up -d` (ไม่มี `caddy reload` เพราะปิด admin API ไว้ ดูข้างล่าง) แก้แค่ env file = `up -d` อย่างเดียว
+
+**งบ memory (t4g.small 2 GiB ไม่มี swap)** เป็น limit ต่อ container ไม่ใช่ที่จองไว้ **ค่าประเมิน** ตัดสินด้วย `docker stats` ตอน load test (O5) ตอน idle วัดได้ web ~21 MiB, api ~80 MiB, postgres ~36 MiB
+
+| Container | Limit | เหตุผล |
+|---|---|---|
+| `postgres` | 512 MiB | `shared_buffers` 128 MB + backend ~20 ตัวจาก pool + `work_mem` |
+| `api` | 512 MiB | `NODE_OPTIONS=--max-old-space-size=320` (heap ล้นแล้วเห็น error ใน log แทนโดน kernel kill เงียบๆ) ที่เหลือคือโค้ด, buffer, argon2 (19 MiB ต่อ hash ทำพร้อมกันได้ไม่เกิน 4 ตาม thread pool ของ libuv), ไฟล์ import 5 MB และ export |
+| `web` | 192 MiB | Caddy, `GOMEMLIMIT=160MiB` ให้ Go เก็บขยะก่อนชน limit |
+| `migrate` | 192 MiB | เฉพาะตอน `up` แล้วจบ |
+| **รวม** | 1216 MiB (1408 ตอน `up`) | เหลือ ~600 MiB ให้ kernel, dockerd/containerd, sshd และ page cache |
+
+`docker compose build` ไม่อยู่ใน limit เหล่านี้ (vite/tsc ใช้หลายร้อย MB) ถ้า build ระหว่าง stack รันบนเครื่อง 2 GB อาจตึง O4 ต้องตัดสินว่าจะเปิด swap หรือ build ตอนไม่มีรอบเปิด
+
+**ค่า Postgres** (ใน `command` ของ service ค่าประเมินจนกว่า O5): `shared_buffers=128MB` (DB ทั้งก้อนแค่หลักสิบ MB ใหญ่กว่านี้ไม่ได้อะไรแต่แย่ RAM จาก Node), `effective_cache_size=512MB` (แค่ hint ของ planner ไม่จอง memory), `max_connections=50` (pool 20 + create-admin/migrate + psql/`pg_dump` ของคนดูแล และเผื่อ O5 เพิ่ม pool ต้องสูงกว่า `DB_POOL_MAX` พอสมควรเสมอ), `work_mem=4MB` (export เรียงแค่หลักร้อยแถว), `maintenance_work_mem=64MB`, `shm_size: 128mb` (`/dev/shm` ของ Docker default 64 MB ที่ Postgres ใช้กับ parallel query), `stop_grace_period: 1m` (ให้ปิดแบบ fast shutdown + checkpoint จบ ไม่โดน SIGKILL ที่ 10 วินาทีจนต้อง crash recovery) และ log: `log_min_duration_statement=1000` (statement ช้ากว่า 1 วินาทีไว้ดูตอน load test) โดย `log_parameter_max_length=0` (ไม่ log ค่า parameter ซึ่งอาจเป็นรหัส/ชื่อนักเรียน) และ `log_error_verbosity=terse` (ไม่ log DETAIL ซึ่งอาจยกค่าในแถวมา)
+
+**Caddy (O2)**
+
+- **HTTPS:** `SITE_ADDRESS=<domain>` Caddy ขอใบรับรองจาก CA สาธารณะผ่าน ACME (ค่าเริ่มต้นคือ Let's Encrypt) และต่ออายุเอง (DNS ต้องชี้มาที่เครื่องและเปิด 80/443 ก่อน) HTTP ทุก path redirect เป็น HTTPS (308) อัตโนมัติ `SITE_ADDRESS=:80` เป็น HTTP ล้วนไม่มีใบรับรอง (ทดสอบในเครื่องเท่านั้น) และ `SITE_ADDRESS=localhost` ใช้ CA ภายในของ Caddy (smoke test)
+- **HSTS:** `Strict-Transport-Security: max-age=31536000; includeSubDomains` เฉพาะ response ที่มาทาง HTTPS (matcher `@https protocol https`) บน `:80` ไม่มีเพราะไม่มีอะไรให้ pin (และ browser ไม่สน HSTS บน HTTP อยู่แล้ว) ค่าเดียวกับที่ helmet ส่งบน `/api/*` browser จึงได้ policy เดียวไม่ว่าจะเห็น response ไหนก่อน Caddy ไม่ใส่ซ้ำบน `/api/*` (header ซ้ำ) 1 ปีโดย**ไม่ใส่ `preload`** เพราะ preload list ฝังใน browser และถอนออกใช้เวลาหลายเดือน ถ้าวันหนึ่ง domain ต้องกลับไปเป็น HTTP จะเข้าไม่ได้
+- **จำกัดขนาด body:** `/api/*` รับ body ไม่เกิน 6 MiB (`request_body max_size`) สูงกว่าที่ api รับมากสุดเล็กน้อย (ไฟล์ import 5 MiB + multipart) body ใหญ่กว่านั้นได้ 413 จาก Caddy ทันทีโดยไม่ส่งต่อให้ Node ส่วน route อื่นยังมี limit 64 KiB ของ api เอง request ปกติไม่เปลี่ยน
+- **Admin API ปิด (`admin off`):** ปกติ Caddy เปิด admin endpoint ที่ `localhost:2019` ใน container ซึ่งแก้ config ที่รันอยู่ได้ เราไม่ได้ใช้ เพราะ config อยู่ใน image การเปลี่ยนคือ build ใหม่แล้ว `up -d` (สร้าง container ใหม่) หรือ restart container ซึ่งโหลด `Caddyfile` ใหม่อยู่แล้ว ปิดไว้จึงเหลือ listener น้อยลงหนึ่งตัว
+- **Healthcheck:** Caddyfile มี site `http://127.0.0.1:2020` (`bind 127.0.0.1`) ที่ตอบ `/health` 200 healthcheck ของ compose ใช้ `wget` ใน container ยิงตัวนี้ จึงใช้ได้เหมือนกันไม่ว่า `SITE_ADDRESS` เป็น `:80` หรือ domain (ยิงหน้าเว็บจริงต้องรู้ชื่อ host และ TLS) และเพราะ bind แค่ loopback ของ container เอง และไม่ได้ publish พอร์ต host หรือ container อื่น (รวม api) จึงเรียกไม่ได้
+- `skip_install_trust`: ไม่พยายามติดตั้ง root CA ภายในลง trust store ของ container (ใช้แค่กับ `localhost` ตอนทดสอบ ไม่มีผลกับ domain จริง)
+
+**Smoke test ของ compose:** `scripts/smoke-compose.sh` (ต้องมี Docker + Compose v2 และ curl) สร้าง env file ชั่วคราวจาก `deploy/production.env.example` ด้วย secret สุ่ม (ไม่พิมพ์ออกมา) แล้ว `build` + `up -d --wait` ด้วย project name ไม่ซ้ำและ `SITE_ADDRESS=localhost` (CA ภายในของ Caddy ไม่ต้องใช้ internet) พอร์ต host 18080/18443 (ตั้งด้วย `SMOKE_HTTP_PORT`, `SMOKE_HTTPS_PORT`) curl เชื่อ CA ที่ copy ออกมาจาก container ด้วย `--cacert` แทนการปิดการตรวจ (`-k`) chain ที่เสียจึงยัง fail ตรวจ: ทุก service healthy, migrate จบด้วย 0 ครั้งเดียวและ restart policy `no`, HTTP → 308 ไป HTTPS path เดิมโดยไม่มี HSTS, HTTPS `/` เป็น SPA พร้อม HSTS + CSP, `/api/health` 200 พร้อม HSTS ตัวเดียว, postgres/api/migrate ไม่เปิดพอร์ต host, web ไปถึง api แต่ไม่ถึง postgres, api ไปถึง web:80 แต่ไม่ถึง health listener, ค่า `shared_buffers`/`max_connections` ที่ใช้จริง, heap limit ของ api, log rotation และ memory limit ทุก service, `create-admin` ผ่าน `run --rm --no-deps` แล้ว login ผ่าน HTTPS ได้ (ไม่ start migrate ซ้ำ), body 7 MiB ได้ 413 จาก Caddy (body ว่าง) ส่วน 100 KiB ยังถึง api (413 JSON ของ api), restart api แล้ว login ได้, `down` (ไม่มี `-v`) แล้ว `up` ใหม่: migrate รันซ้ำจบด้วย 0, login ได้ (volume DB อยู่), CA และใบรับรองของ site เป็นไฟล์เดิม (volume `/data` อยู่ ไม่ขอใหม่) ลบทุกอย่าง (`down -v` + image) ด้วย `trap` ไม่แตะ DB ของ dev CI รันต่อจาก `smoke-images.sh` ใน job `images` ถ้า build หลัง proxy ที่ดักถอด TLS ให้ตั้ง `EXTRA_CA_FILE=<pem>` script จะเพิ่ม build secret ผ่าน override ชั่วคราว (`compose.prod.yml` ไม่ต้องใช้)
+
+**ยังไม่อยู่ใน O2:** เตรียม EC2/security group/DNS และเปิด-ปิดเครื่อง (O4), backup `pg_dump` ไป S3 และซ้อม restore (O3), ตัวเลข pool/memory/Postgres จริงจาก load test (O5) และ arm64 ยังไม่ได้รันจริง (ต้องรันทั้งสอง smoke script บนเครื่องจริงครั้งแรก)
+
+### Environment variables
 
 | Env | ใช้ที่ | ความหมาย |
 |---|---|---|
-| `DATABASE_URL` | api | connection string |
-| `JWT_SECRET` | api | secret สำหรับ sign token (≥ 32 ตัวอักษร สร้างด้วย `openssl rand -base64 48`) ขาดหรือสั้นไป = server ไม่ start |
+| `DATABASE_URL` | api, migrate, create-admin | connection string (production ประกอบจาก `POSTGRES_*` ใน env file เอง) |
+| `JWT_SECRET` | api | secret สำหรับ sign token (≥ 32 ตัวอักษร สร้างด้วย `openssl rand -base64 48`) ขาดหรือสั้นไป = server ไม่ start เปลี่ยน = ทุกคนหลุด login |
 | `PORT` | api | default 3000 |
 | `NODE_ENV` | api | `production` (ตั้งไว้ใน image แล้ว) |
-| `TRUST_PROXY` | api | `true` เมื่ออยู่หลัง Caddy/LB |
-| `SITE_ADDRESS` | web | site address ของ Caddy default `:80` (HTTP ไม่มี TLS) ตั้งเป็น domain แล้ว Caddy ขอใบรับรองเอง ค่าจริงอยู่ใน env ห้าม commit |
+| `TRUST_PROXY` | api | `true` เมื่ออยู่หลัง Caddy/LB (`compose.prod.yml` ตั้งให้แล้ว) |
+| `DB_POOL_MAX` | api, create-admin, seed-dev | จำนวน connection สูงสุดของ pool default `20` (1–100) ต้องต่ำกว่า `max_connections` ของ Postgres (50 ใน `compose.prod.yml`) พอสมควร |
+| `DB_CONNECTION_TIMEOUT_MS` | api, create-admin, seed-dev | รอ connection ว่างจาก pool นานสุด default `5000` เกิน = request นั้นได้ 500 |
+| `DB_STATEMENT_TIMEOUT_MS` | api, create-admin, seed-dev | `statement_timeout` ต่อ statement default `10000` |
+| `DB_IDLE_IN_TRANSACTION_TIMEOUT_MS` | api, create-admin, seed-dev | `idle_in_transaction_session_timeout` default `10000` |
+| `SITE_ADDRESS` | web | site address ของ Caddy default `:80` (HTTP ไม่มี TLS) ตั้งเป็น domain แล้ว Caddy ขอและต่ออายุใบรับรองเอง ค่าจริงอยู่ใน env file ห้าม commit (`compose.prod.yml` บังคับให้ตั้ง) |
 | `API_UPSTREAM` | web | `host:port` ของ api default `api:3000` |
+| `POSTGRES_USER`, `POSTGRES_DB`, `POSTGRES_PASSWORD` | postgres (compose) | สร้าง DB ครั้งแรกเท่านั้น (เปลี่ยนทีหลังไม่มีผลกับ volume ที่มีอยู่) password สร้างด้วย `openssl rand -hex 24` |
+| `HTTP_PORT`, `HTTPS_PORT` | `compose.prod.yml` | พอร์ตบน host default 80/443 มีไว้ให้ smoke test รันข้างของที่จับ 80/443 อยู่ production ไม่ต้องตั้ง |
+
+- `DB_*` ทั้ง 4 ตัว (O2) เป็นจำนวนเต็มบวก timeout ไม่เกิน 600000 (ไม่ยอม `0` ซึ่ง `pg` แปลว่าไม่จำกัด) ค่าว่างหรือไม่ตั้ง = default ซึ่งเท่ากับค่าเดิมก่อนตั้งได้ ค่าผิด = ไม่ start และบอกแค่ชื่อตัวแปร ตรวจด้วย Zod ใน `apps/api/src/config.ts` (`migrate` ไม่ใช้ pool จึงไม่สนตัวแปรเหล่านี้) **ค่า default ยังเป็นค่าประเมิน** ตัดสินด้วย load test (O5)
+- `GOMEMLIMIT` (web) และ `NODE_OPTIONS` (api) ตั้งไว้ใน `compose.prod.yml` ให้ตรงกับ memory limit ไม่ได้อยู่ใน env file
 
 **ออกแบบให้ portable:** migration เป็นคำสั่งแยก (`node dist/migrate.js`), `GET /api/health` เช็ค DB, graceful shutdown (SIGTERM), log JSON ออก stdout, ไม่เก็บ state บน disk ของ app
+
+### Portability, ค่าใช้จ่าย และ runbook
 
 ย้ายไปที่อื่น = เปลี่ยน 3 อย่าง: ใครให้ Postgres, ใครทำ HTTPS, ใครเก็บ env/secret
 
@@ -412,12 +510,12 @@ Compose ของ production, HTTPS กับ domain, จำกัด resource �
 
 **Runbook การใช้งาน**
 
-1. 1–2 วันก่อนเปิดรอบ: start เครื่อง → `apt upgrade` + `git pull` + `docker compose build` (build บนเครื่องเอง ไม่มี registry) → smoke test
+1. 1–2 วันก่อนเปิดรอบ: start เครื่อง → `apt upgrade` + อัปเดตตาม [ขั้นตอนอัปเดต](#compose-ของ-production-o2) (`git pull` → `build` → `up -d --wait` build บนเครื่องเอง ไม่มี registry) → ลองเปิดเว็บและ login (ขั้นตอนเต็มบน EC2 อยู่ใน O4)
 2. วันจริง: เฝ้า log/CPU/RAM
 3. หลังปิดรอบ: export รายชื่อ → `pg_dump` ไป S3 → stop เครื่อง
-4. Compose ตั้ง `restart: unless-stopped`
+4. Compose ตั้ง `restart: unless-stopped` (ยกเว้น `migrate` ที่รันครั้งเดียวต่อ `up`)
 
-**ความเสี่ยงที่ยอมรับ:** เครื่องเดียว = single point of failure ต้องมี backup + runbook สั้นๆ ตั้ง pool ของ `pg` (เริ่ม ~20) ให้เหมาะกับ RAM 2 GB
+**ความเสี่ยงที่ยอมรับ:** เครื่องเดียว = single point of failure ต้องมี backup + runbook สั้นๆ pool ของ `pg` (default 20 ปรับด้วย `DB_POOL_MAX`) และ memory limit ใน `compose.prod.yml` ต้องเหมาะกับ RAM 2 GB ยังเป็นค่าประเมินจนกว่าจะ load test (O5)
 
 ## Testing
 
@@ -433,7 +531,7 @@ Compose ของ production, HTTPS กับ domain, จำกัด resource �
 |---|---|---|
 | 1 | คนที่มีชุมนุมแล้วเข้า waitlist เพื่อย้ายได้ไหม | ได้ (ตามที่ออกแบบ Phase 2) |
 | 2 | Excel template จริงของโรงเรียน | ใช้คอลัมน์ที่เดาไว้ แล้วปรับทีหลัง |
-| 3 | Domain สำหรับ HTTPS | รับจาก env, ใส่ขั้นตอน DNS ใน README |
+| 3 | Domain สำหรับ HTTPS | รับจาก env (`SITE_ADDRESS` ใน `deploy/production.env` ทำแล้วใน O2) ขั้นตอน DNS อยู่ใน O4 |
 | 4 | Elastic IP vs อัปเดต DNS ตอน boot | อัปเดต DNS (ถ้ามี domain) |
 | 5 | Queue อยู่ Phase 3 ไหม | Phase 3 (ย้ายขึ้นได้ถ้ากังวลวันจริง) |
 | 6 | ~~สร้าง PDF ด้วยอะไร~~ | **ปิดแล้ว:** spike ผ่าน ใช้ `pdfkit` + ฟอนต์ Sarabun (OFL) ฝั่ง server (ดูหัวข้อ [Export รายชื่อ](#export-รายชื่อ)) |
@@ -441,4 +539,4 @@ Compose ของ production, HTTPS กับ domain, จำกัด resource �
 
 ## ขั้นตอนถัดไป
 
-ทำต่อใน **Phase 1**: Ops ต่อจาก O1 (O2 compose production + Caddy HTTPS/limits → O3 backup/restore → O4 runbook EC2) → load test บนสเปคเครื่องจริง (production image, scaffold, migration แรก, auth + role guard, จัดการรอบ, import Excel, รหัสผ่านเริ่มต้น, หน้าชุมนุม, export Excel/PDF, API อ่านของนักเรียน, API ลง/ยกเลิกพร้อม concurrency test และหน้าเว็บนักเรียน เสร็จแล้ว)
+ทำต่อใน **Phase 1**: Ops ต่อจาก O2 (O3 backup/restore (`pg_dump` ไป S3 และซ้อม restore) → O4 runbook EC2 + DNS (รวม swap หรือเวลาที่ build บนเครื่อง 2 GB) → O5 load test บนสเปคเครื่องจริง ซึ่งตัดสิน pool, memory limit และค่า Postgres) (production image, compose production, scaffold, migration แรก, auth + role guard, จัดการรอบ, import Excel, รหัสผ่านเริ่มต้น, หน้าชุมนุม, export Excel/PDF, API อ่านของนักเรียน, API ลง/ยกเลิกพร้อม concurrency test และหน้าเว็บนักเรียน เสร็จแล้ว)
