@@ -13,3 +13,6 @@ dist/
 *.xlsx
 !templates/*.xlsx
 *.dump
+*.dump.partial
+# Caddy certificate archives from scripts/backup.sh --include-certs (private keys)
+caddy-data-*.tar.gz

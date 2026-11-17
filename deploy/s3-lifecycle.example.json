@@ -1,0 +1,12 @@
+{
+  "Rules": [
+    {
+      "ID": "expire-club-registration-backups",
+      "Status": "Enabled",
+      "Filter": { "Prefix": "prod/" },
+      "Expiration": { "Days": 400 },
+      "NoncurrentVersionExpiration": { "NoncurrentDays": 30 },
+      "AbortIncompleteMultipartUpload": { "DaysAfterInitiation": 7 }
+    }
+  ]
+}

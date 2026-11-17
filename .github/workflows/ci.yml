@@ -51,12 +51,13 @@ jobs:
   # Postgres, checking health, Caddy's headers and SPA fallback, non-root users, image contents and
   # graceful shutdown. Then runs the production compose stack (compose.prod.yml) over HTTPS with
   # Caddy's local CA: redirect, HSTS, migrate, create-admin, reachability, body limit, log
-  # rotation and data/certificates surviving restarts. The second build reuses the first one's
-  # BuildKit cache. Plain docker CLI, no extra actions. amd64 only: the arm64 host builds its own
-  # images and is not exercised here.
+  # rotation and data/certificates surviving restarts. Then backs up and restores that stack
+  # (scripts/backup.sh, scripts/restore.sh) against a local MinIO as S3, using the runner's
+  # preinstalled AWS CLI. Later builds reuse the first one's BuildKit cache. Plain docker CLI, no
+  # extra actions. amd64 only: the arm64 host builds its own images and is not exercised here.
   images:
     runs-on: ubuntu-24.04
-    timeout-minutes: 30
+    timeout-minutes: 40
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -65,3 +66,5 @@ jobs:
       - run: scripts/smoke-images.sh
 
       - run: scripts/smoke-compose.sh
+
+      - run: scripts/smoke-backup.sh

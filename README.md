@@ -2,7 +2,7 @@
 
 ระบบลงทะเบียนชุมนุมของโรงเรียน สำหรับนักเรียน ~2,500 คน แบ่งรอบตามชั้น ม.1–ม.6 รอบละ ~400–450 คน
 
-> **สถานะ:** Phase 1 ทำ Auth + role guard เสร็จแล้ว (login, บังคับเปลี่ยนรหัสครั้งแรก, logout, `create-admin`, หน้า FE ตาม role) admin จัดการรอบลงทะเบียนได้แล้ว (`/api/admin/rounds` + หน้า `/admin/rounds`) นำเข้า Excel ได้แล้วทั้งขั้นตรวจ (dry run) และขั้นยืนยัน (`/api/admin/import/preview`, `/api/admin/import/commit` + หน้า `/admin/import`) ออกรหัสผ่านเริ่มต้นให้นักเรียนเป็นไฟล์ Excel ได้แล้ว (`/api/admin/students/password-status`, `/api/admin/students/initial-passwords` + หน้า `/admin/initial-passwords`) ดู/แก้ชุมนุมรายรอบได้แล้ว (`/api/admin/rounds/:roundId/clubs`, `/api/admin/clubs/:id` + หน้า `/admin/clubs`) ส่งออกรายชื่อรายชุมนุม/รายห้องเป็น Excel และ PDF ได้แล้ว (`/api/admin/rounds/:roundId/export` + หน้า `/admin/export`) นักเรียนอ่านรอบกับรายการชุมนุมของชั้นตัวเองผ่าน API ได้แล้ว (`/api/student/round`, `/api/student/clubs`) และ**ลง/ยกเลิกชุมนุมผ่าน API ได้แล้ว** (`POST /api/student/registration`, `POST /api/student/registration/cancel`) พร้อม concurrency test 500 request กับ Postgres จริง และ**มีหน้าเว็บนักเรียนแล้ว** (`/student/clubs` ดูชุมนุมและลง, `/student/my-registration` ดูผลและยกเลิก) งาน Ops เริ่มแล้ว: **มี production Docker image แล้ว** (O1: `api` และ `web` จาก `Dockerfile` ที่ root พร้อม `scripts/smoke-images.sh` ใน CI) และ**มี Compose ของ production แล้ว** (O2: `compose.prod.yml` + `deploy/production.env.example` HTTPS อัตโนมัติด้วย Caddy เมื่อมี domain พร้อม `scripts/smoke-compose.sh` ใน CI) ดูหัวข้อ [Infra และ Deployment](#infra-และ-deployment) ต่อจาก monorepo, migration แรก และ `GET /api/health` เอกสารนี้คือแผนและข้อกำหนดของโปรเจกต์
+> **สถานะ:** Phase 1 ทำ Auth + role guard เสร็จแล้ว (login, บังคับเปลี่ยนรหัสครั้งแรก, logout, `create-admin`, หน้า FE ตาม role) admin จัดการรอบลงทะเบียนได้แล้ว (`/api/admin/rounds` + หน้า `/admin/rounds`) นำเข้า Excel ได้แล้วทั้งขั้นตรวจ (dry run) และขั้นยืนยัน (`/api/admin/import/preview`, `/api/admin/import/commit` + หน้า `/admin/import`) ออกรหัสผ่านเริ่มต้นให้นักเรียนเป็นไฟล์ Excel ได้แล้ว (`/api/admin/students/password-status`, `/api/admin/students/initial-passwords` + หน้า `/admin/initial-passwords`) ดู/แก้ชุมนุมรายรอบได้แล้ว (`/api/admin/rounds/:roundId/clubs`, `/api/admin/clubs/:id` + หน้า `/admin/clubs`) ส่งออกรายชื่อรายชุมนุม/รายห้องเป็น Excel และ PDF ได้แล้ว (`/api/admin/rounds/:roundId/export` + หน้า `/admin/export`) นักเรียนอ่านรอบกับรายการชุมนุมของชั้นตัวเองผ่าน API ได้แล้ว (`/api/student/round`, `/api/student/clubs`) และ**ลง/ยกเลิกชุมนุมผ่าน API ได้แล้ว** (`POST /api/student/registration`, `POST /api/student/registration/cancel`) พร้อม concurrency test 500 request กับ Postgres จริง และ**มีหน้าเว็บนักเรียนแล้ว** (`/student/clubs` ดูชุมนุมและลง, `/student/my-registration` ดูผลและยกเลิก) งาน Ops เริ่มแล้ว: **มี production Docker image แล้ว** (O1: `api` และ `web` จาก `Dockerfile` ที่ root พร้อม `scripts/smoke-images.sh` ใน CI), **มี Compose ของ production แล้ว** (O2: `compose.prod.yml` + `deploy/production.env.example` HTTPS อัตโนมัติด้วย Caddy เมื่อมี domain พร้อม `scripts/smoke-compose.sh` ใน CI) และ**มี backup/restore แล้ว** (O3: `scripts/backup.sh` `pg_dump` ไป S3 แบบเข้ารหัส, `scripts/restore.sh` กู้แบบได้ทั้งก้อนหรือไม่ได้เลยและซ้อมกู้ลง DB ชั่วคราว พร้อม `scripts/smoke-backup.sh` ใน CI) ดูหัวข้อ [Infra และ Deployment](#infra-และ-deployment) ต่อจาก monorepo, migration แรก และ `GET /api/health` เอกสารนี้คือแผนและข้อกำหนดของโปรเจกต์
 >
 > **หมายเหตุ:** ตัวเลข performance ทั้งหมดเป็นการประเมินจากหลักการ ยังไม่ได้วัดจริง ต้อง load test ก่อนใช้งาน
 
@@ -84,8 +84,8 @@ club-registration/
 │   └── web/        # Vite + React
 ├── packages/
 │   └── shared/     # Zod schema + type ที่ใช้ร่วมกัน
-├── deploy/         # production.env.example (template ของ env file production ไม่มีค่าจริง)
-├── scripts/        # smoke-images.sh, smoke-compose.sh ทดสอบ image และ compose จริง (CI job images)
+├── deploy/         # production.env.example (template ของ env file production ไม่มีค่าจริง), ตัวอย่าง IAM policy และ lifecycle ของ S3
+├── scripts/        # backup.sh, restore.sh (รันบน host), smoke-*.sh ทดสอบ image/compose/backup จริง (CI job images), lib/ ที่ใช้ร่วมกัน
 ├── templates/      # Excel template เปล่า (ไม่มีข้อมูลจริง)
 ├── Dockerfile      # target api และ web
 ├── .dockerignore   # allowlist ของ build context
@@ -184,6 +184,7 @@ COMMIT;
 8. **Ops:** Dockerfile, `docker-compose.yml`, Caddy HTTPS, `/api/health`, migration script แยก, graceful shutdown, backup `pg_dump` ไป S3, runbook (deploy/backup/restore/เปิด-ปิดเครื่อง) แบ่งเป็น O1 image → O2 compose production + Caddy HTTPS/limits → O3 backup/restore → O4 runbook EC2 → O5 load test
    - ~~**O1 image**~~ เสร็จแล้ว: `Dockerfile` (target `api`, `web`), `Caddyfile`, `.dockerignore`, `scripts/smoke-images.sh` และ CI job `images` รายละเอียดดู [Infra และ Deployment](#infra-และ-deployment)
    - ~~**O2 compose production**~~ เสร็จแล้ว: `compose.prod.yml` (postgres, migrate, api, web พร้อม healthcheck, memory limit, log rotation, network แยก), `deploy/production.env.example`, Caddy HTTPS + HSTS + จำกัดขนาด body, ตั้ง pool/timeout ของ DB ผ่าน env (`DB_*`), `scripts/smoke-compose.sh` ใน CI job `images` รายละเอียดดู [Compose ของ production (O2)](#compose-ของ-production-o2)
+   - ~~**O3 backup/restore**~~ เสร็จแล้ว: `scripts/backup.sh` (`pg_dump` custom format ใน container → ตรวจทั้งไฟล์ → S3 ด้วย SSE-S3 ผ่าน AWS CLI ของ host, ไฟล์ในเครื่อง 600, `flock` กันรันซ้อน, `--local-only`, `--include-certs`), `scripts/restore.sh` (ต้อง `--yes`, กู้ลง DB ใหม่แล้วสลับชื่อใน transaction เดียว → migrate → รอ healthy, `--target-db` ซ้อมกู้โดยไม่แตะ production, `--certs`), ตัวอย่าง IAM policy (ไม่มีสิทธิ์ลบ) และ lifecycle ใน `deploy/`, `scripts/smoke-backup.sh` (MinIO) ใน CI job `images` รายละเอียดดู [Backup และ Restore (O3)](#backup-และ-restore-o3)
 9. ~~**Test:** concurrency test + invariant `clubs.registered` = จำนวน registration จริง~~ เสร็จแล้ว (S2): `apps/api/test/registration-concurrency.test.ts` (500 นักเรียนแย่ง 30 ที่ → 200 พอดี 30 ที่เหลือ `club_full` 470, คนเดียวกดหลายชุมนุมพร้อมกันได้ชุมนุมเดียว, key เดียวกันพร้อมกันเกิดผลครั้งเดียว, ยกเลิกแข่งกับลง, ยกเลิกแล้วคนอื่นแย่งที่ว่าง) และตัวตรวจ invariant `registrationInvariantViolations` (`apps/api/test/support/registration.ts`: `registered` = จำนวนแถว, อยู่ใน 0..capacity, 1 คน 1 แถวต่อรอบ, ชั้นนักเรียน = ชั้นรอบ, ชุมนุมอยู่ในรอบเดียวกัน, register − cancel ตรงกับที่นั่งทั้งรายคนและรายชุมนุม, event ล่าสุดตรงกับชุมนุมที่ถือ) รันหลังทุกเทสต์ของไฟล์ลง/ยกเลิก
    - **วัดจริงในเทสต์** (เครื่องพัฒนา 4 vCPU ไม่ใช่สเปค production, pool 20, ผ่าน `app.inject` ใน process เดียว ไม่มี network, 4 รอบ): 500 request พร้อมกันจบทั้งหมดใน 2.4–2.6 วินาที (เฉลี่ย ~5 ms ต่อ request เพราะเรียงกันด้วย lock ของรอบ) ต้อง load test บนเครื่องจริง ข้อควรระวัง: ทุก transaction ในรอบเรียงกันด้วย lock และ request ที่รอ connection จาก pool เกิน 5 วินาที (`connectionTimeoutMillis`) จะได้ 500 ถ้าเครื่องจริงช้ากว่านี้หลายเท่า ต้องปรับ pool/timeout (ตั้งได้ด้วย env `DB_POOL_MAX`, `DB_CONNECTION_TIMEOUT_MS` ฯลฯ ไม่ต้อง build ใหม่) หรือเปิด queue (Phase 3)
 
@@ -332,7 +333,8 @@ Admin เลือก **รอบ** → เลือก **มุมมอง** (
 - **ข้อมูลติดต่อครู** (เบอร์, อีเมล, LINE ID ทุกช่องเป็น optional): เห็นเฉพาะ admin (หน้า `/admin/clubs`) **นักเรียนเห็นแค่ชื่อครู** query ฝั่งนักเรียนไม่ SELECT คอลัมน์ติดต่อเลย (ใช้ `ADVISOR_NAMES_JOIN` ใน `services/clubs.ts` ตัวเดียวกับ export รายชุมนุม) และ response schema ของนักเรียนไม่มีช่องเหล่านี้ (serializer ตัดช่องที่ไม่อยู่ใน schema ทิ้งอีกชั้น) ถ้าวันหนึ่งจะให้นักเรียน ~2,500 คนเห็นช่องทางติดต่อ ต้องให้ครูยินยอมก่อน และใช้ช่องทางกลางของโรงเรียนถ้ามี
 - **Frontend:** ห้าม `dangerouslySetInnerHTML` กับ `description` ที่ admin กรอก
 - **Log:** ไม่ใส่ secret/PII พอสำหรับ debug
-- **Repo เป็น Public:** ห้ามมีข้อมูลจริงทุกชนิด (นักเรียน ครู domain จริง IP ชื่อ bucket) เปิด secret scanning และ push protection แล้ว `.gitignore` กัน `*.xlsx` จริง / `.env*` / `*.dump` (เว้น `templates/`) ถ้าเผลอ push secret ต้อง rotate ทันที ลบจาก history ไม่พอ
+- **Backup:** dump มีข้อมูลส่วนบุคคลทั้งหมดและ hash รหัสผ่าน เก็บใน bucket private (Block Public Access) เข้ารหัส SSE-S3 role ของเครื่องเขียน/อ่านได้เฉพาะ prefix ของ backup ลบไม่ได้ ไฟล์ในเครื่อง 600 และไม่พิมพ์เนื้อหาออก log (ดู [Backup และ Restore (O3)](#backup-และ-restore-o3))
+- **Repo เป็น Public:** ห้ามมีข้อมูลจริงทุกชนิด (นักเรียน ครู domain จริง IP ชื่อ bucket) เปิด secret scanning และ push protection แล้ว `.gitignore` กัน `*.xlsx` จริง / `.env*` / `*.dump` / `*.dump.partial` / `caddy-data-*.tar.gz` (เว้น `templates/`) ถ้าเผลอ push secret ต้อง rotate ทันที ลบจาก history ไม่พอ
 
 ## Infra และ Deployment
 
@@ -388,7 +390,7 @@ docker run --rm -it -e DATABASE_URL club-registration-api node dist/create-admin
 | `web` | build target `web` | Caddy (HTTPS, SPA, proxy `/api/*`) รอ api healthy | 80, 443, 443/udp (HTTP/3) | `frontend` | `unless-stopped` | 192 MiB |
 
 - **Network:** `backend` เป็น `internal` (ไม่มีทางออก internet) Postgres จึงออกนอกเครื่องไม่ได้ และ Caddy อยู่แค่ `frontend` จึงไม่เห็น Postgres เลย มีแค่ `web` ที่เปิดพอร์ตบน host
-- **Volume:** `postgres-data` (ข้อมูลทั้งหมด), `caddy-data` (`/data`: ใบรับรองและ ACME account) และ `caddy-config` (`/config`) อยู่ใน `/var/lib/docker/volumes/club-registration-prod_*` **ห้าม `down -v`** เป็นกิจวัตร: ลบ DB ทั้งก้อน และถ้าใบรับรองหายต้องขอใหม่ ขอใหม่ซ้ำหลายครั้งติด rate limit ของ Let's Encrypt (รอเป็นสัปดาห์) backup ของ DB เป็นงาน O3
+- **Volume:** `postgres-data` (ข้อมูลทั้งหมด), `caddy-data` (`/data`: ใบรับรองและ ACME account) และ `caddy-config` (`/config`) อยู่ใน `/var/lib/docker/volumes/club-registration-prod_*` **ห้าม `down -v`** เป็นกิจวัตร: ลบ DB ทั้งก้อน และถ้าใบรับรองหายต้องขอใหม่ ขอใหม่ซ้ำหลายครั้งติด rate limit ของ Let's Encrypt (รอเป็นสัปดาห์) backup ของทั้งสองอย่างดู [Backup และ Restore (O3)](#backup-และ-restore-o3)
 - **Fail fast:** ตัวแปรที่จำเป็น (`SITE_ADDRESS`, `POSTGRES_*`, `DATABASE_URL`, `JWT_SECRET`) ใช้ `${VAR:?…}` ขาดตัวไหน compose ไม่ยอมรันและบอกชื่อ ส่วน `DB_*` ไม่ตั้งได้ (ค่าว่าง = default ของ api)
 - **Log rotation:** ทุก service ใช้ `json-file` ไฟล์ละ 10 MB เก็บ 5 ไฟล์ (สูงสุด ~50 MB ต่อ container) วันที่คนเยอะดิสก์ไม่เต็มเพราะ log
 - **Migrate:** รันทุกครั้งที่ `up` migration ที่ใช้แล้วถูกข้าม จึงไม่มีผลถ้าไม่มีของใหม่ ถ้า migrate ล้ม api ไม่ start (container เดิมของ api ยังรันต่อถ้ามี) ดูสาเหตุด้วย `logs migrate` ใช้ image เดียวกับ api เสมอ (`image: club-registration-prod-api`) build แค่ api ก็ไม่มีทางได้ migration เก่ากว่า server
@@ -458,7 +460,98 @@ docker image prune -f           # ลบ image เก่าที่ไม่ม
 
 **Smoke test ของ compose:** `scripts/smoke-compose.sh` (ต้องมี Docker + Compose v2 และ curl) สร้าง env file ชั่วคราวจาก `deploy/production.env.example` ด้วย secret สุ่ม (ไม่พิมพ์ออกมา) แล้ว `build` + `up -d --wait` ด้วย project name ไม่ซ้ำและ `SITE_ADDRESS=localhost` (CA ภายในของ Caddy ไม่ต้องใช้ internet) พอร์ต host 18080/18443 (ตั้งด้วย `SMOKE_HTTP_PORT`, `SMOKE_HTTPS_PORT`) curl เชื่อ CA ที่ copy ออกมาจาก container ด้วย `--cacert` แทนการปิดการตรวจ (`-k`) chain ที่เสียจึงยัง fail ตรวจ: ทุก service healthy, migrate จบด้วย 0 ครั้งเดียวและ restart policy `no`, HTTP → 308 ไป HTTPS path เดิมโดยไม่มี HSTS, HTTPS `/` เป็น SPA พร้อม HSTS + CSP, `/api/health` 200 พร้อม HSTS ตัวเดียว, postgres/api/migrate ไม่เปิดพอร์ต host, web ไปถึง api แต่ไม่ถึง postgres, api ไปถึง web:80 แต่ไม่ถึง health listener, ค่า `shared_buffers`/`max_connections` ที่ใช้จริง, heap limit ของ api, log rotation และ memory limit ทุก service, `create-admin` ผ่าน `run --rm --no-deps` แล้ว login ผ่าน HTTPS ได้ (ไม่ start migrate ซ้ำ), body 7 MiB ได้ 413 จาก Caddy (body ว่าง) ส่วน 100 KiB ยังถึง api (413 JSON ของ api), restart api แล้ว login ได้, `down` (ไม่มี `-v`) แล้ว `up` ใหม่: migrate รันซ้ำจบด้วย 0, login ได้ (volume DB อยู่), CA และใบรับรองของ site เป็นไฟล์เดิม (volume `/data` อยู่ ไม่ขอใหม่) ลบทุกอย่าง (`down -v` + image) ด้วย `trap` ไม่แตะ DB ของ dev CI รันต่อจาก `smoke-images.sh` ใน job `images` ถ้า build หลัง proxy ที่ดักถอด TLS ให้ตั้ง `EXTRA_CA_FILE=<pem>` script จะเพิ่ม build secret ผ่าน override ชั่วคราว (`compose.prod.yml` ไม่ต้องใช้)
 
-**ยังไม่อยู่ใน O2:** เตรียม EC2/security group/DNS และเปิด-ปิดเครื่อง (O4), backup `pg_dump` ไป S3 และซ้อม restore (O3), ตัวเลข pool/memory/Postgres จริงจาก load test (O5) และ arm64 ยังไม่ได้รันจริง (ต้องรันทั้งสอง smoke script บนเครื่องจริงครั้งแรก)
+**ยังไม่อยู่ใน O2:** เตรียม EC2/security group/DNS และเปิด-ปิดเครื่อง (O4), backup `pg_dump` ไป S3 และซ้อม restore (ทำแล้วใน O3), ตัวเลข pool/memory/Postgres จริงจาก load test (O5) และ arm64 ยังไม่ได้รันจริง (ต้องรันทั้งสอง smoke script บนเครื่องจริงครั้งแรก)
+
+### Backup และ Restore (O3)
+
+DB ทั้งก้อนอยู่ใน volume `postgres-data` บน EBS ของเครื่องเดียว backup จึงเป็นทางเดียวที่จะกลับมาได้เมื่อเครื่อง/ดิสก์พัง เผลอ `down -v` หรือข้อมูลเสียจาก import ผิด ใช้ 2 script บน host (ต้องรันจาก checkout ของ repo บนเครื่อง production ไม่อยู่ใน image) และ `scripts/lib/backup-common.sh` ที่ใช้ร่วมกัน
+
+**อะไรถูก backup ไปไหน**
+
+| | ไฟล์ | ที่เก็บ |
+|---|---|---|
+| DB | `pg_dump --format=custom` ของ `POSTGRES_DB` ทั้งก้อน (ทุกตาราง รวม `pgmigrations`, `registration_events`, `password_hash`) ชื่อ `<db>-<YYYYmmddTHHMMSSZ>.dump` (เวลา UTC) | `BACKUP_DIR` บนเครื่อง (เก็บ `BACKUP_KEEP_LOCAL` ไฟล์ล่าสุด) และ `BACKUP_S3_URI/<ชื่อเดียวกัน>` |
+| ใบรับรอง (เลือกได้ `--include-certs`) | tar.gz ของ volume `caddy-data` (`/data` ของ Caddy: ใบรับรอง + key ของ ACME account) ชื่อ `caddy-data-<เวลา>.tar.gz` | ที่เดียวกัน |
+
+- **ไม่ต้องหยุดระบบ:** `pg_dump` อ่านจาก snapshot เดียวที่สอดคล้องกันทั้งก้อน (ถือแค่ `ACCESS SHARE` ไม่ขวางการลง/ยกเลิก) รันระหว่างรอบเปิดได้ ใช้เวลาไม่กี่วินาที (DB สมมติ 40 คนในเทสต์ได้ไฟล์ ~37 KB ขนาดจริงของ 2,500 คนยังไม่ได้วัด)
+- **ไม่ต้องเปิดพอร์ต DB และไม่ต้องลง Postgres client บน host:** `pg_dump`/`pg_restore`/`psql` รันใน container `postgres` ผ่าน `docker compose exec -T` ไฟล์วิ่งผ่าน stdin/stdout
+- **ตรวจก่อนเก็บ:** `pg_restore --list` แล้วอ่านทั้งไฟล์อีกรอบ (`pg_restore --file=/dev/null` แปลงเป็น SQL ทิ้ง ไม่เขียนลง DB ไหน) เพราะ `--list` อ่านแค่สารบัญที่หัวไฟล์ ไฟล์ที่ถูกตัดครึ่งยังผ่าน `--list` ได้ (ทดลองแล้ว) ไฟล์ที่ไม่ผ่านถูกลบทิ้งและไม่ upload เขียนเป็น `.partial` ก่อนแล้วค่อย rename เมื่อผ่าน ไฟล์ที่ค้างจากการล้มจึงไม่ถูกนับเป็น backup
+- **S3:** `aws s3 cp --sse AES256` (SSE-S3 ทุก object ไม่พึ่งค่า default ของ bucket) แล้วตรวจว่า object มีอยู่และขนาดเท่าไฟล์ในเครื่อง ไม่ลบอะไรใน S3 เอง (role ไม่มีสิทธิ์ลบ) object เก่าหมดอายุด้วย lifecycle rule ของ bucket
+- **AWS CLI ของ host** (O4 ติดตั้ง) ใช้ IAM role ของ instance ไม่มี access key บนเครื่อง ไม่ใช้ container `aws-cli` เพราะ IMDSv2 ตั้ง hop limit = 1 เป็นค่าเริ่มต้น container จึงขอ credential จาก instance metadata ไม่ได้ ตัวแปร `AWS_*` (`AWS_REGION`, `AWS_ENDPOINT_URL` ฯลฯ) ส่งผ่านถึง `aws` ตรงๆ (เทสต์ใช้ `AWS_ENDPOINT_URL` ชี้ไป MinIO)
+- **ข้อมูลส่วนบุคคล:** dump มีชื่อนักเรียนและ hash รหัสผ่าน script สร้างไฟล์ด้วย `umask 077` (ไฟล์ 600 ในไดเรกทอรี 700) ไม่พิมพ์เนื้อหา dump หรือแถวในตารางออก log เลย (log มีแค่ชื่อไฟล์ ขนาด จำนวนแถวต่อตาราง และผลตรวจ invariant) ตัดบรรทัด `DETAIL`/`CONTEXT` ของ error จาก Postgres ซึ่งอาจยกค่าในแถวมา bucket ต้องเป็น private ห้ามคัดลอก dump ไปเครื่องส่วนตัว `.gitignore` กัน `*.dump`, `*.dump.partial`, `caddy-data-*.tar.gz` อีกชั้น
+- **กันรันซ้อน:** `flock` บน `BACKUP_DIR/.lock` ร่วมกันทั้ง backup และ restore รันไม่ซ้อนกันเด็ดขาด (ตัวที่สองจบทันทีด้วย exit 3 ไม่รอ) ไม่ถามอะไร จึงใช้กับ cron/systemd timer ได้ (ตั้งเวลาเป็นงาน O4)
+
+**ใช้งาน** (บนเครื่อง ในโฟลเดอร์ repo ใช้ `deploy/production.env` เป็นค่าเริ่มต้น เปลี่ยนด้วย `PROD_ENV_FILE`)
+
+```bash
+scripts/backup.sh                    # dump → ตรวจ → upload S3 → ตรวจ object → ลบไฟล์ในเครื่องที่เกิน BACKUP_KEEP_LOCAL
+scripts/backup.sh --include-certs    # + archive ใบรับรองของ Caddy (ก่อนทิ้ง/สร้างเครื่องใหม่)
+scripts/backup.sh --local-only       # S3 ล่มหรือไม่มีเน็ต: เก็บในเครื่องอย่างเดียว
+
+scripts/restore.sh --target-db drill_check latest        # ซ้อม: กู้ลง DB ชั่วคราว ไม่แตะ production แล้วลบทิ้ง
+scripts/restore.sh --target-db drill_check --keep latest # ซ้อมแล้วเก็บ DB ไว้ตรวจเอง (ลบเองด้วย dropdb)
+scripts/restore.sh --yes latest      # กู้ production จาก object ล่าสุดใน BACKUP_S3_URI
+scripts/restore.sh --yes latest-local                     # S3 ล่ม: จากไฟล์ล่าสุดใน BACKUP_DIR
+scripts/restore.sh --yes s3://example-club-backups/prod/club_registration-20261117T153000Z.dump
+scripts/restore.sh --yes /var/backups/club-registration/club_registration-20261117T153000Z.dump
+scripts/restore.sh --certs --yes latest                   # คืน volume ใบรับรองของ Caddy
+```
+
+| Exit code | backup.sh | restore.sh |
+|---|---|---|
+| 0 | สำเร็จ | สำเร็จ |
+| 1 | ล้ม (dump/ตรวจไม่ผ่าน ไม่มีอะไรถูกเก็บหรือ upload) | ล้ม (ดูข้อความ ถ้าล้มหลังหยุด api/web จะ `up` กลับให้เอง) |
+| 2 | ใช้ผิด/ตั้งค่าไม่ครบ (เช่นไม่มี `BACKUP_S3_URI` และไม่ใส่ `--local-only`) | ใช้ผิด หรือ**ไม่มี `--yes`** (ปฏิเสธพร้อมบอกว่าจะเขียนทับอะไร ไม่แตะอะไรเลย) |
+| 3 | มี backup/restore อื่นถือ lock อยู่ | เหมือนกัน |
+| 4 | upload ไม่สำเร็จ แต่ไฟล์ที่ตรวจแล้วอยู่ในเครื่อง (บอกคำสั่ง `aws s3 cp` ให้ upload ทีหลัง) | – |
+
+**Restore production ทำอย่างไร (ได้ข้อมูลเก่าทั้งก้อนหรือใหม่ทั้งก้อน ไม่มีผสม)**
+
+1. resolve ต้นทาง (`latest` = ชื่อล่าสุดตาม timestamp ใน S3) ถ้าไม่มี `--yes` ปฏิเสธที่นี่ (exit 2) ก่อนเปลี่ยนอะไร
+2. ดาวน์โหลดลงไดเรกทอรีชั่วคราวใน `BACKUP_DIR` (700, ลบทิ้งตอนจบ) start `postgres` ถ้ายังไม่รัน (เช่นเครื่องใหม่ volume ว่าง) แล้วตรวจไฟล์แบบเดียวกับตอน backup **ไฟล์เสีย/ถูกตัด = จบตรงนี้ ยังไม่หยุดอะไร**
+3. หยุด `web` และ `api` (ไม่มีใครเขียนข้อมูลที่กำลังจะถูกแทน)
+4. `pg_restore --no-owner --exit-on-error --single-transaction` ลง**DB ใหม่ที่ว่าง** `<db>_restoring` ล้ม = ลบ DB นั้นทิ้งแล้ว `up` stack เดิมกลับ production ไม่ถูกแตะ ตรวจด้วยว่าเป็น dump ของแอปนี้ (มี `pgmigrations` และ `users`)
+5. ใน transaction เดียว: rename `<db>` → `<db>_before_restore` และ `<db>_restoring` → `<db>` (Postgres ทำ `ALTER DATABASE … RENAME` ใน transaction ได้) DB ที่ api ใช้จึงเป็นของเก่าทั้งก้อนหรือของ backup ทั้งก้อนเท่านั้น
+6. `compose run --rm migrate` (dump อาจมาจาก schema ที่เก่ากว่าโค้ดปัจจุบัน) แล้ว `up -d --wait` รอจนทุก service healthy พิมพ์จำนวนแถวต่อตารางและผลตรวจ invariant (`registered` = จำนวน registration)
+
+- **ทำไมไม่ `pg_restore --clean --if-exists` ลง DB เดิม:** `--clean` drop เฉพาะ object ที่อยู่ใน dump ถ้า DB ปัจจุบันมีตารางจาก migration ใหม่กว่า dump ตารางนั้นจะค้างพร้อมข้อมูลหลัง backup ขณะที่ `pgmigrations` ถูกย้อนเป็นของเก่า (= ข้อมูลผสม และ migrate รอบถัดไปชนกับตารางที่มีอยู่แล้ว) การกู้ลง DB ใหม่แล้วสลับชื่อไม่มีปัญหานี้ และยังเหลือ DB เดิมไว้ย้อนกลับได้
+- DB เดิมเก็บเป็น `<db>_before_restore` จนถึง restore ครั้งถัดไป (มีข้อมูลส่วนบุคคล ลบเมื่อยืนยันข้อมูลที่กู้แล้ว: `dcp exec postgres dropdb -U club club_registration_before_restore`) ถ้าต้องย้อนกลับ: หยุด api/web แล้วสลับชื่อกลับด้วย `psql` แบบเดียวกับข้อ 5
+- ถ้า migrate ล้มหลังสลับ: ข้อมูลเป็นของ backup แล้วแต่ api ไม่ start (ตาม `depends_on` ของ compose) ดู `dcp logs migrate`
+- ไม่ต้องกู้ role ของ Postgres: user เดียวที่แอปใช้ถูกสร้างจาก `POSTGRES_*` ใน env file ตอนสร้าง volume (`--no-owner` ทำให้ทุก object เป็นของ user นั้น)
+- **ซ้อม restore (`--target-db`)** ทำข้อ 2 และ 4 ลง DB ชื่อที่ให้ (ห้ามเป็นชื่อ production, `postgres`, `template*`) ไม่หยุด api ไม่ migrate ไม่สลับอะไร แล้วพิมพ์จำนวนแถวและผล invariant และลบ DB นั้นทิ้ง (เว้นแต่ `--keep`) ถ้า DB ชื่อนั้นมีอยู่แล้วต้องใส่ `--yes` **ควรซ้อมทุกเดือนและก่อนเปิดรอบทุกครั้ง** backup ที่ไม่เคยลองกู้ = ยังไม่รู้ว่ามี backup
+- **ใบรับรอง (`--certs`):** หยุด `web` → ลบของใน `/data` → แตกไฟล์ด้วย container ชั่วคราวจาก image `web` (user `caddy` เจ้าของ volume) → start `web` อย่างเดียว (`--no-deps`) ใช้ตอนสร้างเครื่องใหม่ เพื่อไม่ต้องขอใบรับรองใหม่จนติด rate limit ของ Let's Encrypt (ไม่จำเป็นถ้าเครื่องเดิมยังอยู่ เพราะ volume ยังอยู่) **ลำดับบนเครื่องใหม่:** `dcp build` → `restore.sh --certs --yes latest` → `restore.sh --yes latest` Caddy จึงเจอใบรับรองเดิมตั้งแต่ start ครั้งแรก
+- **ล้มกลางทาง:** ถ้าล้มหลังหยุด api/web แต่ก่อนสลับ DB script จะ `up -d --wait` ให้เองเฉพาะเมื่อเดิมมันรันอยู่ (เครื่องใหม่ที่ยังไม่เคยรันจะไม่ถูก start บน DB ว่าง) และไม่ start ให้หลังสลับแล้วถ้า migrate ล้ม
+
+**S3 และสิทธิ์ (ทำครั้งเดียว จากเครื่อง admin ด้วยสิทธิ์ admin ของบัญชี AWS ส่วนการสร้าง IAM role/instance profile ให้ EC2 อยู่ใน O4)** ชื่อ bucket, account id และ region จริงอยู่แค่ใน `deploy/production.env` บนเครื่องและในบัญชี AWS ห้าม commit ตัวอย่างใช้ `example-club-backups` และ prefix `prod`
+
+```bash
+BUCKET=example-club-backups      # ชื่อจริงห้าม commit
+aws s3api create-bucket --bucket "$BUCKET" --region <region> \
+  --create-bucket-configuration LocationConstraint=<region>
+aws s3api put-public-access-block --bucket "$BUCKET" --public-access-block-configuration \
+  BlockPublicAcls=true,IgnorePublicAcls=true,BlockPublicPolicy=true,RestrictPublicBuckets=true
+aws s3api put-bucket-versioning --bucket "$BUCKET" --versioning-configuration Status=Enabled
+aws s3api put-bucket-lifecycle-configuration --bucket "$BUCKET" \
+  --lifecycle-configuration file://deploy/s3-lifecycle.example.json
+sed "s/example-club-backups/$BUCKET/g" deploy/s3-backup-policy.example.json >/tmp/club-backup-policy.json
+aws iam put-role-policy --role-name <ชื่อ role ของ EC2> --policy-name club-backup \
+  --policy-document file:///tmp/club-backup-policy.json
+```
+
+- **Policy ของ role (`deploy/s3-backup-policy.example.json`, least privilege):** `s3:ListBucket` บน bucket โดยมีเงื่อนไข `s3:prefix` = `prod/*` (ใช้หา `latest` และตรวจ object), `s3:PutObject` + `s3:GetObject` (+ `s3:AbortMultipartUpload` สำหรับ upload ไฟล์ใหญ่ที่ล้มกลางทาง) บน `prod/*` เท่านั้น **ไม่มี `s3:DeleteObject`** หรือสิทธิ์ของ bucket อื่น/สิทธิ์ตั้งค่า bucket ถ้าเครื่องถูกยึด ผู้บุกรุกลบ backup ไม่ได้ ส่วนการเขียนทับ object เดิม (`PutObject` ทำได้) ป้องกันด้วย **versioning** (เวอร์ชันเก่ายังอยู่) เปลี่ยน prefix ต้องแก้ทั้งสองไฟล์ JSON และ `BACKUP_S3_URI` ให้ตรงกัน เทสต์รันทั้ง backup และ restore ด้วย user ที่มีแค่ policy นี้ (ใน MinIO) และตรวจว่าลบและ list นอก prefix ไม่ได้
+- **เข้ารหัส:** SSE-S3 (AES-256 ฝั่ง AWS ทุก object, script ส่ง `--sse AES256` เอง) ระหว่างทางเป็น HTTPS ของ AWS CLI ถ้าต้องการคุมกุญแจเอง/ดู audit การถอดรหัสใช้ SSE-KMS ได้ (ต้องเพิ่มสิทธิ์ `kms:` ใน policy) ไม่ได้ทำใน O3
+- **Retention (`deploy/s3-lifecycle.example.json`):** object ใต้ `prod/` หมดอายุ 400 วัน (ครอบคลุม 1 ปีการศึกษาและรอบถัดไป เพราะระบบใช้ปีละ 2–4 ครั้ง ถ้าตั้งสั้นเช่น 90 วัน ช่วงระหว่างเทอมอาจไม่เหลือ backup เลย) เวอร์ชันที่ถูกเขียนทับ/หมดอายุถูกลบจริงหลัง 30 วัน และล้าง multipart ที่ค้าง 7 วัน **ปรับตามนโยบาย PDPA ของโรงเรียน** (เก็บข้อมูลนักเรียนไม่นานกว่าที่จำเป็น) ไฟล์ในเครื่องเก็บ `BACKUP_KEEP_LOCAL` ไฟล์ล่าสุด (default 7)
+
+**ถ้า S3 ใช้ไม่ได้** (network, สิทธิ์, AWS ล่ม): `backup.sh` ปกติจบด้วย exit 4 แต่ไฟล์ที่ตรวจแล้วอยู่ใน `BACKUP_DIR` และข้อความบอกคำสั่ง `aws s3 cp … --sse AES256` ให้ upload ซ้ำเมื่อ S3 กลับมา (หรือรอรอบถัดไป) ถ้ารู้ล่วงหน้าว่าใช้ไม่ได้ใช้ `--local-only` (exit 0) restore ใช้ `latest-local` หรือ path ของไฟล์ได้โดยไม่แตะ S3 ข้อจำกัด: สำเนาในเครื่องอยู่บน EBS เดียวกับ DB ป้องกันข้อมูลเสียหาย/ลบผิดได้ แต่ไม่ช่วยถ้า EBS หรือเครื่องหาย
+
+**RPO/RTO (ประเมิน ยังไม่ได้วัดบนเครื่องจริง)**
+
+- **RPO (ข้อมูลที่อาจหาย) = เวลานับจาก backup ที่สำเร็จล่าสุด** ตอนนี้ยังรันด้วยมือ (หลังปิดรอบตาม runbook) ถ้าเครื่องพังระหว่างรอบเปิด การลง/ยกเลิกตั้งแต่ backup ล่าสุดหายทั้งหมด O4 จะตั้ง timer (เสนอ: ทุก 15 นาทีระหว่างรอบเปิด และวันละครั้งนอกนั้น) RPO จึงจะเหลือ ≤ ~15 นาที ระหว่างนี้ให้รัน `backup.sh` เองก่อนและหลังเปิดรอบ ก่อนยืนยัน import และก่อน deploy ที่มี migration
+- **RTO (เวลากลับมาใช้ได้):** เครื่องเดิมยังอยู่ (DB เสีย/ลบผิด): smoke test กู้ข้อมูลสมมติ 40 คนจาก S3 จนทุก service healthy ใน 13 วินาที บนเครื่องพัฒนา ข้อมูลจริงหลักสิบ MB น่าจะเป็นหลักนาที เครื่องใหม่ทั้งหมด: เตรียม EC2 + `git clone` + env file + `dcp build` + restore ตาม O4 ประเมิน ~30–60 นาที (ส่วนใหญ่คือ build บน t4g.small) ยังไม่ได้ลองจริง
+
+**Smoke test:** `scripts/smoke-backup.sh` (ต้องมี Docker + Compose v2, curl, `flock`) ใช้ stack จริงจาก `compose.prod.yml` (`SITE_ADDRESS=:80`, project name ไม่ซ้ำ, พอร์ต 18081/18444 ตั้งด้วย `SMOKE_BACKUP_HTTP_PORT`/`SMOKE_BACKUP_HTTPS_PORT`) กับ MinIO ที่ pin tag + digest เป็น S3 (MinIO เลิกออก image เอง จึงใช้ build ชุมชนสุดท้ายของ Bitnami `bitnamilegacy/minio` เฉพาะในเทสต์) เปิด SSE-S3 ด้วย KMS key ในตัว สร้าง bucket ที่เปิด versioning + lifecycle ตามไฟล์ตัวอย่าง และ user ที่มีแค่ policy ตามไฟล์ตัวอย่าง credential ทั้งหมดสุ่มต่อรอบและไม่พิมพ์ ข้อมูลสมมติ: admin จาก `create-admin` ที่เปลี่ยนรหัสผ่าน API จริง, รอบ, 5 ชุมนุม + ครู, นักเรียน 40 คน, ลง 30 คนพร้อม `registered` และ event ที่ตรงกัน ตรวจ (ลำดับเดียวกับลำดับบนเครื่องใหม่): (1) backup → object ชื่อ `<db>-<UTC>.dump` มีอยู่ เข้ารหัส (`ServerSideEncryption: AES256`) ขนาดตรงไฟล์ในเครื่อง ไฟล์ 600 ไดเรกทอรี 700 archive ใบรับรองครบ policy ลบ object และ list นอก prefix ไม่ได้ lock กันรันซ้อน (exit 3 ไม่มี dump เพิ่ม) (2) แก้ข้อมูลหลัง backup → `restore.sh latest` ไม่มี `--yes` ได้ exit 2 ข้อมูลและ api ไม่เปลี่ยน → `down -v` ลบทั้ง stack และ volume → `restore.sh --certs` (ไม่มี `--yes` ถูกปฏิเสธ ไม่สร้างอะไร มี `--yes` ได้ `/data` คืนลง volume ใหม่) → `restore.sh --yes latest` → api/web healthy, migrate จบด้วย 0, จำนวนแถวและ checksum ของทุกตารางเท่ากับตอน backup, invariant ผ่าน, admin login ผ่าน Caddy ด้วยรหัสที่เปลี่ยนก่อน backup (3) ซ้อมลง scratch DB: ข้อมูลตรง backup, production และ api ไม่ถูกแตะ, DB ที่มีอยู่แล้วต้อง `--yes`, ไม่มี `--keep` ลบทิ้ง, ชื่อ production ถูกปฏิเสธ (4) dump ที่ถูกตัดครึ่งและไฟล์ขยะถูกปฏิเสธด้วย exit 1 ก่อนหยุดอะไร api ไม่ถูก restart ข้อมูลไม่เปลี่ยน ส่วน dump ที่สมบูรณ์แต่เป็นของ DB อื่น ล้มหลังหยุด api/web แล้ว ข้อมูลไม่เปลี่ยนและ stack กลับมา healthy เอง (5) S3 ต่อไม่ได้ → exit 4 พร้อมไฟล์ในเครื่อง, `--local-only` exit 0 ไม่ upload, เก็บไฟล์ในเครื่องแค่ `BACKUP_KEEP_LOCAL` (6) output ของทุก script ไม่มีชื่อสมมติหรือ hash รหัสผ่าน ใช้ AWS CLI ของ host ถ้ามี (runner `ubuntu-24.04` ของ GitHub ติดตั้งไว้แล้ว) ถ้าไม่มีใช้ image `amazon/aws-cli` ที่ pin ไว้ผ่าน wrapper เฉพาะในเทสต์ (`SMOKE_AWS_CONTAINER=1` บังคับใช้) ลบทุกอย่างด้วย `trap` CI รันต่อจาก `smoke-compose.sh` ใน job `images` ตรวจ script ทุกตัวด้วย `docker run --rm -v "$PWD:/mnt" -w /mnt koalaman/shellcheck:stable scripts/*.sh scripts/lib/*.sh` (`.shellcheckrc` ให้ shellcheck ตาม `source` ไปที่ `scripts/lib/`) script ทั้งหมดเขียนสำหรับ Linux (GNU coreutils/findutils, `flock` จาก util-linux)
+
+**ยังไม่อยู่ใน O3:** ตั้งเวลา backup ด้วย systemd timer/cron, ติดตั้ง AWS CLI, สร้าง IAM role/instance profile และ bucket จริง, แจ้งเตือนเมื่อ backup ล้ม (O4) และยังไม่ได้ทดสอบกับ S3 จริง/IAM role จริงของ EC2 (เทสต์ใช้ MinIO) ต้องลอง `backup.sh` + ซ้อม `--target-db` บนเครื่องจริงครั้งแรก
 
 ### Environment variables
 
@@ -477,9 +570,15 @@ docker image prune -f           # ลบ image เก่าที่ไม่ม
 | `API_UPSTREAM` | web | `host:port` ของ api default `api:3000` |
 | `POSTGRES_USER`, `POSTGRES_DB`, `POSTGRES_PASSWORD` | postgres (compose) | สร้าง DB ครั้งแรกเท่านั้น (เปลี่ยนทีหลังไม่มีผลกับ volume ที่มีอยู่) password สร้างด้วย `openssl rand -hex 24` |
 | `HTTP_PORT`, `HTTPS_PORT` | `compose.prod.yml` | พอร์ตบน host default 80/443 มีไว้ให้ smoke test รันข้างของที่จับ 80/443 อยู่ production ไม่ต้องตั้ง |
+| `BACKUP_S3_URI` | `backup.sh`, `restore.sh` | `s3://<bucket>/<prefix>` ที่เก็บ backup (เช่น `s3://example-club-backups/prod` ชื่อจริงห้าม commit) ว่าง = `backup.sh` ไม่ยอมรันถ้าไม่ใส่ `--local-only` |
+| `BACKUP_AWS_REGION` | `backup.sh`, `restore.sh` | region ของ bucket (export เป็น `AWS_REGION`) ว่าง = ใช้ค่าของ AWS CLI เอง |
+| `BACKUP_DIR` | `backup.sh`, `restore.sh` | ที่เก็บสำเนาในเครื่อง default `/var/backups/club-registration` (script ตั้งเป็น 700 ไฟล์ 600) และไฟล์ lock `.lock` |
+| `BACKUP_KEEP_LOCAL` | `backup.sh` | จำนวนสำเนาในเครื่องที่เก็บ (ล่าสุด) default 7 ของใน S3 หมดอายุด้วย lifecycle |
+| `PROD_ENV_FILE` | `backup.sh`, `restore.sh` | env file ที่ใช้ default `deploy/production.env` (ตั้งใน environment ของ shell ไม่ใช่ในไฟล์) |
 
 - `DB_*` ทั้ง 4 ตัว (O2) เป็นจำนวนเต็มบวก timeout ไม่เกิน 600000 (ไม่ยอม `0` ซึ่ง `pg` แปลว่าไม่จำกัด) ค่าว่างหรือไม่ตั้ง = default ซึ่งเท่ากับค่าเดิมก่อนตั้งได้ ค่าผิด = ไม่ start และบอกแค่ชื่อตัวแปร ตรวจด้วย Zod ใน `apps/api/src/config.ts` (`migrate` ไม่ใช้ pool จึงไม่สนตัวแปรเหล่านี้) **ค่า default ยังเป็นค่าประเมิน** ตัดสินด้วย load test (O5)
 - `GOMEMLIMIT` (web) และ `NODE_OPTIONS` (api) ตั้งไว้ใน `compose.prod.yml` ให้ตรงกับ memory limit ไม่ได้อยู่ใน env file
+- `BACKUP_*` อยู่ใน env file เดียวกันแต่ compose ไม่อ่าน script อ่านเป็นข้อมูล (ไม่ `source` ไฟล์) ค่าใน environment ของ shell ชนะค่าในไฟล์ ตัวแปร `AWS_*` (`AWS_REGION`, `AWS_ENDPOINT_URL` ฯลฯ) ส่งผ่านถึง AWS CLI ตรงๆ และ `COMPOSE_PROJECT_NAME` ใช้เลือก stack อื่นได้ (smoke test ใช้)
 
 **ออกแบบให้ portable:** migration เป็นคำสั่งแยก (`node dist/migrate.js`), `GET /api/health` เช็ค DB, graceful shutdown (SIGTERM), log JSON ออก stdout, ไม่เก็บ state บน disk ของ app
 
@@ -510,9 +609,9 @@ docker image prune -f           # ลบ image เก่าที่ไม่ม
 
 **Runbook การใช้งาน**
 
-1. 1–2 วันก่อนเปิดรอบ: start เครื่อง → `apt upgrade` + อัปเดตตาม [ขั้นตอนอัปเดต](#compose-ของ-production-o2) (`git pull` → `build` → `up -d --wait` build บนเครื่องเอง ไม่มี registry) → ลองเปิดเว็บและ login (ขั้นตอนเต็มบน EC2 อยู่ใน O4)
-2. วันจริง: เฝ้า log/CPU/RAM
-3. หลังปิดรอบ: export รายชื่อ → `pg_dump` ไป S3 → stop เครื่อง
+1. 1–2 วันก่อนเปิดรอบ: start เครื่อง → `scripts/backup.sh` (ก่อนแตะอะไร) → `apt upgrade` + อัปเดตตาม [ขั้นตอนอัปเดต](#compose-ของ-production-o2) (`git pull` → `build` → `up -d --wait` build บนเครื่องเอง ไม่มี registry) → ซ้อมกู้ `scripts/restore.sh --target-db drill_check latest` → ลองเปิดเว็บและ login (ขั้นตอนเต็มบน EC2 อยู่ใน O4)
+2. วันจริง: เฝ้า log/CPU/RAM และรัน `scripts/backup.sh` เป็นระยะระหว่างรอบเปิด (จนกว่า O4 จะตั้ง timer ให้) ถ้าต้องกู้ดู [Backup และ Restore (O3)](#backup-และ-restore-o3)
+3. หลังปิดรอบ: export รายชื่อ → `scripts/backup.sh --include-certs` → ตรวจว่า exit 0 และมี object ใหม่ (`aws s3 ls <BACKUP_S3_URI>/` เห็นไฟล์ชื่อเวลาล่าสุด) → stop เครื่อง (exit 4 = upload ไม่สำเร็จ ห้าม stop จนกว่าจะ upload ได้)
 4. Compose ตั้ง `restart: unless-stopped` (ยกเว้น `migrate` ที่รันครั้งเดียวต่อ `up`)
 
 **ความเสี่ยงที่ยอมรับ:** เครื่องเดียว = single point of failure ต้องมี backup + runbook สั้นๆ pool ของ `pg` (default 20 ปรับด้วย `DB_POOL_MAX`) และ memory limit ใน `compose.prod.yml` ต้องเหมาะกับ RAM 2 GB ยังเป็นค่าประเมินจนกว่าจะ load test (O5)
@@ -539,4 +638,4 @@ docker image prune -f           # ลบ image เก่าที่ไม่ม
 
 ## ขั้นตอนถัดไป
 
-ทำต่อใน **Phase 1**: Ops ต่อจาก O2 (O3 backup/restore (`pg_dump` ไป S3 และซ้อม restore) → O4 runbook EC2 + DNS (รวม swap หรือเวลาที่ build บนเครื่อง 2 GB) → O5 load test บนสเปคเครื่องจริง ซึ่งตัดสิน pool, memory limit และค่า Postgres) (production image, compose production, scaffold, migration แรก, auth + role guard, จัดการรอบ, import Excel, รหัสผ่านเริ่มต้น, หน้าชุมนุม, export Excel/PDF, API อ่านของนักเรียน, API ลง/ยกเลิกพร้อม concurrency test และหน้าเว็บนักเรียน เสร็จแล้ว)
+ทำต่อใน **Phase 1**: Ops ต่อจาก O3 (O4 runbook EC2 + DNS (รวม swap หรือเวลาที่ build บนเครื่อง 2 GB, ติดตั้ง AWS CLI, IAM role/instance profile + bucket จริง และตั้งเวลา `scripts/backup.sh` ด้วย systemd timer/cron พร้อมแจ้งเตือนเมื่อล้ม) → O5 load test บนสเปคเครื่องจริง ซึ่งตัดสิน pool, memory limit และค่า Postgres) (backup/restore, production image, compose production, scaffold, migration แรก, auth + role guard, จัดการรอบ, import Excel, รหัสผ่านเริ่มต้น, หน้าชุมนุม, export Excel/PDF, API อ่านของนักเรียน, API ลง/ยกเลิกพร้อม concurrency test และหน้าเว็บนักเรียน เสร็จแล้ว)

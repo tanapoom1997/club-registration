@@ -22,9 +22,9 @@
 set -euo pipefail
 
 cd "$(dirname "${BASH_SOURCE[0]}")/.."
+# shellcheck source=lib/smoke-common.sh
+source scripts/lib/smoke-common.sh
 
-readonly COMPOSE_FILE='compose.prod.yml'
-readonly ENV_TEMPLATE='deploy/production.env.example'
 readonly SITE='localhost'
 readonly HTTP_PORT="${SMOKE_HTTP_PORT:-18080}"
 readonly HTTPS_PORT="${SMOKE_HTTPS_PORT:-18443}"
@@ -39,9 +39,8 @@ readonly API_SIZED_BYTES=$((100 * 1024))
 project="crsmoke-$$-${RANDOM}"
 work_dir="$(mktemp -d)"
 env_file="$work_dir/production.env"
-failures=0
 
-compose() { docker compose -p "$project" -f "$COMPOSE_FILE" --env-file "$env_file" "$@"; }
+compose() { docker compose -p "$project" -f "$PROD_COMPOSE_FILE" --env-file "$env_file" "$@"; }
 
 cleanup() {
   if [[ -f "$env_file" ]]; then
@@ -52,37 +51,11 @@ cleanup() {
 }
 trap cleanup EXIT
 
-log() { printf '==> %s\n' "$*"; }
-pass() { printf '  ok    %s\n' "$*"; }
-fail() {
-  printf '  FAIL  %s\n' "$*"
-  failures=$((failures + 1))
-}
-check() {
-  local description="$1"
-  shift
-  if "$@"; then pass "$description"; else fail "$description"; fi
-}
-random_secret() { head -c 48 /dev/urandom | base64 | tr -d '\n/+='; }
-# Hex, as the env template asks for the database password (it is embedded in DATABASE_URL).
-random_hex() { head -c 24 /dev/urandom | od -An -tx1 | tr -d ' \n'; }
-
 dump_logs() {
   echo '--- compose ps ---'
   compose ps -a || true
   echo '--- logs ---'
   compose logs --no-color --tail 40 || true
-}
-
-wait_for() {
-  local description="$1" attempts="$2"
-  shift 2
-  for _ in $(seq "$attempts"); do
-    if "$@" >/dev/null 2>&1; then return 0; fi
-    sleep 1
-  done
-  echo "Timed out waiting for $description" >&2
-  return 1
 }
 
 container_of() { compose ps -aq "$1"; }
@@ -122,7 +95,6 @@ login() {
 # Copies a file out of the web container's /data volume.
 copy_from_web() { compose cp "web:$1" "$2" >/dev/null 2>&1; }
 
-negate() { ! "$@"; }
 web_connects() { compose exec -T web nc -z -w 3 "$1" "$2" >/dev/null 2>&1; }
 api_fetches() {
   compose exec -T api node --input-type=module -e \
@@ -145,48 +117,12 @@ api_heap_limit_mib() {
   compose exec -T api node -p 'Math.round(require("v8").getHeapStatistics().heap_size_limit / 2 ** 20)'
 }
 
-log "Writing a throwaway env file from $ENV_TEMPLATE"
-# Built with shell builtins only, so no secret appears in a process list.
-(
-  umask 077
-  while IFS= read -r line; do
-    case "$line" in
-      SITE_ADDRESS=*) line="SITE_ADDRESS=${SITE}" ;;
-      POSTGRES_PASSWORD=) line="POSTGRES_PASSWORD=$(random_hex)" ;;
-      JWT_SECRET=) line="JWT_SECRET=$(random_secret)" ;;
-    esac
-    printf '%s\n' "$line"
-  done <"$ENV_TEMPLATE" >"$env_file"
-  printf 'HTTP_PORT=%s\nHTTPS_PORT=%s\n' "$HTTP_PORT" "$HTTPS_PORT" >>"$env_file"
-)
-# The template must keep its blanks where the loop above fills them in.
-grep -qE '^POSTGRES_PASSWORD=[0-9a-f]{48}$' "$env_file"
-grep -qE '^JWT_SECRET=.{32,}$' "$env_file"
+log "Writing a throwaway env file from $PROD_ENV_TEMPLATE"
+write_prod_env_file "$env_file" "SITE_ADDRESS=${SITE}" "HTTP_PORT=${HTTP_PORT}" \
+  "HTTPS_PORT=${HTTPS_PORT}"
 
 log "Building images (project ${project})"
-build_files=(-f "$COMPOSE_FILE")
-build_env=()
-extra_ca="${EXTRA_CA_FILE:-${NODE_EXTRA_CA_CERTS:-}}"
-if [[ -n "$extra_ca" && -s "$extra_ca" ]]; then
-  # The Dockerfile's optional build secret, added for this run only; compose.prod.yml itself never
-  # needs it. Bake (Compose's builder) refuses to read a file outside the project directory unless
-  # the fs entitlement check is lifted, which is done for this one command only.
-  cat >"$work_dir/extra-ca.yml" <<EOF
-services:
-  api:
-    build:
-      secrets: [extra_ca]
-  web:
-    build:
-      secrets: [extra_ca]
-secrets:
-  extra_ca:
-    file: $(cd "$(dirname "$extra_ca")" && pwd)/$(basename "$extra_ca")
-EOF
-  build_files+=(-f "$work_dir/extra-ca.yml")
-  build_env+=(BUILDX_BAKE_ENTITLEMENTS_FS=0)
-fi
-env "${build_env[@]}" docker compose -p "$project" "${build_files[@]}" --env-file "$env_file" build
+build_prod_images "$project" "$env_file" "$work_dir"
 
 log 'Starting the stack (up --wait)'
 if ! compose up -d --wait --wait-timeout 180; then
