@@ -1,7 +1,7 @@
 import { chmod, readFile, writeFile } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
 import { parseArgs } from 'node:util';
-import { loadDatabaseConfig } from './config.js';
+import { loadDatabaseConfig, poolSettingsFrom } from './config.js';
 import { createPool } from './db.js';
 import { DEMO_ACCOUNTS, seedDemoAccounts } from './dev/demo-accounts.js';
 import type { DemoCredential } from './dev/demo-accounts.js';
@@ -52,7 +52,8 @@ if (process.env.NODE_ENV === 'production') {
   console.error('seed-dev refuses to run with NODE_ENV=production');
   process.exitCode = 1;
 } else {
-  const pool = createPool(loadDatabaseConfig().DATABASE_URL);
+  const databaseConfig = loadDatabaseConfig();
+  const pool = createPool(databaseConfig.DATABASE_URL, poolSettingsFrom(databaseConfig));
   try {
     const { issued, unchanged } = await seedDemoAccounts(pool, { reset: values.reset });
     const known = mergeIssued(await readKnownPasswords(), issued);
