@@ -155,12 +155,15 @@ const INVARIANTS: Readonly<Record<string, string>> = Object.freeze({
   'a student holds at most one registration per round': `
     SELECT round_id, student_id, count(*)::int AS rows
     FROM registrations GROUP BY round_id, student_id HAVING count(*) > 1`,
-  "a registration's student is in the round's grade": `
+  // Until the round closes: a seat in a closed round is history, and an import of a later term
+  // may move the student up a grade (README Import, item 3). It never may while the round is open
+  // or upcoming.
+  "a registration's student is in the round's grade until the round closes": `
     SELECT r.id, sp.grade AS student_grade, ro.grade AS round_grade
     FROM registrations r
     JOIN student_profiles sp ON sp.user_id = r.student_id
     JOIN rounds ro ON ro.id = r.round_id
-    WHERE sp.grade <> ro.grade`,
+    WHERE sp.grade <> ro.grade AND ro.closes_at > statement_timestamp()`,
   "a registration's club belongs to its round": `
     SELECT r.id FROM registrations r JOIN clubs c ON c.id = r.club_id
     WHERE c.round_id <> r.round_id`,

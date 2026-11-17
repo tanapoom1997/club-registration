@@ -9,7 +9,7 @@ import { createPool, withTransaction } from '../src/db.js';
 import { parseImportWorkbook } from '../src/import/parse.js';
 import { commitImport } from '../src/services/import-commit.js';
 import { registerForClub } from '../src/services/registrations.js';
-import { lockRound } from '../src/services/round-lock.js';
+import { lockRound, lockRoundsForImport } from '../src/services/round-lock.js';
 import { buildTestApp, createTestUser } from './support/app.js';
 import {
   createClub,
@@ -23,15 +23,17 @@ import { startMigratedPostgres, stopPostgres } from './support/postgres.js';
 import {
   createStudents,
   eventsOf,
+  moveWindow,
   newKey,
   registrationInvariantViolations,
   seatStudent,
   sessionCookie,
 } from './support/registration.js';
 
-// The import commit against registrations in the same term (CLAUDE.md rule 3): the commit takes
-// every round lock of its term before planning, so a registration either commits before the plan
-// reads it or waits for the import to commit. Each race is made deterministic by holding a lock
+// The import commit against registrations (CLAUDE.md rule 3): before planning, the commit takes
+// the round lock of every round of its term and of every round of another term that has not
+// closed yet, so a registration in one of them either commits before the plan reads it or waits
+// for the import to commit. Each race is made deterministic by holding a lock
 // on a separate connection and watching pg_stat_activity until the other side is blocked on it.
 // Every value is made up.
 
@@ -55,18 +57,26 @@ describe('import commit and the round locks', () => {
   let container: StartedPostgreSqlContainer;
   let pool: Pool;
 
-  // Rounds of one term, open now by the DB clock, so registrations in them are accepted.
-  const createOpenRoundInTerm = async (term: string, grade: number): Promise<number> => {
+  // Window edges in seconds from now by the DB clock, the clock registration decides by.
+  const createRoundInTerm = async (
+    term: string,
+    grade: number,
+    { opensIn, closesIn }: { opensIn: number; closesIn: number },
+  ): Promise<number> => {
     const { rows } = await pool.query<{ id: number }>(
       `INSERT INTO rounds (term, grade, opens_at, closes_at)
-       VALUES ($1, $2, now() - $3::int * interval '1 second', now() + $3::int * interval '1 second')
+       VALUES ($1, $2, now() + $3::int * interval '1 second', now() + $4::int * interval '1 second')
        RETURNING id`,
-      [term, grade, HOUR],
+      [term, grade, opensIn, closesIn],
     );
     const id = rows[0]?.id;
     if (id === undefined) throw new Error('Round insert returned no row');
     return id;
   };
+
+  // Rounds of one term, open now by the DB clock, so registrations in them are accepted.
+  const createOpenRoundInTerm = async (term: string, grade: number): Promise<number> =>
+    await createRoundInTerm(term, grade, { opensIn: -HOUR, closesIn: HOUR });
 
   const parse = async (rows: Partial<Record<'students' | 'clubs', ExcelJS.CellValue[][]>>) =>
     await parseImportWorkbook(await buildImportWorkbook(rows));
@@ -309,6 +319,222 @@ describe('import commit and the round locks', () => {
       expect(await Promise.all(clubs.map(capacityOf))).toEqual([40, 40, 40]);
     }
   }, 60_000);
+
+  describe("another term's rounds", () => {
+    const UPCOMING = Object.freeze({ opensIn: HOUR, closesIn: 2 * HOUR });
+    const CLOSED = Object.freeze({ opensIn: -2 * HOUR, closesIn: -HOUR });
+
+    // A student of grade 1 with a seat in an open grade-1 round of an earlier term, taken through
+    // the real service.
+    const seatedInEarlierTerm = async () => {
+      const earlierTerm = uniqueTerm();
+      const roundId = await createOpenRoundInTerm(earlierTerm, 1);
+      const clubId = await createClub(pool, roundId, uniqueCode());
+      const student = await createStudent(pool, { grade: 1 });
+      await seatStudent(pool, student.id, clubId);
+      return { earlierTerm, roundId, clubId, student };
+    };
+
+    const otherTermMessage = (earlierTerm: string) =>
+      `นักเรียนมีชุมนุมในรอบ ม.1 ของภาคเรียน ${earlierTerm} ที่ยังไม่ปิด จึงเปลี่ยนชั้นไม่ได้ ให้ปิดรอบนั้นก่อนแล้วนำเข้าใหม่`;
+
+    it('locks the rounds of the term and the unclosed rounds of other terms, in id order', async () => {
+      const term = uniqueTerm();
+      const otherTerm = uniqueTerm();
+      const expected = [
+        await createRoundInTerm(otherTerm, 1, UPCOMING),
+        await createRoundInTerm(term, 1, CLOSED),
+        await createRoundInTerm(otherTerm, 3, CLOSED),
+        await createOpenRoundInTerm(term, 2),
+        await createOpenRoundInTerm(otherTerm, 2),
+      ];
+      const skipped = expected.splice(2, 1);
+
+      const locked = await withTransaction(pool, async (client) => {
+        const ids = await lockRoundsForImport(client, term);
+        const { rows } = await client.query<{ objid: number }>(
+          `SELECT objid::int FROM pg_locks
+           WHERE locktype = 'advisory' AND classid = 0 AND objsubid = 1
+             AND pid = pg_backend_pid() AND granted
+           ORDER BY objid`,
+        );
+        return { ids, held: rows.map(({ objid }) => objid) };
+      });
+
+      expect(locked.ids).toEqual(expected);
+      expect(locked.held).toEqual(expected);
+      expect(locked.ids).not.toContain(skipped[0]);
+    });
+
+    it("refuses the grade change of a student whose seat in another term's open round commits while it waits", async () => {
+      const earlierTerm = uniqueTerm();
+      const roundId = await createOpenRoundInTerm(earlierTerm, 1);
+      const clubId = await createClub(pool, roundId, uniqueCode());
+      const student = await createStudent(pool, { grade: 1 });
+      const term = uniqueTerm();
+      await createRoundInTerm(term, 2, UPCOMING);
+      const newcomer = uniqueStudentId();
+      const parsed = await parse({
+        students: [
+          studentRow({ loginId: student.loginId, grade: 2 }),
+          studentRow({ loginId: newcomer }),
+        ],
+      });
+      const registrar = await pool.connect();
+      let finished = false;
+      try {
+        await registrar.query('BEGIN');
+        const registrarPid = await backendPid(registrar);
+        // The real service in the earlier term's round, not committed yet: it holds that round's
+        // lock, the seat and a FOR SHARE lock on the student's profile.
+        await registerForClub(registrar, {
+          studentId: student.id,
+          clubId,
+          idempotencyKey: newKey(),
+        });
+
+        const importing = settle(commitImport(pool, term, parsed));
+        const waiter = await waitForLockWaiter(({ pid }) => pid !== registrarPid);
+        await registrar.query('COMMIT');
+        finished = true;
+        const result = await importing;
+
+        // It waited on the earlier term's round lock, before planning, not on the profile row.
+        expect(waiter).toMatchObject({
+          waitEvent: 'advisory',
+          query: 'SELECT pg_advisory_xact_lock($1::bigint)',
+        });
+        expect(result.ok && result.value.status).toBe('invalid');
+        expect(result.ok && result.value.plan.errors).toEqual([
+          {
+            sheet: 'students',
+            row: 2,
+            column: IMPORT_COLUMNS.students.grade,
+            message: otherTermMessage(earlierTerm),
+          },
+        ]);
+        expect(await gradeOf(student.id)).toBe(1);
+        expect(await userExists(newcomer)).toBe(false);
+        expect(await seatsOf(student.id)).toEqual([clubId]);
+      } finally {
+        if (!finished) await registrar.query('ROLLBACK');
+        registrar.release();
+      }
+    });
+
+    it("refuses the grade change of a student with a seat in another term's upcoming round", async () => {
+      const { earlierTerm, roundId, clubId, student } = await seatedInEarlierTerm();
+      await moveWindow(pool, roundId, { opensInSeconds: HOUR, closesInSeconds: 2 * HOUR });
+      const parsed = await parse({
+        students: [studentRow({ loginId: student.loginId, grade: 2 })],
+      });
+
+      const result = await commitImport(pool, uniqueTerm(), parsed);
+
+      expect(result.status).toBe('invalid');
+      expect(result.plan.errors).toEqual([
+        expect.objectContaining({ row: 2, message: otherTermMessage(earlierTerm) }),
+      ]);
+      expect(await gradeOf(student.id)).toBe(1);
+      expect(await seatsOf(student.id)).toEqual([clubId]);
+    });
+
+    it("moves a student whose seat is in another term's closed round, keeping the seat", async () => {
+      const { roundId, clubId, student } = await seatedInEarlierTerm();
+      await moveWindow(pool, roundId, { opensInSeconds: -2 * HOUR, closesInSeconds: -HOUR });
+      const parsed = await parse({
+        students: [studentRow({ loginId: student.loginId, grade: 2 })],
+      });
+
+      const result = await commitImport(pool, uniqueTerm(), parsed);
+
+      // A seat in a closed round is history: the student moves up and the seat stays on record.
+      expect(result.status).toBe('committed');
+      expect(await gradeOf(student.id)).toBe(2);
+      expect(await seatsOf(student.id)).toEqual([clubId]);
+    });
+
+    it('makes an edit of a round window wait until the import commits', async () => {
+      const closedId = await createRoundInTerm(uniqueTerm(), 1, CLOSED);
+      // A student in the file whose users row is held, so the import stops at its first write,
+      // after taking its locks.
+      const other = await createStudent(pool, { grade: 1, fullName: 'ชื่อเก่า สมมติ' });
+      const parsed = await parse({
+        students: [studentRow({ loginId: other.loginId, fullName: 'ชื่อใหม่ สมมติ' })],
+      });
+      const blocker = await pool.connect();
+      let released = false;
+      try {
+        await blocker.query('BEGIN');
+        const blockerPid = await backendPid(blocker);
+        await blocker.query('SELECT 1 FROM users WHERE id = $1 FOR UPDATE', [other.id]);
+        const importing = settle(commitImport(pool, uniqueTerm(), parsed));
+        const importWaiter = await waitForLockWaiter(({ pid }) => pid !== blockerPid);
+        expect(importWaiter.query).toContain('INSERT INTO users');
+
+        // Reopening a closed round of another term would add a round the import has not locked.
+        const reopening = settle(
+          moveWindow(pool, closedId, { opensInSeconds: -HOUR, closesInSeconds: HOUR }),
+        );
+        const editWaiter = await waitForLockWaiter(
+          ({ pid }) => pid !== blockerPid && pid !== importWaiter.pid,
+        );
+        expect(editWaiter.query).toContain('UPDATE rounds');
+        await blocker.query('ROLLBACK');
+        released = true;
+
+        expect((await importing).ok).toBe(true);
+        expect((await reopening).ok).toBe(true);
+      } finally {
+        if (!released) await blocker.query('ROLLBACK');
+        blocker.release();
+      }
+    });
+
+    it('does not deadlock a registration whose round edit queues behind the import', async () => {
+      const roundId = await createOpenRoundInTerm(uniqueTerm(), 1);
+      const clubId = await createClub(pool, roundId, uniqueCode());
+      const student = await createStudent(pool, { grade: 1 });
+      const newcomer = uniqueStudentId();
+      const parsed = await parse({ students: [studentRow({ loginId: newcomer })] });
+      const registrar = await pool.connect();
+      let finished = false;
+      try {
+        await registrar.query('BEGIN');
+        const registrarPid = await backendPid(registrar);
+        // The registration's first step only: it holds the round lock, nothing else yet.
+        await lockRound(registrar, roundId);
+        const importing = settle(commitImport(pool, uniqueTerm(), parsed));
+        const importWaiter = await waitForLockWaiter(({ pid }) => pid !== registrarPid);
+        expect(importWaiter.waitEvent).toBe('advisory');
+        // An admin edit of that round queues behind the import's FOR SHARE on the rounds row.
+        const editing = settle(
+          pool.query('UPDATE rounds SET max_active = max_active + 1 WHERE id = $1', [roundId]),
+        );
+        await waitForLockWaiter(
+          ({ pid, query }) => pid !== importWaiter.pid && query.includes('UPDATE rounds'),
+        );
+
+        // The rest of the registration checks its foreign keys with FOR KEY SHARE on that same
+        // rounds row; it must not queue behind the edit (which waits for the import, which waits
+        // for this registration). Postgres would break such a cycle with 40P01.
+        const registered = await settle(
+          registerForClub(registrar, { studentId: student.id, clubId, idempotencyKey: newKey() }),
+        );
+        await registrar.query('COMMIT');
+        finished = true;
+
+        expect(registered.ok).toBe(true);
+        expect((await importing).ok).toBe(true);
+        expect((await editing).ok).toBe(true);
+        expect(await seatsOf(student.id)).toEqual([clubId]);
+        expect(await userExists(newcomer)).toBe(true);
+      } finally {
+        if (!finished) await registrar.query('ROLLBACK');
+        registrar.release();
+      }
+    });
+  });
 
   it('previews without waiting for a round lock or the import lock', async () => {
     const term = uniqueTerm();
