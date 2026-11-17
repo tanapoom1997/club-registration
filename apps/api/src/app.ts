@@ -20,6 +20,7 @@ import { adminRoundRoutes } from './routes/admin-rounds.js';
 import { adminStudentRoutes } from './routes/admin-students.js';
 import { authRoutes } from './routes/auth.js';
 import { healthRoutes } from './routes/health.js';
+import { studentRoutes } from './routes/student.js';
 
 // JSON bodies in this API are tiny; routes that take uploads raise this for themselves.
 const BODY_LIMIT_BYTES = 64 * 1024;
@@ -108,6 +109,7 @@ export const buildApp = async ({
   await app.register(adminImportRoutes({ pool, guard }), { prefix: '/api' });
   await app.register(adminStudentRoutes({ pool, guard }), { prefix: '/api' });
   await app.register(adminExportRoutes({ pool, guard }), { prefix: '/api' });
+  await app.register(studentRoutes({ pool, guard }), { prefix: '/api' });
 
   return app;
 };
