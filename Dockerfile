@@ -55,6 +55,11 @@ RUN --mount=type=cache,id=club-registration-pnpm-store,target=/pnpm/store \
     --mount=type=secret,id=extra_ca \
     if [ -s /run/secrets/extra_ca ]; then export NODE_EXTRA_CA_CERTS=/run/secrets/extra_ca; fi; \
     pnpm --filter api deploy --prod --store-dir /pnpm/store /deploy
+# Development-only entry points stay out of the image. seed-dev creates demo accounts whose
+# passwords it writes to a file (it already refuses NODE_ENV=production; absent is stronger), and
+# generate-template rewrites templates/ in a checkout. dev/ is imported by seed-dev alone. rm
+# without -f fails the build if one is renamed, so this list cannot silently go stale.
+RUN rm -r /deploy/dist/seed-dev.js /deploy/dist/generate-template.js /deploy/dist/dev
 
 FROM deps AS build-web
 COPY apps/web/ apps/web/
@@ -96,7 +101,12 @@ RUN addgroup -S -g 1000 caddy \
     && adduser -S -D -H -u 1000 -G caddy -s /sbin/nologin caddy \
     && chown -R caddy:caddy /data /config
 COPY Caddyfile /etc/caddy/Caddyfile
-# Fails the build on a Caddyfile error instead of at container start.
-RUN caddy validate --config /etc/caddy/Caddyfile --adapter caddyfile
+# Fails the build on a Caddyfile error instead of at container start. Validating provisions the
+# config's apps, which can create a local CA (key included) under XDG_DATA_HOME; a throwaway
+# directory keeps that out of /data, so no image ships key material and the certificate volume
+# starts empty and owned by caddy.
+RUN XDG_DATA_HOME=/tmp/caddy-validate XDG_CONFIG_HOME=/tmp/caddy-validate \
+    caddy validate --config /etc/caddy/Caddyfile --adapter caddyfile \
+    && rm -rf /tmp/caddy-validate
 COPY --from=build-web /repo/apps/web/dist /srv
 USER caddy
