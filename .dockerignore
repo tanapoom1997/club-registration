@@ -1,0 +1,29 @@
+# Allowlist: the build context is the repo root, which on a developer machine or the EC2 host
+# also holds .env, .dev-credentials.txt, dumps and real student spreadsheets. Sending only what
+# the images are built from keeps those out of the build entirely, not just out of the final layer.
+*
+!package.json
+!pnpm-lock.yaml
+!pnpm-workspace.yaml
+!tsconfig.base.json
+!Caddyfile
+!apps/
+!packages/
+!templates/import-template.xlsx
+
+# Never sent, even from inside the allowed directories. Installs and builds happen inside the
+# image, so local node_modules/dist would only make the result depend on the machine.
+**/node_modules
+**/dist
+**/.env*
+**/.dev-credentials.txt
+**/*.dump
+**/*.xlsx
+!templates/import-template.xlsx
+**/*.log
+**/coverage
+**/.vite
+**/.DS_Store
+apps/api/test
+**/*.test.ts
+**/*.test.tsx

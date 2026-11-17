@@ -46,3 +46,17 @@ jobs:
       - run: pnpm test
 
       - run: pnpm build
+
+  # Builds the production images (Dockerfile targets api and web) and runs them together with
+  # Postgres, checking health, Caddy's headers and SPA fallback, non-root users, image contents and
+  # graceful shutdown. Plain docker CLI, no extra actions. amd64 only: the arm64 host builds its
+  # own images and is not exercised here.
+  images:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - run: scripts/smoke-images.sh
