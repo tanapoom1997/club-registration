@@ -8,6 +8,11 @@
       "@club-registration/source": "./src/index.ts",
       "types": "./dist/index.d.ts",
       "default": "./dist/index.js"
+    },
+    "./zod-jitless": {
+      "@club-registration/source": "./src/zod-jitless.ts",
+      "types": "./dist/zod-jitless.d.ts",
+      "default": "./dist/zod-jitless.js"
     }
   },
   "scripts": {
