@@ -25,6 +25,10 @@ export const ERROR_CODES = Object.freeze({
   capacityBelowRegistered: 'capacity_below_registered',
   nothingToExport: 'nothing_to_export',
   studentProfileMissing: 'student_profile_missing',
+  clubFull: 'club_full',
+  alreadyRegistered: 'already_registered',
+  roundNotOpen: 'round_not_open',
+  notRegistered: 'not_registered',
 } as const);
 
 export type ErrorCode = (typeof ERROR_CODES)[keyof typeof ERROR_CODES];

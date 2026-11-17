@@ -25,7 +25,7 @@ type StudentRoundRow = {
   closes_at: Date;
 };
 
-type RegistrationRow = {
+export type RegistrationRow = {
   club_id: number;
   club_code: string;
   club_name: string;
@@ -53,7 +53,7 @@ const toStudentRound = (row: StudentRoundRow, now: Date): StudentRound => ({
   status: roundStatusAt({ opensAt: row.opens_at, closesAt: row.closes_at }, now),
 });
 
-const toRegistration = (row: RegistrationRow): StudentRegistration => ({
+export const toRegistration = (row: RegistrationRow): StudentRegistration => ({
   club: { id: row.club_id, clubCode: row.club_code, name: row.club_name },
   registeredAt: row.created_at.toISOString(),
 });
@@ -73,7 +73,7 @@ const toStudentClub = (row: StudentClubRow): StudentClub => ({
 // one was made some other way (by hand, or a broken import). Such an account cannot register at
 // all (registrations reference student_profiles), so it gets a distinct 403 that tells the student
 // to ask an admin, instead of `round: null`, which would claim their grade simply has no round.
-const findStudentGrade = async (db: Queryable, studentId: number): Promise<number> => {
+export const findStudentGrade = async (db: Queryable, studentId: number): Promise<number> => {
   const { rows } = await db.query<{ grade: number }>(
     'SELECT grade FROM student_profiles WHERE user_id = $1',
     [studentId],
@@ -83,30 +83,34 @@ const findStudentGrade = async (db: Queryable, studentId: number): Promise<numbe
   return profile.grade;
 };
 
-// Exactly one round of the grade, or none: the one open now; else the upcoming one that opens
+// Exactly one round of the grade, or none: the one open at `at`; else the upcoming one that opens
 // soonest; else the one that closed last, so a student can still see their result. Ties only
 // happen when an admin lets two terms' windows overlap; then the open round closing soonest wins
 // (the most urgent), and id keeps the choice stable. The window is half-open, as in
-// roundStatusAt.
-const selectStudentRound = async (
+// roundStatusAt. `at` and `alias` are always constants in this module (a parameter placeholder or
+// a DB clock function, and a table alias), never input. Writes use the same order with the DB
+// clock, so a student can only write to the round they are shown (see registrations.ts).
+export const roundSelectionOrder = (at: string, alias: string): string => `
+  CASE
+    WHEN ${at} < ${alias}.opens_at THEN 1
+    WHEN ${at} < ${alias}.closes_at THEN 0
+    ELSE 2
+  END,
+  CASE WHEN ${at} < ${alias}.opens_at THEN ${alias}.opens_at END,
+  CASE WHEN ${at} >= ${alias}.closes_at THEN ${alias}.closes_at END DESC,
+  ${alias}.closes_at,
+  ${alias}.id`;
+
+export const selectStudentRound = async (
   db: Queryable,
   grade: number,
   now: Date,
 ): Promise<StudentRound | undefined> => {
   const { rows } = await db.query<StudentRoundRow>(
-    `SELECT id, term, grade, opens_at, closes_at
-     FROM rounds
-     WHERE grade = $1
-     ORDER BY
-       CASE
-         WHEN $2::timestamptz < opens_at THEN 1
-         WHEN $2::timestamptz < closes_at THEN 0
-         ELSE 2
-       END,
-       CASE WHEN $2::timestamptz < opens_at THEN opens_at END,
-       CASE WHEN $2::timestamptz >= closes_at THEN closes_at END DESC,
-       closes_at,
-       id
+    `SELECT r.id, r.term, r.grade, r.opens_at, r.closes_at
+     FROM rounds r
+     WHERE r.grade = $1
+     ORDER BY ${roundSelectionOrder('$2::timestamptz', 'r')}
      LIMIT 1`,
     [grade, now],
   );
@@ -114,7 +118,7 @@ const selectStudentRound = async (
   return row && toStudentRound(row, now);
 };
 
-const findRegistration = async (
+export const findRegistration = async (
   db: Queryable,
   roundId: number,
   studentId: number,

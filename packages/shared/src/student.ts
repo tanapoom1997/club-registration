@@ -1,5 +1,6 @@
 import { z } from 'zod';
-import { roundSchema } from './rounds.js';
+import { idempotencyKeySchema } from './idempotency.js';
+import { dbIdBodySchema, roundSchema } from './rounds.js';
 
 // What a logged-in student reads about their own grade's round. The student and their grade come
 // from the session only, so these endpoints take no parameters at all. Strict, so an attempt to
@@ -59,3 +60,25 @@ export const studentClubsResponseSchema = studentRoundResponseSchema.extend({
   clubs: z.array(studentClubSchema),
 });
 export type StudentClubsResponse = z.infer<typeof studentClubsResponseSchema>;
+
+// Writes. Strict like the reads: the student, grade and round come from the session, so a body
+// that tries to name one (e.g. studentId) is refused with 400 rather than ignored. One key per
+// click; a retry of the same click sends the same key (README "Idempotency").
+export const registerRequestSchema = z.strictObject({
+  clubId: dbIdBodySchema,
+  idempotencyKey: idempotencyKeySchema,
+});
+export type RegisterRequest = z.infer<typeof registerRequestSchema>;
+
+// Cancels the student's registration in their selected round; there is only one, so no club id.
+export const cancelRegistrationRequestSchema = z.strictObject({
+  idempotencyKey: idempotencyKeySchema,
+});
+export type CancelRegistrationRequest = z.infer<typeof cancelRegistrationRequestSchema>;
+
+// Both writes answer with the student's registration in the round as it stands after the request
+// (null after a cancel). A replayed key answers with the state now, not a copy of the first reply.
+export const studentRegistrationResponseSchema = z.object({
+  registration: studentRegistrationSchema.nullable(),
+});
+export type StudentRegistrationResponse = z.infer<typeof studentRegistrationResponseSchema>;

@@ -44,6 +44,9 @@ const closesAfterOpens = ({ opensAt, closesAt }: Window): boolean =>
 // A row id taken from the URL path.
 export const dbIdSchema = z.coerce.number().int().positive().max(PG_INT_MAX);
 
+// A row id in a JSON body: JSON has numbers, so text such as "5" is refused, not coerced.
+export const dbIdBodySchema = z.number().int().positive().max(PG_INT_MAX);
+
 export const roundIdParamsSchema = z.object({ id: dbIdSchema });
 export type RoundIdParams = z.infer<typeof roundIdParamsSchema>;
 
