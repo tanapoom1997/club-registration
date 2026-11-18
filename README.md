@@ -636,6 +636,16 @@ aws iam put-role-policy --role-name <ชื่อ role ของ EC2> --policy-n
 
 **ความเสี่ยงที่ยอมรับ:** เครื่องเดียว = single point of failure ต้องมี backup + runbook สั้นๆ pool ของ `pg` (default 20 ปรับด้วย `DB_POOL_MAX`) และ memory limit ใน `compose.prod.yml` ต้องเหมาะกับ RAM 2 GB ยังเป็นค่าประเมินจนกว่าจะ load test (O5)
 
+### Dependency audit
+
+- **Gate:** `pnpm audit:deps` (`pnpm audit --audit-level high`) อ่านแค่ `pnpm-lock.yaml` ไม่ต้อง install ล้มเมื่อมี advisory ระดับ high/critical ส่วน moderate/low แสดงในผลแต่ไม่ล้ม รันใน `.github/workflows/audit.yml` ทุก PR, push เข้า `main` และทุกวัน 08:23 น. (advisory ที่ออกหลัง merge ไม่ทำให้ repo เปลี่ยน จึงต้องมีรอบตามเวลา ถ้ารอบตามเวลาล้ม GitHub ส่งอีเมลหาคนที่แก้ schedule ล่าสุด)
+- **Ignore:** ทำได้เฉพาะ advisory ที่ยังไม่มีเวอร์ชันแก้และเข้าไม่ถึง app ใส่ GHSA ใน `auditConfig.ignoreGhsas` ของ `pnpm-workspace.yaml` พร้อมเหตุผล และลบทันทีที่มีเวอร์ชันแก้ ห้ามลด `--audit-level` เพื่อให้ผ่าน ตอนนี้ ignore 1 ตัว: `picomatch` ≤ 4.0.7 ReDoS (GHSA-fc5q-39xc-vjpf) ยังไม่มีเวอร์ชันแก้ และอยู่แค่ใน dev tooling (vite, vitest, eslint, tailwind) ซึ่งใช้ pattern จาก config ของ repo เอง ไม่ใช่จาก request หรือไฟล์ที่อัปโหลด
+- **Moderate ที่ยังเปิดอยู่** (ณ 2026-11-18 ทุกตัวแก้ได้เฉพาะ major ใหม่ที่ package แม่ยังไม่ขยับไป การบังคับด้วย `overrides` ข้าม major เสี่ยงกว่าตัวช่องโหว่เอง รอ package แม่อัปเดตผ่าน Dependabot):
+  - `uuid` 8.3.2 ผ่าน `exceljs` (production) ช่องโหว่อยู่ที่ v3/v5/v6 เมื่อส่ง `buf` เข้าไป
+  - `glob` 10.x/13.x ผ่าน `node-pg-migrate` (production, ใช้หาไฟล์ migration ใน repo) และ `testcontainers` (dev)
+  - `minimatch` 9.x/10.x ผ่าน `eslint`, `node-pg-migrate` และ `testcontainers` ใช้กับ pattern ของ repo เอง
+- **Dependabot** (`.github/dependabot.yml`): เปิด PR อัปเดต npm (minor/patch รวมเป็น PR เดียว major แยก PR) และ GitHub Actions (อัปเดต SHA ที่ pin ไว้) ทุกวันจันทร์ ข้าม major ของ `typescript` (pin 6.0.x) และ `@types/node` (ตาม Node 24) ส่วน security update อัตโนมัติต้องเปิดที่ Settings ของ repo (Dependabot security updates) ไม่ได้มาจากไฟล์นี้ base image ใน `Dockerfile` (`ARG ...@sha256`) และ `compose.prod.yml` ยังอัปเดตด้วยมือ
+
 ## Testing
 
 - **Vitest + Testcontainers** ใช้ Postgres จริง ห้าม mock

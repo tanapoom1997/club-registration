@@ -71,6 +71,7 @@ pnpm typecheck
 pnpm lint
 pnpm format
 pnpm test               # Vitest + Testcontainers (ต้องเปิด Docker)
+pnpm audit:deps         # ล้มถ้า lockfile มี advisory ระดับ high/critical ที่ไม่ได้ ignore (ไม่ต้อง install)
 pnpm build
 scripts/smoke-images.sh   # build image api + web แล้วรันกับ Postgres จริง ตรวจ health/headers/non-root/shutdown (ต้องเปิด Docker)
 scripts/smoke-compose.sh  # รัน compose.prod.yml ทั้ง stack ผ่าน HTTPS (CA ภายในของ Caddy) พอร์ต 18080/18443 แล้วลบทิ้ง
@@ -161,7 +162,7 @@ backup/restore (README หัวข้อ Backup และ Restore (O3)): dump �
 ### TypeScript / Lint
 - `tsconfig`: `strict`, `noUncheckedIndexedAccess`, `exactOptionalPropertyTypes`, `noImplicitOverride`, `verbatimModuleSyntax`, `isolatedModules`
 - ESLint เปิดอย่างน้อย: `@typescript-eslint/no-floating-promises`, `no-misused-promises`, `no-explicit-any`, `consistent-type-imports`, `eqeqeq`, `no-restricted-imports` (กัน web↔api import กัน)
-- CI/ก่อน commit ต้องผ่าน `typecheck` + `lint` + `test` ห้าม merge ถ้าแดง CI อยู่ที่ `.github/workflows/ci.yml` (job `check`: `scripts/check-no-data-files.sh`, format:check, typecheck, lint, test, build และ job `images`: `scripts/smoke-images.sh`, `scripts/smoke-compose.sh` แล้ว `scripts/smoke-backup.sh` ซึ่งรันในเครื่องด้วยคำสั่งเดียวกันได้) รันทุก PR และทุก push เข้า `main` action pin ด้วย commit SHA ถ้าเพิ่มขั้นตอนให้รันซ้ำในเครื่องได้ด้วยคำสั่ง `pnpm` เดียวกัน
+- CI/ก่อน commit ต้องผ่าน `typecheck` + `lint` + `test` ห้าม merge ถ้าแดง CI อยู่ที่ `.github/workflows/ci.yml` (job `check`: `scripts/check-no-data-files.sh`, format:check, typecheck, lint, test, build และ job `images`: `scripts/smoke-images.sh`, `scripts/smoke-compose.sh` แล้ว `scripts/smoke-backup.sh` ซึ่งรันในเครื่องด้วยคำสั่งเดียวกันได้) รันทุก PR และทุก push เข้า `main` ส่วน `.github/workflows/audit.yml` รัน `pnpm audit:deps` ทุก PR, push เข้า `main` และทุกวัน action pin ด้วย commit SHA ถ้าเพิ่มขั้นตอนให้รันซ้ำในเครื่องได้ด้วยคำสั่ง `pnpm` เดียวกัน
 
 ### Security
 - Password hash ด้วย **argon2id** (`crypto.argon2` ของ Node, เก็บเป็น PHC string) ห้าม MD5/SHA ธรรมดา เทียบด้วย `timingSafeEqual`
@@ -171,7 +172,7 @@ backup/restore (README หัวข้อ Backup และ Restore (O3)): dump �
 - Route เขียนที่ไม่ได้รับ JSON (เช่น multipart อัปโหลด ซึ่ง form ข้ามเว็บส่งได้โดยไม่มี preflight) ต้องเรียก `assertSameOrigin` (`apps/api/src/http/same-origin.ts`) ใน preHandler
 - Validate input ทุกจุดด้วย Zod ที่ขอบระบบ (body, query, params, ไฟล์ที่อัปโหลด) ไม่เชื่อข้อมูลภายนอก
 - Error response ไม่เปิดเผย stack trace หรือข้อความจาก DB ให้ client
-- Dependency: ใช้ lockfile และ `pnpm install --frozen-lockfile` ใน CI/Docker, เปิด Dependabot/`pnpm audit` (เสนอ), Docker รันด้วย non-root user
+- Dependency: ใช้ lockfile และ `pnpm install --frozen-lockfile` ใน CI/Docker, Docker รันด้วย non-root user, `pnpm audit:deps` ล้มเมื่อมี advisory ระดับ high/critical การ ignore advisory ทำได้เฉพาะตัวที่ยังไม่มีเวอร์ชันแก้และเข้าไม่ถึง app ใส่ใน `auditConfig.ignoreGhsas` ของ `pnpm-workspace.yaml` พร้อมเหตุผล และลบทันทีที่มีเวอร์ชันแก้ ห้ามลด `--audit-level` เพื่อให้ผ่าน Dependabot (`.github/dependabot.yml`) เปิด PR อัปเดต npm และ GitHub Actions ทุกสัปดาห์ (README หัวข้อ Dependency audit)
 
 ### Database
 - Timestamp ใช้ `timestamptz` เสมอ เก็บเป็น UTC แปลงเวลาไทยที่ชั้นแสดงผล

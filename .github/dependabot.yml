@@ -1,0 +1,36 @@
+# Version updates (README "Dependency audit"). Security updates for known advisories come from
+# the repository's Dependabot security updates setting, not from this file.
+version: 2
+updates:
+  - package-ecosystem: npm
+    # pnpm workspace: the root covers apps/* and packages/* through pnpm-workspace.yaml.
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+      time: '09:17'
+      timezone: Asia/Bangkok
+    open-pull-requests-limit: 5
+    groups:
+      # One PR for the routine bumps instead of one per package. Majors stay separate PRs because
+      # each one needs reading the changelog.
+      minor-and-patch:
+        update-types: [minor, patch]
+    ignore:
+      # Pinned to 6.0.x until typescript-eslint supports 7 (CLAUDE.md Tech Stack).
+      - dependency-name: typescript
+        update-types: [version-update:semver-major]
+      # Types follow the runtime, Node 24 (engines, .nvmrc).
+      - dependency-name: '@types/node'
+        update-types: [version-update:semver-major]
+
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+      time: '09:17'
+      timezone: Asia/Bangkok
+    groups:
+      actions:
+        patterns: ['*']
