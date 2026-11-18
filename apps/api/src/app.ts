@@ -13,6 +13,7 @@ import {
 import type pg from 'pg';
 import { createAuthGuard, JWT_ALGORITHM, SESSION_TTL_SECONDS } from './auth/session.js';
 import { AppError } from './errors.js';
+import { LOG_SERIALIZERS } from './log.js';
 import { adminClubRoutes } from './routes/admin-clubs.js';
 import { adminExportRoutes } from './routes/admin-export.js';
 import { adminImportRoutes } from './routes/admin-import.js';
@@ -25,13 +26,19 @@ import { studentRoutes } from './routes/student.js';
 // JSON bodies in this API are tiny; routes that take uploads raise this for themselves.
 const BODY_LIMIT_BYTES = 64 * 1024;
 
+type AppLogger = boolean | { level: string; stream?: { write: (line: string) => void } };
+
 type AppOptions = {
   pool: pg.Pool;
   jwtSecret: string;
   // stream lets tests capture log lines to prove no secret or personal data is written.
-  logger?: boolean | { level: string; stream?: { write: (line: string) => void } };
+  logger?: AppLogger;
   trustProxy?: boolean;
 };
+
+// Tests' capturing loggers get the same serializers as production, so they test what ships.
+const loggerOptions = (logger: AppLogger) =>
+  logger === false ? false : { ...(logger === true ? {} : logger), serializers: LOG_SERIALIZERS };
 
 const clientErrorStatus = (error: unknown): number | undefined => {
   if (typeof error !== 'object' || error === null || !('statusCode' in error)) return undefined;
@@ -51,7 +58,7 @@ export const buildApp = async ({
   trustProxy = false,
 }: AppOptions) => {
   const app = Fastify({
-    logger,
+    logger: loggerOptions(logger),
     trustProxy,
     bodyLimit: BODY_LIMIT_BYTES,
   }).withTypeProvider<ZodTypeProvider>();
