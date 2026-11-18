@@ -13,6 +13,7 @@ import { lockImport } from '../src/services/round-lock.js';
 import { createTestUser } from './support/app.js';
 import { uniqueStudentId, uniqueTerm } from './support/import-db.js';
 import { buildImportWorkbook, studentRow } from './support/import.js';
+import { waitForLockWaiter } from './support/lock-waiter.js';
 import { startMigratedPostgres, stopPostgres } from './support/postgres.js';
 import { registrationInvariantViolations } from './support/registration.js';
 
@@ -38,7 +39,6 @@ const FAKE_HASH = 'not-a-real-hash';
 const IMPORT_LOCK_QUERY = 'SELECT pg_advisory_xact_lock($1, $2)';
 
 type Student = { id: number; loginId: string; seatNo: number };
-type LockWaiter = { pid: number; waitEvent: string; query: string };
 
 describe('initial password issuance and the import lock', () => {
   let container: StartedPostgreSqlContainer;
@@ -108,21 +108,6 @@ describe('initial password issuance and the import lock', () => {
     return pid;
   };
 
-  const waitForLockWaiter = async (matches: (waiter: LockWaiter) => boolean) => {
-    for (let attempt = 0; attempt < 200; attempt += 1) {
-      const { rows } = await pool.query<{ pid: number; wait_event: string; query: string }>(
-        `SELECT pid, wait_event, query FROM pg_stat_activity
-         WHERE wait_event_type = 'Lock' AND datname = current_database()`,
-      );
-      const waiter = rows
-        .map(({ pid, wait_event: waitEvent, query }) => ({ pid, waitEvent, query }))
-        .find(matches);
-      if (waiter) return waiter;
-      await sleep(25);
-    }
-    throw new Error('No backend ever waited for the expected lock');
-  };
-
   const sessionVersions = async (students: readonly Student[]) => {
     const { rows } = await pool.query<{ session_version: number }>(
       'SELECT session_version FROM users WHERE id = ANY($1::int[]) ORDER BY id',
@@ -165,7 +150,7 @@ describe('initial password issuance and the import lock', () => {
       await lockImport(holder);
 
       const issuing = settle(issue({ grade: GRADE, classroom, onlyUnissued: false }, students));
-      const waiter = await waitForLockWaiter(({ pid }) => pid !== holderPid);
+      const waiter = await waitForLockWaiter(pool, ({ pid }) => pid !== holderPid);
       // While it waits it holds no row: another transaction can lock every student at once.
       const { rowCount } = await holder.query(
         'SELECT 1 FROM users WHERE id = ANY($1::int[]) FOR UPDATE NOWAIT',
@@ -200,10 +185,11 @@ describe('initial password issuance and the import lock', () => {
       await blocker.query('SELECT 1 FROM users WHERE id = $1 FOR UPDATE', [students[2]!.id]);
 
       const issuing = settle(issue({ grade: GRADE, classroom, onlyUnissued: false }, students));
-      const issueWaiter = await waitForLockWaiter(({ pid }) => pid !== blockerPid);
+      const issueWaiter = await waitForLockWaiter(pool, ({ pid }) => pid !== blockerPid);
       expect(issueWaiter.query).toContain('FOR NO KEY UPDATE OF u');
       const importing = settle(commitImport(pool, uniqueTerm(), parsed));
       const importWaiter = await waitForLockWaiter(
+        pool,
         ({ pid }) => pid !== blockerPid && pid !== issueWaiter.pid,
       );
       await blocker.query('ROLLBACK');
