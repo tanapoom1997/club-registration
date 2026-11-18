@@ -115,6 +115,8 @@ no_effective_caps() {
   [[ "$(compose exec -T "$1" sh -c 'grep "^CapEff:" /proc/1/status')" =~ ^CapEff:[[:space:]]+0+$ ]]
 }
 root_fs_read_only() { ! compose exec -T "$1" sh -c 'touch /smoke-write-test' >/dev/null 2>&1; }
+# migrate's own report (run-migrations.ts): one JSON line naming what it applied.
+migrate_logged() { compose logs --no-log-prefix migrate | grep -qF "\"msg\":\"$1\""; }
 migrate_done_once() {
   [[ "$(inspect migrate '{{.State.Status}} {{.State.ExitCode}} {{.RestartCount}} {{.HostConfig.RestartPolicy.Name}}')" == 'exited 0 0 no' ]]
 }
@@ -153,6 +155,7 @@ check 'postgres is healthy' is_healthy postgres
 check 'api is healthy' is_healthy api
 check 'web is healthy (loopback health listener)' is_healthy web
 check 'migrate exited 0, once, with restart policy "no"' migrate_done_once
+check 'migrate logged the migrations it applied' migrate_logged 'migrations applied'
 
 log "Checking HTTP on 127.0.0.1:${HTTP_PORT}"
 fetch redirect http /student/clubs
@@ -247,6 +250,7 @@ if ! compose up -d --wait --wait-timeout 180 >/dev/null 2>&1; then
   exit 1
 fi
 check 'migrate ran again on up and exited 0 (nothing to apply)' migrate_done_once
+check 'migrate logged that nothing was pending' migrate_logged 'no pending migrations'
 login login_after_down
 check 'the admin still logs in after down/up (postgres volume kept)' status_is login_after_down 200
 wait_for "Caddy's local CA after up" 30 copy_from_web "$CA_PATH" "$work_dir/root-after.crt"
