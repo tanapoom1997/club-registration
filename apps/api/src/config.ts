@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { APP_DB_PASSWORD_PATTERN } from './db-role.js';
 import { DEFAULT_POOL_SETTINGS } from './db.js';
 import type { PoolSettings } from './db.js';
 
@@ -31,6 +32,13 @@ const configSchema = databaseConfigSchema.extend({
   JWT_SECRET: z.string().min(32),
 });
 
+// migrate connects as the database owner (DATABASE_URL) and gives club_app its login. Optional so
+// development can keep running the api as the owner; compose.prod.yml requires it.
+const migrateConfigSchema = z.object({
+  DATABASE_URL: z.string().min(1),
+  APP_DB_PASSWORD: z.preprocess(emptyAsUnset, z.string().regex(APP_DB_PASSWORD_PATTERN).optional()),
+});
+
 export type DatabaseConfig = z.infer<typeof databaseConfigSchema>;
 export type Config = z.infer<typeof configSchema>;
 
@@ -51,6 +59,9 @@ export const loadConfig = (env: NodeJS.ProcessEnv = process.env): Config =>
 // server-only secrets like JWT_SECRET.
 export const loadDatabaseConfig = (env: NodeJS.ProcessEnv = process.env): DatabaseConfig =>
   parseEnv(databaseConfigSchema, env);
+
+export const loadMigrateConfig = (env: NodeJS.ProcessEnv = process.env) =>
+  parseEnv(migrateConfigSchema, env);
 
 export const poolSettingsFrom = (config: DatabaseConfig): PoolSettings => ({
   max: config.DB_POOL_MAX,

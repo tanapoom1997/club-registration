@@ -15,7 +15,7 @@ import { createPool } from '../src/db.js';
 import { TEST_JWT_SECRET, createTestUser } from './support/app.js';
 import type { TestUser } from './support/app.js';
 import { createClub, createRound, uniqueCode, uniqueTerm } from './support/import-db.js';
-import { startMigratedPostgres, stopPostgres } from './support/postgres.js';
+import { appConnectionUri, startMigratedPostgres, stopPostgres } from './support/postgres.js';
 import { waitForAdvisoryLockWaiter } from './support/registration.js';
 
 type InjectResponse = Awaited<ReturnType<FastifyInstance['inject']>>;
@@ -110,7 +110,7 @@ describe('admin clubs', () => {
 
   beforeAll(async () => {
     container = await startMigratedPostgres();
-    pool = createPool(container.getConnectionUri());
+    pool = createPool(appConnectionUri(container));
   });
 
   afterAll(async () => {

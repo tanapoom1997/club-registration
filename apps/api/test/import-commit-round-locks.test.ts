@@ -20,7 +20,12 @@ import {
 } from './support/import-db.js';
 import { buildImportWorkbook, clubRow, multipartBody, studentRow } from './support/import.js';
 import { waitForLockWaiter } from './support/lock-waiter.js';
-import { startMigratedPostgres, stopPostgres } from './support/postgres.js';
+import {
+  appConnectionUri,
+  startMigratedPostgres,
+  stopPostgres,
+  truncateAsOwner,
+} from './support/postgres.js';
 import {
   createStudents,
   eventsOf,
@@ -120,7 +125,7 @@ describe('import commit and the round locks', () => {
 
   beforeAll(async () => {
     container = await startMigratedPostgres();
-    pool = createPool(container.getConnectionUri());
+    pool = createPool(appConnectionUri(container));
   });
 
   afterAll(async () => {
@@ -129,7 +134,7 @@ describe('import commit and the round locks', () => {
 
   beforeEach(async () => {
     // A student registers in their grade's selected round, so each test starts with no rounds.
-    await pool.query('TRUNCATE rounds CASCADE');
+    await truncateAsOwner(container, ['rounds']);
   });
 
   afterEach(async () => {

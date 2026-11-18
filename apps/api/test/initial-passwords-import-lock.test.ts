@@ -14,7 +14,7 @@ import { createTestUser } from './support/app.js';
 import { uniqueStudentId, uniqueTerm } from './support/import-db.js';
 import { buildImportWorkbook, studentRow } from './support/import.js';
 import { waitForLockWaiter } from './support/lock-waiter.js';
-import { startMigratedPostgres, stopPostgres } from './support/postgres.js';
+import { appConnectionUri, startMigratedPostgres, stopPostgres } from './support/postgres.js';
 import { registrationInvariantViolations } from './support/registration.js';
 
 // Issuing initial passwords against an import commit (README "รายการที่ยังเปิดอยู่" item 9). Both
@@ -126,7 +126,7 @@ describe('initial password issuance and the import lock', () => {
 
   beforeAll(async () => {
     container = await startMigratedPostgres();
-    pool = createPool(container.getConnectionUri());
+    pool = createPool(appConnectionUri(container));
     adminId = (await createTestUser(pool, { role: 'admin' })).id;
   });
 
