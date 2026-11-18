@@ -9,10 +9,11 @@ import type { Round } from '@club-registration/shared';
 import type { FastifyInstance, InjectOptions } from 'fastify';
 import type { Pool } from 'pg';
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from 'vitest';
+import { buildApp } from '../src/app.js';
 import { SESSION_COOKIE } from '../src/auth/session.js';
 import { createPool } from '../src/db.js';
 import { roundStatusAt } from '../src/services/rounds.js';
-import { buildTestApp, createTestUser } from './support/app.js';
+import { TEST_JWT_SECRET, createTestUser } from './support/app.js';
 import type { TestUser } from './support/app.js';
 import { startMigratedPostgres, stopPostgres } from './support/postgres.js';
 
@@ -36,8 +37,10 @@ const futureWindow = () => ({ opensAt: isoFromNow(DAY_MS), closesAt: isoFromNow(
 describe('admin rounds', () => {
   let container: StartedPostgreSqlContainer;
   let pool: Pool;
-  let app: Awaited<ReturnType<typeof buildTestApp>>;
+  let app: Awaited<ReturnType<typeof buildApp>>;
+  let adminId: number;
   let adminToken: string;
+  let logLines: string[];
 
   const loginAs = async (user: TestUser): Promise<string> => {
     const response = await app.inject({
@@ -99,8 +102,15 @@ describe('admin rounds', () => {
   });
 
   beforeEach(async () => {
-    app = await buildTestApp(pool);
-    adminToken = await loginAs(await createTestUser(pool, { role: 'admin' }));
+    logLines = [];
+    app = await buildApp({
+      pool,
+      jwtSecret: TEST_JWT_SECRET,
+      logger: { level: 'info', stream: { write: (line) => logLines.push(line) } },
+    });
+    const admin = await createTestUser(pool, { role: 'admin' });
+    adminId = admin.id;
+    adminToken = await loginAs(admin);
   });
 
   afterEach(async () => {
@@ -420,6 +430,98 @@ describe('admin rounds', () => {
 
       expect(response.statusCode).toBe(400);
       expect(await countRounds(term)).toBe(0);
+    });
+  });
+
+  describe('audit log', () => {
+    const auditEntries = (action: string) =>
+      logLines
+        .map((line) => JSON.parse(line) as Record<string, unknown>)
+        .filter(({ audit }) => audit === action);
+
+    it('records which admin created a round and its settings', async () => {
+      const round = await createRound({ grade: 4, maxActive: 90 });
+
+      expect(auditEntries('round.create')).toEqual([
+        expect.objectContaining({
+          adminId,
+          roundId: round.id,
+          term: round.term,
+          grade: 4,
+          opensAt: round.opensAt,
+          closesAt: round.closesAt,
+          maxActive: 90,
+        }),
+      ]);
+    });
+
+    it('records which admin created a batch and every round id in it', async () => {
+      const term = uniqueTerm();
+
+      const response = await request({
+        method: 'POST',
+        url: '/api/admin/rounds/batch',
+        payload: { term, ...futureWindow(), maxActive: 100 },
+      });
+
+      expect(response.statusCode).toBe(201);
+      expect(auditEntries('round.create_batch')).toEqual([
+        expect.objectContaining({
+          adminId,
+          term,
+          roundIds: roundsOf(response).map(({ id }) => id),
+          maxActive: 100,
+        }),
+      ]);
+    });
+
+    it('records which admin changed a round, the fields sent and the values after', async () => {
+      const round = await createRound();
+
+      await request({
+        method: 'PATCH',
+        url: `/api/admin/rounds/${round.id}`,
+        payload: { maxActive: 77 },
+      });
+
+      expect(auditEntries('round.update')).toEqual([
+        expect.objectContaining({
+          adminId,
+          roundId: round.id,
+          changed: ['maxActive'],
+          opensAt: round.opensAt,
+          closesAt: round.closesAt,
+          maxActive: 77,
+        }),
+      ]);
+    });
+
+    it('records which admin deleted a round', async () => {
+      const round = await createRound();
+
+      await request({ method: 'DELETE', url: `/api/admin/rounds/${round.id}` });
+
+      expect(auditEntries('round.delete')).toEqual([
+        expect.objectContaining({ adminId, roundId: round.id }),
+      ]);
+    });
+
+    it('records nothing for a change that was refused', async () => {
+      const round = await createRound();
+      await insertClub(round.id, 20);
+
+      const refusedDelete = await request({
+        method: 'DELETE',
+        url: `/api/admin/rounds/${round.id}`,
+      });
+      const refusedUpdate = await request({
+        method: 'PATCH',
+        url: '/api/admin/rounds/2000000000',
+        payload: { maxActive: 1 },
+      });
+
+      expect([refusedDelete.statusCode, refusedUpdate.statusCode]).toEqual([409, 404]);
+      expect([...auditEntries('round.delete'), ...auditEntries('round.update')]).toEqual([]);
     });
   });
 

@@ -12,7 +12,7 @@
 4. **ห้าม mock Postgres ในเทสต์** ใช้ Testcontainers เสมอ การเปลี่ยนแปลงที่แตะ logic ลง/ยกเลิก/เปลี่ยน/waitlist ต้องมี concurrency test และ invariant check คู่กัน
 5. **ไม่เชื่อ role หรือ `student_id` จาก client** ใช้ค่าจาก JWT เท่านั้น
 6. **`apps/web` กับ `apps/api` ห้าม import กัน** คุยผ่าน HTTP และ `packages/shared` เท่านั้น
-7. **ทุก endpoint เขียนต้อง idempotent** รับ `idempotency_key` และเขียน `registration_events`
+7. **ทุก endpoint เขียนต้อง idempotent** endpoint ที่แตะที่นั่งของนักเรียน (ลง/ยกเลิก และ Phase 2 เปลี่ยน/waitlist/admin แก้แทน) รับ `idempotency_key` และเขียน `registration_events` ส่วน admin endpoint ที่ส่งซ้ำแล้วได้ผลเดิมอยู่แล้ว (สร้าง/แก้/ลบรอบ, แก้ชุมนุม) ไม่รับ key แต่ต้องบันทึกว่า admin คนไหนทำอะไรด้วย `logAdminChange` (`apps/api/src/http/audit-log.ts`) หลัง commit
 8. **Export Excel ต้อง escape** ค่าที่ขึ้นต้นด้วย `=`, `+`, `-`, `@` (ใช้ `escapeCellText` ใน `apps/api/src/export/escape-cell.ts` ที่เดียว) และ export รายห้องต้องมีนักเรียนทุกคนในห้อง รวมคนที่ยังไม่ลง (สเปกเต็มดู README หัวข้อ Export รายชื่อ)
 9. **ห้ามใส่ข้อมูลจริงใน repo**: ไฟล์ .xlsx ของนักเรียน, `.env*`, `*.dump`, รหัสผ่าน, secret ข้อมูลทดสอบใช้ข้อมูลสมมติเท่านั้น (`templates/` เก็บได้เฉพาะไฟล์เปล่า)
    ไฟล์จริงของโรงเรียนเก็บนอก repo (เช่น `~/club-registration-data/`) ไฟล์ตัวอย่างสร้างด้วย `generate-sample-import` ลง `samples/` (gitignored) ไม่ commit และ CI ตรวจด้วย `scripts/check-no-data-files.sh`
