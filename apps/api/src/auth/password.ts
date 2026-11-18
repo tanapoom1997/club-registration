@@ -23,7 +23,8 @@ const PHC_PATTERN =
 
 // Stored for an account that has no password yet (e.g. a student created by the Excel import,
 // waiting for an admin to issue an initial one). It is not a PHC string, so verifyPassword
-// rejects every password against it and nobody can sign in until a real hash replaces it.
+// rejects every password against it (after the same Argon2 work as a wrong password) and nobody
+// can sign in until a real hash replaces it.
 export const UNISSUED_PASSWORD_HASH = '!unissued';
 
 const toUnpaddedBase64 = (buffer: Buffer): string => buffer.toString('base64').replace(/=+$/, '');
@@ -50,14 +51,28 @@ export const hashPassword = async (password: string): Promise<string> => {
   ].join('$');
 };
 
+// The work of one verify with this module's parameters, for a refusal that needs no Argon2 to
+// decide: a stored value that is not a usable hash (UNISSUED_PASSWORD_HASH, a corrupted row) or a
+// login ID with no account. Refusing those at once would be measurably quicker than refusing a
+// wrong password, and timing the login would then tell which IDs exist and which still wait for an
+// initial password.
+export const spendVerifyWork = async (password: string): Promise<void> => {
+  await derive(password, randomBytes(SALT_BYTES), ARGON2_PARAMS, TAG_BYTES);
+};
+
+const refuseAfterVerifyWork = async (password: string): Promise<false> => {
+  await spendVerifyWork(password);
+  return false;
+};
+
 export const verifyPassword = async (storedHash: string, password: string): Promise<boolean> => {
   const match = PHC_PATTERN.exec(storedHash);
-  if (!match) return false;
+  if (!match) return await refuseAfterVerifyWork(password);
   const [, version, memory, passes, parallelism, salt = '', tag = ''] = match;
-  if (Number(version) !== ARGON2_VERSION) return false;
+  if (Number(version) !== ARGON2_VERSION) return await refuseAfterVerifyWork(password);
 
   const expected = Buffer.from(tag, 'base64');
-  if (expected.length < MIN_TAG_BYTES) return false;
+  if (expected.length < MIN_TAG_BYTES) return await refuseAfterVerifyWork(password);
   const actual = await derive(
     password,
     Buffer.from(salt, 'base64'),
