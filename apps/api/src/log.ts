@@ -58,8 +58,12 @@ const serializeAt = (value: unknown, depth: number): SerializedError => {
     return { type: typeof value, message: 'non-Error value thrown', stack: '' };
   }
   const message = safeMessage(value);
-  // The stack starts with the message, so a withheld message must go from there too.
-  const stack = (value.stack ?? '').replace(value.message, message);
+  // The stack starts with the message, so a withheld message must go from there too. A function
+  // replacer: a string one would expand $' and $& in the message.
+  const stack =
+    message === value.message
+      ? (value.stack ?? '')
+      : (value.stack ?? '').replace(value.message, () => message);
   const fields = value instanceof pg.DatabaseError ? PG_ERROR_FIELDS : SAFE_ERROR_FIELDS;
   const nested =
     depth < MAX_NESTED_DEPTH

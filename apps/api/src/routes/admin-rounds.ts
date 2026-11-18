@@ -66,11 +66,13 @@ export const adminRoundRoutes =
       async (request, reply) => {
         const rounds = await createRoundBatch(pool, request.body, new Date());
         const { term, opensAt, closesAt, maxActive } = request.body;
+        // The body may carry any offset (+07:00); the other round lines log the stored UTC form,
+        // so one search finds a window whichever route set it.
         logAdminChange(request, ADMIN_ACTIONS.roundCreateBatch, {
           term,
           roundIds: rounds.map(({ id }) => id),
-          opensAt,
-          closesAt,
+          opensAt: new Date(opensAt).toISOString(),
+          closesAt: new Date(closesAt).toISOString(),
           maxActive,
         });
         return await reply.status(201).send({ rounds });

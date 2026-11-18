@@ -116,4 +116,16 @@ describe('logging', () => {
     expect(err).toMatchObject({ type: 'Error', message: 'fictional failure in app code' });
     expect(err.stack).toEqual(expect.stringContaining('logging.test.ts'));
   });
+
+  it('keeps a stack whose message holds $ replacement patterns as it was', async () => {
+    const error = new Error("fictional price $' and $& in a message");
+    failingRoute(async () => {
+      await Promise.resolve();
+      throw error;
+    });
+
+    await app.inject({ method: 'GET', url: '/api/test-only/fail' });
+
+    expect(unhandledErrorEntry().stack).toBe(error.stack);
+  });
 });

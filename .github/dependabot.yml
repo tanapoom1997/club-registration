@@ -17,9 +17,10 @@ updates:
       minor-and-patch:
         update-types: [minor, patch]
     ignore:
-      # Pinned to 6.0.x until typescript-eslint supports 7 (CLAUDE.md Tech Stack).
+      # Pinned to 6.0.x (CLAUDE.md Tech Stack): TypeScript minors are not semver-safe and
+      # typescript-eslint caps the TypeScript range it supports, so 6.1 waits for it too.
       - dependency-name: typescript
-        update-types: [version-update:semver-major]
+        update-types: [version-update:semver-major, version-update:semver-minor]
       # Types follow the runtime, Node 24 (engines, .nvmrc).
       - dependency-name: '@types/node'
         update-types: [version-update:semver-major]

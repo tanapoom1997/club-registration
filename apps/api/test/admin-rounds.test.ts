@@ -455,24 +455,35 @@ describe('admin rounds', () => {
       ]);
     });
 
-    it('records which admin created a batch and every round id in it', async () => {
+    it('records which admin created a batch, every round id and the stored window', async () => {
       const term = uniqueTerm();
 
       const response = await request({
         method: 'POST',
         url: '/api/admin/rounds/batch',
-        payload: { term, ...futureWindow(), maxActive: 100 },
+        // Thai time, as an admin's browser may send it.
+        payload: {
+          term,
+          opensAt: '2099-12-01T08:00:00+07:00',
+          closesAt: '2099-12-01T16:00:00+07:00',
+          maxActive: 100,
+        },
       });
 
       expect(response.statusCode).toBe(201);
+      const rounds = roundsOf(response);
       expect(auditEntries('round.create_batch')).toEqual([
         expect.objectContaining({
           adminId,
           term,
-          roundIds: roundsOf(response).map(({ id }) => id),
+          roundIds: rounds.map(({ id }) => id),
+          opensAt: '2099-12-01T01:00:00.000Z',
+          closesAt: '2099-12-01T09:00:00.000Z',
           maxActive: 100,
         }),
       ]);
+      // The same form the create and update lines log.
+      expect(rounds[0]?.opensAt).toBe('2099-12-01T01:00:00.000Z');
     });
 
     it('records which admin changed a round, the fields sent and the values after', async () => {
