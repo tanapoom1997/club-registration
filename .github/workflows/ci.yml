@@ -31,6 +31,19 @@ jobs:
       # env file that could hold real data (.gitignore can be bypassed with git add -f).
       - run: scripts/check-no-data-files.sh
 
+      # The Ubuntu 24.04 package, the same version a developer on 24.04 gets from apt. Installed
+      # only if the runner image does not already ship it.
+      - name: Install ShellCheck
+        run: |
+          if ! command -v shellcheck >/dev/null; then
+            sudo apt-get update -q
+            sudo apt-get install -y -q --no-install-recommends shellcheck
+          fi
+
+      # Every tracked shell script: backup/restore handle production data, the smoke scripts gate
+      # every PR. Needs no Node, so it runs before setup.
+      - run: scripts/lint-shell.sh
+
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version-file: .nvmrc

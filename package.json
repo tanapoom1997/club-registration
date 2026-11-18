@@ -10,6 +10,7 @@
     "dev": "pnpm --filter api migrate && pnpm --filter api seed-dev && pnpm --filter api --filter web --parallel run dev",
     "typecheck": "pnpm -r typecheck",
     "lint": "eslint .",
+    "lint:sh": "scripts/lint-shell.sh",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "test": "pnpm -r test",
