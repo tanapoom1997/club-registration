@@ -126,6 +126,7 @@ password_issuances  -- บันทึกการออกรหัสผ่า
 - `CHECK (registered >= 0 AND registered <= capacity)` บน `clubs`
 - `UNIQUE(round_id, club_code)` บน `clubs` → ใช้เป็น key ตอน upsert จาก Excel
 - `UNIQUE(actor_id, idempotency_key)` บน `registration_events` → retry ไม่เกิดซ้ำ
+- `UNIQUE(login_id)` + `CHECK (login_id ~ '^[a-z0-9._-]{1,64}$')` (`users_login_id_format`) บน `users` → กฎเดียวกับ `loginIdSchema` (ตัวเล็กเท่านั้น) "Admin" กับ "admin" จึงเป็น 2 บัญชีไม่ได้แม้ผู้เขียนบางทางข้าม schema เช่นแก้ด้วย psql แก้กฎต้องแก้ทั้งสองที่ (`test/schema.test.ts` ตรวจทั้งคู่ด้วยชุดค่าเดียวกัน) migration ล้มถ้า DB เดิมมีแถวที่ผิดกฎ ทำให้ deploy หยุดที่ service `migrate` ก่อน api ขึ้น
 
 **จุดวิกฤต: การจองที่นั่ง** (ทำแล้วใน `apps/api/src/services/registrations.ts` ทีละ statement ตามลำดับ ใน transaction สั้นๆ เดียว)
 
