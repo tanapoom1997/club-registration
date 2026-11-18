@@ -1,0 +1,44 @@
+name: Audit
+
+# Known vulnerabilities in the locked dependencies (`pnpm audit:deps`, high and critical fail).
+# Its own workflow rather than a job in ci.yml: it also runs on a schedule, because an advisory
+# published after a merge changes nothing in the repo and no push would ever catch it, and the
+# schedule should not rebuild the images every day.
+on:
+  pull_request:
+  push:
+    branches: [main]
+  schedule:
+    # Daily at 01:23 UTC (08:23 Thai time). A failed scheduled run is emailed by GitHub to whoever
+    # last edited this schedule.
+    - cron: '23 1 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: audit-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  audit:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    env:
+      COREPACK_ENABLE_DOWNLOAD_PROMPT: '0'
+    steps:
+      # Same pinned SHAs as ci.yml; Dependabot updates both.
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version-file: .nvmrc
+
+      - run: corepack enable
+
+      # Reads pnpm-lock.yaml only, so no install. Moderate and low advisories are printed but do
+      # not fail the run; ignored advisories are listed with their reasons in pnpm-workspace.yaml.
+      - run: pnpm audit:deps

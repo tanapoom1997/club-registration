@@ -1,4 +1,5 @@
 import type { StartedPostgreSqlContainer } from '@testcontainers/postgresql';
+import { loginIdSchema } from '@club-registration/shared';
 import pg from 'pg';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { startMigratedPostgres, stopPostgres } from './support/postgres.js';
@@ -6,6 +7,22 @@ import { startMigratedPostgres, stopPostgres } from './support/postgres.js';
 const CHECK_VIOLATION = '23514';
 const UNIQUE_VIOLATION = '23505';
 const FOREIGN_KEY_VIOLATION = '23503';
+const LOGIN_ID_FORMAT = 'users_login_id_format';
+
+// Fictional ids. Valid ones are stored exactly as loginIdSchema would store them.
+const VALID_LOGIN_IDS = ['a', 'demo-admin', 'demo1001', 'first.last_2', '6512345', 'x'.repeat(64)];
+const INVALID_LOGIN_IDS = [
+  '',
+  'Mixed-Case',
+  'UPPER',
+  ' padded',
+  'has space',
+  'café',
+  'ไทยสมมติ',
+  'semi;colon',
+  'tab\tinside',
+  'x'.repeat(65),
+];
 
 describe('initial schema constraints', () => {
   let container: StartedPostgreSqlContainer;
@@ -102,6 +119,42 @@ describe('initial schema constraints', () => {
 
     await expect(pool.query(insertEvent, [roundId, studentId])).rejects.toMatchObject({
       code: UNIQUE_VIOLATION,
+    });
+  });
+
+  describe('users.login_id', () => {
+    const insertUser = async (loginId: string) =>
+      await pool.query(
+        `INSERT INTO users (login_id, full_name, role, password_hash)
+         VALUES ($1, 'Fictional User', 'student', 'not-a-real-hash')`,
+        [loginId],
+      );
+
+    it('rejects an id that differs from an existing one only by case', async () => {
+      await insertUser('case-probe');
+
+      await expect(insertUser('Case-Probe')).rejects.toMatchObject({
+        code: CHECK_VIOLATION,
+        constraint: LOGIN_ID_FORMAT,
+      });
+    });
+
+    it.each(INVALID_LOGIN_IDS)(
+      'rejects %j, which loginIdSchema would not store',
+      async (loginId) => {
+        expect(loginIdSchema.safeParse(loginId).data).not.toBe(loginId);
+
+        await expect(insertUser(loginId)).rejects.toMatchObject({
+          code: CHECK_VIOLATION,
+          constraint: LOGIN_ID_FORMAT,
+        });
+      },
+    );
+
+    it.each(VALID_LOGIN_IDS)('accepts %j, which loginIdSchema stores as is', async (loginId) => {
+      expect(loginIdSchema.parse(loginId)).toBe(loginId);
+
+      await expect(insertUser(loginId)).resolves.toMatchObject({ rowCount: 1 });
     });
   });
 

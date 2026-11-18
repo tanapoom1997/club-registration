@@ -7,3 +7,20 @@ allowBuilds:
   cpu-features: false
   protobufjs: false
   ssh2: false
+
+# eslint-plugin-jsx-a11y 6.10.2 (the latest, last released 2024) declares ESLint <= 9 as its peer.
+# It runs on ESLint 10: all of its rules load and report in this repo's lint. If a later ESLint
+# breaks it, the maintained fork eslint-plugin-jsx-a11y-x declares ESLint 10 (eslint.config.js).
+peerDependencyRules:
+  allowedVersions:
+    eslint-plugin-jsx-a11y>eslint: '10'
+
+# `pnpm audit:deps` (and the Audit workflow) fail on high or critical advisories. An advisory is
+# ignored here only when it has no fixed release and cannot reach this app; remove each entry as
+# soon as a fix is published (Dependabot then raises the update). README "Dependency audit".
+auditConfig:
+  ignoreGhsas:
+    # picomatch <=4.0.7 ReDoS through extglobs, no patched release yet (4.0.7 is the latest).
+    # Dev tooling only (vite, vitest, eslint, tailwind): it matches glob patterns from this repo's
+    # own config, never a request or an uploaded file. `pnpm audit --prod` does not list it.
+    - GHSA-fc5q-39xc-vjpf
