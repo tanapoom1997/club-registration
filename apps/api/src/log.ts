@@ -86,13 +86,36 @@ const serializeAt = (value: unknown, depth: number): SerializedError => {
 
 export const serializeError = (error: unknown): SerializedError => serializeAt(error, 0);
 
+// Parameter names as code would write them. Anything else (a student number, Thai text, a token
+// sent as a bare name) may be data itself, so it is only counted.
+const QUERY_KEY_PATTERN = /^[A-Za-z][A-Za-z0-9_]{0,31}$/;
+const MAX_QUERY_KEYS = 10;
+
+// The query string's parameter names, never its values: no route takes personal data in its
+// query, but the line is written before validation, and a client can still put a password or a
+// student's login there (a form falling back to GET, a script building the URL).
+const describeQuery = (query: string) => {
+  if (query === '') return {};
+  const names = [...new Set(new URLSearchParams(query).keys())];
+  const shown = names.filter((name) => QUERY_KEY_PATTERN.test(name)).sort();
+  const kept = shown.slice(0, MAX_QUERY_KEYS);
+  const omitted = names.length - kept.length;
+  return { queryKeys: kept, ...(omitted > 0 ? { queryKeysOmitted: omitted } : {}) };
+};
+
 // No remoteAddress or remotePort: next to the request id, which ties a request's lines to the
 // student id the routes log, an IP points at a student's device or home. Caddy keeps no access
 // log for the same reason (Caddyfile). Abuse is handled by the in-memory rate limits instead.
-export const serializeRequest = (request: FastifyRequest) => ({
-  method: request.method,
-  url: request.url,
-  host: request.host,
-});
+export const serializeRequest = (request: FastifyRequest) => {
+  const queryStart = request.url.indexOf('?');
+  const path = queryStart === -1 ? request.url : request.url.slice(0, queryStart);
+  const query = queryStart === -1 ? '' : request.url.slice(queryStart + 1);
+  return {
+    method: request.method,
+    url: path,
+    host: request.host,
+    ...describeQuery(query),
+  };
+};
 
 export const LOG_SERIALIZERS = Object.freeze({ req: serializeRequest, err: serializeError });
