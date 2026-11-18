@@ -44,7 +44,7 @@
 
 **ไม่ใช้:** Next.js, Redis, ORM (Prisma/Drizzle), serverless, แยก repo FE/BE
 
-**เครื่องมือคุณภาพโค้ด:** ESLint (flat config) + Prettier, `tsc --noEmit` เป็น typecheck
+**เครื่องมือคุณภาพโค้ด:** ESLint (flat config) + Prettier, `tsc --noEmit` เป็น typecheck, `apps/web` เพิ่ม `eslint-plugin-react-hooks` และ `eslint-plugin-jsx-a11y`
 
 ## Commands
 
@@ -163,6 +163,7 @@ backup/restore (README หัวข้อ Backup และ Restore (O3)): dump �
 ### TypeScript / Lint
 - `tsconfig`: `strict`, `noUncheckedIndexedAccess`, `exactOptionalPropertyTypes`, `noImplicitOverride`, `verbatimModuleSyntax`, `isolatedModules`
 - ESLint เปิดอย่างน้อย: `@typescript-eslint/no-floating-promises`, `no-misused-promises`, `no-explicit-any`, `consistent-type-imports`, `eqeqeq`, `no-restricted-imports` (กัน web↔api import กัน)
+- `apps/web`: `react-hooks` recommended (`exhaustive-deps` เป็น error เพราะ warning ไม่ทำให้ `pnpm lint`/CI ล้ม) และ `jsx-a11y` recommended (`<Label>` ถูกตรวจเหมือน `<label>`) ข้าม rule ได้เฉพาะ `eslint-disable-next-line <rule>` บรรทัดเดียวพร้อมเหตุผลในคอมเมนต์ ห้ามปิดทั้งไฟล์
 - CI/ก่อน commit ต้องผ่าน `typecheck` + `lint` + `test` ห้าม merge ถ้าแดง CI อยู่ที่ `.github/workflows/ci.yml` (job `check`: `scripts/check-no-data-files.sh`, `scripts/lint-shell.sh`, format:check, typecheck, lint, test, build และ job `images`: `scripts/smoke-images.sh`, `scripts/smoke-compose.sh` แล้ว `scripts/smoke-backup.sh` ซึ่งรันในเครื่องด้วยคำสั่งเดียวกันได้) รันทุก PR และทุก push เข้า `main` ส่วน `.github/workflows/audit.yml` รัน `pnpm audit:deps` ทุก PR, push เข้า `main` และทุกวัน action pin ด้วย commit SHA ถ้าเพิ่มขั้นตอนให้รันซ้ำในเครื่องได้ด้วยคำสั่ง `pnpm` เดียวกัน
 
 ### Security

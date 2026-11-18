@@ -53,6 +53,9 @@ export const WritePanel = ({
   const refused = error !== undefined && !canRetry;
 
   return (
+    // Escape closing an alertdialog is the WAI-ARIA dialog pattern. The rule's per-element options
+    // match tag names (a native <dialog>), not role="alertdialog" on a div, so it is waived here.
+    // eslint-disable-next-line jsx-a11y/no-noninteractive-element-interactions
     <div
       ref={panelRef}
       tabIndex={-1}
