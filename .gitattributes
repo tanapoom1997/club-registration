@@ -1,0 +1,17 @@
+# Line endings: LF in the repository and in every checkout, whatever core.autocrlf says. A shell
+# script checked out with CRLF fails inside the Linux containers and on the server
+# ("bad interpreter: /usr/bin/env: 'bash\r'"), and the Dockerfile, Caddyfile and SQL migrations
+# are read on Linux too. Prettier writes LF as well (its default endOfLine).
+* text=auto eol=lf
+
+# Binary: never converted or diffed as text. Listed explicitly rather than left to detection, so a
+# font or workbook that happens to look like text is still never rewritten.
+*.ttf binary
+*.otf binary
+*.woff binary
+*.woff2 binary
+*.xlsx binary
+*.pdf binary
+*.png binary
+*.jpg binary
+*.ico binary

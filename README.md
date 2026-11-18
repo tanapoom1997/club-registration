@@ -360,6 +360,8 @@ Admin เลือก **รอบ** → เลือก **มุมมอง** (
   - **dev ยังใช้เจ้าของ:** `pnpm dev` ใช้ `DATABASE_URL` เดียวใน `.env` ทั้ง migrate และ api (ไม่ตั้ง `APP_DB_PASSWORD` ก็ได้) การตรวจสิทธิ์จึงอยู่ที่เทสต์และ smoke ไม่ใช่ตอน dev
 - **Backup:** dump มีข้อมูลส่วนบุคคลทั้งหมดและ hash รหัสผ่าน เก็บใน bucket private (Block Public Access) เข้ารหัส SSE-S3 role ของเครื่องเขียน/อ่านได้เฉพาะ prefix ของ backup ลบไม่ได้ ไฟล์ในเครื่อง 600 และไม่พิมพ์เนื้อหาออก log (ดู [Backup และ Restore (O3)](#backup-และ-restore-o3))
 - **Repo เป็น Public:** ห้ามมีข้อมูลจริงทุกชนิด (นักเรียน ครู domain จริง IP ชื่อ bucket) เปิด secret scanning และ push protection แล้ว `.gitignore` กัน `*.xlsx` จริง / `samples/` / `.env*` / `*.dump` / `*.dump.partial` / `caddy-data-*.tar.gz` (เว้น `templates/`) และ CI ตรวจซ้ำด้วย `scripts/check-no-data-files.sh` (กัน `git add -f` ดู [Excel Import/Export](#excel-importexport)) ไฟล์จริงเก็บนอก repo ถ้าเผลอ push secret ต้อง rotate ทันที ลบจาก history ไม่พอ
+- **แจ้งช่องโหว่:** [`SECURITY.md`](SECURITY.md) ให้แจ้งแบบส่วนตัวผ่าน GitHub private vulnerability reporting (ห้ามเปิด issue สาธารณะ) และทดสอบได้เฉพาะสำเนาในเครื่องด้วยข้อมูลสมมติ ต้องเปิด **Settings → Code security → Private vulnerability reporting** ของ repo ก่อน ไม่อย่างนั้นปุ่ม Report a vulnerability ไม่ขึ้น
+- **Line ending:** `.gitattributes` บังคับ LF ทุก checkout (`* text=auto eol=lf`) shell script ที่ได้ CRLF จากเครื่อง Windows (`core.autocrlf=true`) จะรันใน container/บนเครื่องจริงไม่ได้ ส่วนฟอนต์ `.ttf` และ `.xlsx` เป็น `binary` ไม่ถูกแปลง
 
 ## Infra และ Deployment
 
