@@ -1,7 +1,7 @@
 import { ERROR_CODES } from '@club-registration/shared';
 import type { ChangePasswordRequest, LoginRequest, Role } from '@club-registration/shared';
 import { AppError } from '../errors.js';
-import { generatePassword, hashPassword, verifyPassword } from './password.js';
+import { generatePassword, hashPassword, spendVerifyWork, verifyPassword } from './password.js';
 import {
   bumpSessionVersion,
   createUserIfMissing,
@@ -11,21 +11,14 @@ import {
 } from './users.js';
 import type { AuthenticatedUser, Queryable } from './users.js';
 
-// Unknown login IDs still pay for one Argon2 verify, so response time does not reveal which
-// student IDs exist.
-let dummyHash: Promise<string> | undefined;
-const getDummyHash = async (): Promise<string> => {
-  dummyHash ??= hashPassword(generatePassword(16));
-  return await dummyHash;
-};
-
 export const login = async (
   db: Queryable,
   { loginId, password }: LoginRequest,
 ): Promise<AuthenticatedUser> => {
   const found = await findUserWithHashByLoginId(db, loginId);
   if (!found) {
-    await verifyPassword(await getDummyHash(), password);
+    // Unknown IDs pay for one verify too, so response time does not reveal which IDs exist.
+    await spendVerifyWork(password);
     throw new AppError(ERROR_CODES.invalidCredentials);
   }
   if (!(await verifyPassword(found.passwordHash, password))) {
