@@ -71,6 +71,46 @@ describe('logging', () => {
     expect(output).not.toContain(FORWARDED_IP);
   });
 
+  // No route takes personal data in its query, but a client can still send it there: a form that
+  // falls back to GET, or a script that puts the login in the URL. The line is written before
+  // validation could reject the request, so only the path and the parameter names are kept.
+  it('logs the path and query parameter names, never query values', async () => {
+    const values = ['fictional-secret-pw', 'fictional-student-login', '6599999'];
+    const query = [
+      `password=${values[0]}`,
+      `loginId=${values[1]}`,
+      `studentNo=${values[2]}`,
+      // Names that are data themselves: a number and Thai text are counted, not logged.
+      '6512345=x',
+      `${encodeURIComponent('ชื่อสมมติ')}=y`,
+    ].join('&');
+
+    await app.inject({ method: 'GET', url: `/api/health?${query}` });
+
+    const requestEntry = entries().find(({ req }) => req !== undefined);
+    expect(requestEntry?.req).toEqual({
+      method: 'GET',
+      url: '/api/health',
+      host: 'localhost:80',
+      queryKeys: ['loginId', 'password', 'studentNo'],
+      queryKeysOmitted: 2,
+    });
+    const output = logLines.join('\n');
+    for (const leaked of [...values, '6512345', 'ชื่อสมมติ', encodeURIComponent('ชื่อสมมติ')]) {
+      expect(output).not.toContain(leaked);
+    }
+  });
+
+  it('logs a request without a query string with no query fields', async () => {
+    await app.inject({ method: 'GET', url: '/api/health' });
+
+    expect(entries().find(({ req }) => req !== undefined)?.req).toEqual({
+      method: 'GET',
+      url: '/api/health',
+      host: 'localhost:80',
+    });
+  });
+
   it('logs a unique violation by code and constraint without the duplicated value', async () => {
     const loginId = 'fictional-duplicate-login';
     failingRoute(
