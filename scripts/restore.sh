@@ -197,6 +197,19 @@ restore_into() {
   local database="$1"
   # Called from `||`, where set -e does not apply: every step checks its own status.
   drop_database "$database" >/dev/null || return 1
+  # Roles belong to the server, not to one database, so pg_dump leaves them out while the dump
+  # still GRANTs to club_app (apps/api/migrations/20261119000000_app-role.sql). On a rebuilt server
+  # the role does not exist yet and pg_restore would stop at the first GRANT: create it NOLOGIN, as
+  # that migration does; migrate gives it its login after the switch below.
+  psql_in postgres <<'SQL' || return 1
+DO $$
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'club_app') THEN
+    CREATE ROLE club_app NOLOGIN;
+  END IF;
+END
+$$;
+SQL
   psql_in postgres -v name="$database" <<<'CREATE DATABASE :"name";' || return 1
   log "Restoring into ${database}"
   if ! without_details compose exec -T postgres pg_restore -U "$DB_USER" -d "$database" \
