@@ -665,6 +665,7 @@ aws iam put-role-policy --role-name <ชื่อ role ของ EC2> --policy-n
 ## Testing
 
 - **Vitest + Testcontainers** ใช้ Postgres จริง ห้าม mock และต่อด้วย role `club_app` เหมือน api ใน production (`appConnectionUri` ใน `apps/api/test/support/postgres.ts`)
+- **`packages/shared`:** เทสต์ schema ตรงๆ (Vitest ไม่ต้องใช้ DB, `packages/shared/test/`) เพราะเป็นด่านแรกที่ตรวจข้อมูลจากภายนอกทุก request และทุกแถวของไฟล์ import: การ normalize (login ID ตัวเล็ก, รหัสชุมนุมตัวใหญ่), strict object ที่ต้องปฏิเสธ field เกิน (`studentId`, `grade` ใน request ที่ไม่ควรมี), ช่วงเวลารอบเทียบเป็นเวลาจริงไม่ใช่ข้อความ, และ cell ของ Excel (ชั้น "ม.1", เลขที่ที่ไม่ใช่จำนวนเต็ม, เบอร์ที่ขาด 0 นำหน้า, อักขระควบคุม) ตรวจแล้วว่าเทสต์จับได้จริงด้วยการแก้ schema ให้ผิด 7 แบบ (ไม่ lower-case, เทียบเวลาเป็นข้อความ, ยอมเวลาเท่ากัน, ไม่บังคับ 0 นำหน้าเบอร์, request ไม่ strict, ปฏิเสธการขึ้นบรรทัดในรายละเอียด, ยอมจุดทศนิยม) ทุกแบบมีเทสต์ล้ม
 - **Concurrency test** (ตัวหลัก): 500 request แย่ง 1 ชุมนุม ต้องไม่เกิน capacity และไม่มีลงซ้ำ
 - **Invariant check:** `clubs.registered` = จำนวน `registrations` จริง, ไม่มีนักเรียนมี 2 registration
 - **Load test** บนสเปคเครื่องจริงก่อนวันใช้งาน (500 virtual users แย่งชุมนุมเดียว)

@@ -108,7 +108,7 @@ backup/restore (README หัวข้อ Backup และ Restore (O3)): dump �
 ## ภาษาและสไตล์
 
 - คุยและเขียนเอกสารเป็นภาษาไทย ส่วนโค้ด ชื่อตัวแปร ชื่อตาราง และ commit message เป็นภาษาอังกฤษ
-- Schema ของ request/response นิยามเป็น Zod ใน `packages/shared` ที่เดียว
+- Schema ของ request/response นิยามเป็น Zod ใน `packages/shared` ที่เดียว แก้กฎ validate หรือ normalize แล้วต้องมีเทสต์ใน `packages/shared/test/` (`pnpm --filter @club-registration/shared test` ไม่ต้องใช้ Docker)
 
 ### Code style (ES6+ / modern TypeScript)
 
