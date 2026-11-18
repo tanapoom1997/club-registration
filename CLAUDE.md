@@ -79,7 +79,7 @@ scripts/smoke-compose.sh  # รัน compose.prod.yml ทั้ง stack ผ่
 scripts/smoke-backup.sh   # backup/restore จริงกับ stack (:80, พอร์ต 18081/18444) + MinIO เป็น S3 ด้วยข้อมูลสมมติ แล้วลบทิ้ง
 ```
 
-Production (บนเครื่องจริง รายละเอียดดู README หัวข้อ Compose ของ production (O2)) ใช้ `compose.prod.yml` คู่กับ env file เสมอ ไฟล์จริง `deploy/production.env` (gitignored ด้วย `*.env`) ทำจาก `deploy/production.env.example` ห้าม commit ค่าจริง และ `docker-compose.yml` ยังเป็น Postgres ของ dev อย่างเดียว
+Production (บนเครื่องจริง รายละเอียดดู README หัวข้อ Compose ของ production (O2)) ใช้ `compose.prod.yml` คู่กับ env file เสมอ ทุก service ใช้ `<<: *hardening` (`cap_drop: [ALL]`, `no-new-privileges`, `read_only` + tmpfs เท่าที่ต้องเขียน postgres รันเป็น uid 70) service ใหม่ต้องใส่ด้วย ไฟล์จริง `deploy/production.env` (gitignored ด้วย `*.env`) ทำจาก `deploy/production.env.example` ห้าม commit ค่าจริง และ `docker-compose.yml` ยังเป็น Postgres ของ dev อย่างเดียว
 
 ```bash
 alias dcp='docker compose -f compose.prod.yml --env-file deploy/production.env'

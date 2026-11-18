@@ -106,6 +106,15 @@ log_rotation_set() {
   [[ "$(inspect "$1" '{{.HostConfig.LogConfig.Type}} {{index .HostConfig.LogConfig.Config "max-size"}} {{index .HostConfig.LogConfig.Config "max-file"}}')" == 'json-file 10m 5' ]]
 }
 memory_limited() { (($(inspect "$1" '{{.HostConfig.Memory}}') > 0)); }
+# compose.prod.yml's x-hardening, read back from the container Docker actually created.
+hardened() {
+  [[ "$(inspect "$1" '{{.HostConfig.ReadonlyRootfs}} {{json .HostConfig.CapDrop}} {{json .HostConfig.SecurityOpt}}')" == 'true ["ALL"] ["no-new-privileges:true"]' ]]
+}
+# The effective capabilities of the service's main process: all zero once cap_drop ALL holds.
+no_effective_caps() {
+  [[ "$(compose exec -T "$1" sh -c 'grep "^CapEff:" /proc/1/status')" =~ ^CapEff:[[:space:]]+0+$ ]]
+}
+root_fs_read_only() { ! compose exec -T "$1" sh -c 'touch /smoke-write-test' >/dev/null 2>&1; }
 migrate_done_once() {
   [[ "$(inspect migrate '{{.State.Status}} {{.State.ExitCode}} {{.RestartCount}} {{.HostConfig.RestartPolicy.Name}}')" == 'exited 0 0 no' ]]
 }
@@ -196,7 +205,13 @@ check "api heap limit (${heap_mib} MiB) is under its 512 MiB container limit" \
 for service in postgres migrate api web; do
   check "${service} logs rotate (json-file, 10m x 5)" log_rotation_set "$service"
   check "${service} has a memory limit" memory_limited "$service"
+  check "${service} is read-only, drops every capability, no new privileges" hardened "$service"
 done
+for service in postgres api web; do
+  check "${service}'s main process has no effective capabilities" no_effective_caps "$service"
+  check "${service} cannot write to its root filesystem" root_fs_read_only "$service"
+done
+check 'postgres runs as uid 70 (postgres), not root' test "$(compose exec -T postgres id -u)" == 70
 
 log 'Creating an admin (docker compose run --rm --no-deps api node dist/create-admin.js)'
 # Output holds the initial password: kept in a variable, never echoed.
