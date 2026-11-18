@@ -103,7 +103,9 @@ services:
       postgres:
         condition: service_healthy
     environment:
+      # The owner: migrations change the schema, then give club_app its login (migrate.ts).
       DATABASE_URL: ${DATABASE_URL:?set DATABASE_URL in the env file}
+      APP_DB_PASSWORD: ${APP_DB_PASSWORD:?set APP_DB_PASSWORD in the env file (openssl rand -hex 24)}
     networks:
       - backend
     deploy:
@@ -131,7 +133,9 @@ services:
       # Caddy is the only client and overwrites X-Forwarded-For, so the rate limits see the real
       # client IP and a client cannot spoof it (Caddyfile).
       TRUST_PROXY: 'true'
-      DATABASE_URL: ${DATABASE_URL:?set DATABASE_URL in the env file}
+      # club_app, never the owner: the api cannot change the schema or the event log's history
+      # (README "Database role ของ api"). create-admin run in this service uses it too.
+      DATABASE_URL: ${APP_DATABASE_URL:?set APP_DATABASE_URL in the env file}
       JWT_SECRET: ${JWT_SECRET:?set JWT_SECRET in the env file (openssl rand -base64 48)}
       # Optional; empty means the api's default (config.ts).
       DB_POOL_MAX: ${DB_POOL_MAX:-}

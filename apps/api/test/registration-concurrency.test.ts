@@ -7,7 +7,12 @@ import { SESSION_COOKIE } from '../src/auth/session.js';
 import { createPool } from '../src/db.js';
 import { buildTestApp } from './support/app.js';
 import { createClub, uniqueCode } from './support/import-db.js';
-import { startMigratedPostgres, stopPostgres } from './support/postgres.js';
+import {
+  appConnectionUri,
+  startMigratedPostgres,
+  stopPostgres,
+  truncateAsOwner,
+} from './support/postgres.js';
 import {
   createOpenRound,
   createStudentId,
@@ -70,7 +75,7 @@ describe('registration under concurrency', () => {
 
   beforeAll(async () => {
     container = await startMigratedPostgres();
-    pool = createPool(container.getConnectionUri());
+    pool = createPool(appConnectionUri(container));
   });
 
   afterAll(async () => {
@@ -79,7 +84,7 @@ describe('registration under concurrency', () => {
 
   beforeEach(async () => {
     // A student writes to their grade's selected round, so each test starts with no rounds.
-    await pool.query('TRUNCATE rounds CASCADE');
+    await truncateAsOwner(container, ['rounds']);
     app = await buildTestApp(pool);
   });
 

@@ -15,7 +15,7 @@ import { createPool } from '../src/db.js';
 import { roundStatusAt } from '../src/services/rounds.js';
 import { TEST_JWT_SECRET, createTestUser } from './support/app.js';
 import type { TestUser } from './support/app.js';
-import { startMigratedPostgres, stopPostgres } from './support/postgres.js';
+import { appConnectionUri, startMigratedPostgres, stopPostgres } from './support/postgres.js';
 
 type InjectResponse = Awaited<ReturnType<FastifyInstance['inject']>>;
 
@@ -94,7 +94,7 @@ describe('admin rounds', () => {
 
   beforeAll(async () => {
     container = await startMigratedPostgres();
-    pool = createPool(container.getConnectionUri());
+    pool = createPool(appConnectionUri(container));
   });
 
   afterAll(async () => {

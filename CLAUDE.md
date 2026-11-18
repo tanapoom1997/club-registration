@@ -94,7 +94,7 @@ scripts/restore.sh --yes latest|latest-local|<s3-uri|ไฟล์>   # กู้
 
 backup/restore (README หัวข้อ Backup และ Restore (O3)): dump มี PII ทั้งหมด ไฟล์ 600 ในไดเรกทอรี 700 ห้ามพิมพ์เนื้อหาหรือแถวออก log ห้ามใส่ชื่อ bucket/account id/region จริงใน repo restore กู้ลง DB ใหม่แล้วสลับชื่อใน transaction เดียว (ห้ามเปลี่ยนเป็น `--clean` ลง DB เดิม เพราะได้ข้อมูลผสมเมื่อ schema ต่างกัน) ตรวจ dump ด้วยการอ่านทั้งไฟล์ (`--list` อย่างเดียวไม่จับไฟล์ที่ถูกตัด) แก้ script แล้วต้องรัน `scripts/smoke-backup.sh` และ `scripts/lint-shell.sh`
 
-บัญชี demo (`demo-admin`, `demo1001`, `demo1002`, `demo2001`) เป็นข้อมูลสมมติ ไม่บังคับเปลี่ยนรหัส รหัสสุ่มตอนสร้างครั้งแรกแล้วเก็บใน `.dev-credentials.txt` (gitignored, 600) รัน `pnpm dev` ซ้ำไม่เปลี่ยนรหัส `seed-dev` ไม่ยอมรันเมื่อ `NODE_ENV=production` ส่วน production สร้าง admin ด้วย `node dist/create-admin.js <login_id>` หลัง `pnpm build` หรือใน image `docker run --rm -it -e DATABASE_URL club-registration-api node dist/create-admin.js <login_id>` (migration ก็เช่นกัน: `node dist/migrate.js`) image `api` ไม่มี `seed-dev`/`generate-template`/`dist/dev/` (รวม `generate-sample-import`, ลบตอน build)
+บัญชี demo (`demo-admin`, `demo1001`, `demo1002`, `demo2001`) เป็นข้อมูลสมมติ ไม่บังคับเปลี่ยนรหัส รหัสสุ่มตอนสร้างครั้งแรกแล้วเก็บใน `.dev-credentials.txt` (gitignored, 600) รัน `pnpm dev` ซ้ำไม่เปลี่ยนรหัส `seed-dev` ไม่ยอมรันเมื่อ `NODE_ENV=production` ส่วน production สร้าง admin ด้วย `node dist/create-admin.js <login_id>` หลัง `pnpm build` หรือใน image `docker run --rm -it -e DATABASE_URL club-registration-api node dist/create-admin.js <login_id>` ด้วย `DATABASE_URL` ของ `club_app` (migration ก็เช่นกัน: `node dist/migrate.js` ด้วย `DATABASE_URL` ของเจ้าของ DB และ `APP_DB_PASSWORD`) image `api` ไม่มี `seed-dev`/`generate-template`/`dist/dev/` (รวม `generate-sample-import`, ลบตอน build)
 
 `packages/shared` ไม่ต้อง build ตอน dev และ test เพราะ export condition `@club-registration/source` ชี้ไปที่ `src/` (Vitest ของ api ใช้ alias แทน) ส่วน production ใช้ `dist/` จาก `pnpm build`
 
@@ -179,6 +179,7 @@ backup/restore (README หัวข้อ Backup และ Restore (O3)): dump �
 ### Database
 - Timestamp ใช้ `timestamptz` เสมอ เก็บเป็น UTC แปลงเวลาไทยที่ชั้นแสดงผล
 - Migration เป็น forward-only ห้ามแก้ migration ที่ commit/deploy แล้ว ให้เพิ่มไฟล์ใหม่
+- api ต่อ DB ด้วย role `club_app` ที่มีสิทธิ์เฉพาะคำสั่งที่ใช้จริงรายตาราง (README หัวข้อ Security: Database role ของ api) ส่วน migrate ใช้เจ้าของ DB ตารางใหม่หรือคำสั่งชนิดใหม่ (เช่น `UPDATE`/`DELETE` ตารางที่เดิมไม่มี) ต้อง `GRANT` ใน migration ใหม่และแก้ `EXPECTED_PRIVILEGES` ใน `apps/api/test/db-role.test.ts` ในงานเดียวกัน ให้เท่าที่ api ใช้เท่านั้น ห้ามให้ api ต่อด้วยเจ้าของ DB และห้าม grant `UPDATE`/`DELETE` บน `registration_events` เทสต์ต่อด้วย `club_app` อยู่แล้ว (`appConnectionUri`) งาน fixture ที่ api ไม่ทำ (`TRUNCATE`) ใช้ `truncateAsOwner`
 - ทุก transaction ต้อง `COMMIT` หรือ `ROLLBACK` เสมอ (ใช้ `try/finally` คืน client เข้า pool)
 - ตั้ง `statement_timeout` และ `idle_in_transaction_session_timeout` กัน query ค้าง
 - Index ทุก foreign key และคอลัมน์ที่ใช้ filter บ่อย ตรวจ query หนักด้วย `EXPLAIN`

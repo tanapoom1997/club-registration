@@ -27,6 +27,8 @@ describe('seedDemoAccounts', () => {
 
   beforeAll(async () => {
     container = await startMigratedPostgres();
+    // seed-dev is a development tool and runs as the database owner (DATABASE_URL in .env), never
+    // as club_app; the api image does not ship it.
     pool = createPool(container.getConnectionUri());
   });
 

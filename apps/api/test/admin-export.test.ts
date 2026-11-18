@@ -27,7 +27,7 @@ import {
 } from './support/import-db.js';
 import { readPdf } from './support/pdf.js';
 import type { PdfPage } from './support/pdf.js';
-import { startMigratedPostgres, stopPostgres } from './support/postgres.js';
+import { appConnectionUri, startMigratedPostgres, stopPostgres } from './support/postgres.js';
 
 type InjectResponse = Awaited<ReturnType<FastifyInstance['inject']>>;
 
@@ -189,7 +189,7 @@ describe('admin name list export', () => {
 
   beforeAll(async () => {
     container = await startMigratedPostgres();
-    pool = createPool(container.getConnectionUri());
+    pool = createPool(appConnectionUri(container));
   });
 
   afterAll(async () => {

@@ -4,7 +4,7 @@ import type { Pool } from 'pg';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { createPool } from '../src/db.js';
 import { buildTestApp } from './support/app.js';
-import { startMigratedPostgres, stopPostgres } from './support/postgres.js';
+import { appConnectionUri, startMigratedPostgres, stopPostgres } from './support/postgres.js';
 
 describe('GET /api/health', () => {
   let container: StartedPostgreSqlContainer;
@@ -12,7 +12,7 @@ describe('GET /api/health', () => {
 
   beforeAll(async () => {
     container = await startMigratedPostgres();
-    pool = createPool(container.getConnectionUri());
+    pool = createPool(appConnectionUri(container));
   });
 
   afterAll(async () => {

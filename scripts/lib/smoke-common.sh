@@ -51,6 +51,7 @@ write_prod_env_file() {
       done
       case "$line" in
         POSTGRES_PASSWORD=) line="POSTGRES_PASSWORD=$(random_hex)" ;;
+        APP_DB_PASSWORD=) line="APP_DB_PASSWORD=$(random_hex)" ;;
         JWT_SECRET=) line="JWT_SECRET=$(random_secret)" ;;
       esac
       printf '%s\n' "$line"
@@ -61,6 +62,7 @@ write_prod_env_file() {
   )
   # The template must keep its blanks where the loop above fills them in.
   grep -qE '^POSTGRES_PASSWORD=[0-9a-f]{48}$' "$out"
+  grep -qE '^APP_DB_PASSWORD=[0-9a-f]{48}$' "$out"
   grep -qE '^JWT_SECRET=.{32,}$' "$out"
 }
 

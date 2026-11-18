@@ -4,7 +4,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { createAdmin } from '../src/auth/service.js';
 import { createPool } from '../src/db.js';
 import { buildTestApp, createTestUser } from './support/app.js';
-import { startMigratedPostgres, stopPostgres } from './support/postgres.js';
+import { appConnectionUri, startMigratedPostgres, stopPostgres } from './support/postgres.js';
 
 describe('createAdmin', () => {
   let container: StartedPostgreSqlContainer;
@@ -25,7 +25,7 @@ describe('createAdmin', () => {
 
   beforeAll(async () => {
     container = await startMigratedPostgres();
-    pool = createPool(container.getConnectionUri());
+    pool = createPool(appConnectionUri(container));
   });
 
   afterAll(async () => {

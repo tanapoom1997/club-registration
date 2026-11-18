@@ -113,6 +113,15 @@ postgres_setting_is() {
   # shellcheck disable=SC2016 # expanded by sh inside the container, not here
   [[ "$(compose exec -T postgres sh -c 'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -tAc "SHOW $1"' sh "$1")" == "$2" ]]
 }
+# Every client connection to the database other than this psql, by role. Right after a request
+# the api's pool still holds its connection (pg's idle timeout is 10 s), and it must be club_app.
+database_client_roles() {
+  # shellcheck disable=SC2016 # expanded by sh inside the container, not here
+  compose exec -T postgres sh -c 'psql -X -U "$POSTGRES_USER" -d "$POSTGRES_DB" -tA' <<'SQL'
+SELECT string_agg(DISTINCT usename, ',') FROM pg_stat_activity
+WHERE datname = current_database() AND backend_type = 'client backend' AND pid <> pg_backend_pid();
+SQL
+}
 api_heap_limit_mib() {
   compose exec -T api node -p 'Math.round(require("v8").getHeapStatistics().heap_size_limit / 2 ** 20)'
 }
@@ -159,6 +168,8 @@ check '/ has Content-Security-Policy' \
 fetch health https /api/health
 check '/api/health is 200 over HTTPS' status_is health 200
 check '/api/health reports database up' body_contains health '"database":"up"'
+check 'the api connects to the database as club_app only' \
+  test "$(database_client_roles)" == club_app
 check '/api/health has one Strict-Transport-Security (helmet; Caddy adds none)' \
   test "$(header_count health strict-transport-security)" -eq 1
 check '/api/health Strict-Transport-Security is the same as the site' \

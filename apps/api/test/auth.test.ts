@@ -9,7 +9,7 @@ import { createAuthGuard, SESSION_COOKIE, SESSION_TTL_SECONDS } from '../src/aut
 import { createPool } from '../src/db.js';
 import { buildTestApp, createTestUser } from './support/app.js';
 import type { TestUser } from './support/app.js';
-import { startMigratedPostgres, stopPostgres } from './support/postgres.js';
+import { appConnectionUri, startMigratedPostgres, stopPostgres } from './support/postgres.js';
 
 type InjectResponse = Awaited<ReturnType<FastifyInstance['inject']>>;
 
@@ -37,7 +37,7 @@ describe('auth', () => {
 
   beforeAll(async () => {
     container = await startMigratedPostgres();
-    pool = createPool(container.getConnectionUri());
+    pool = createPool(appConnectionUri(container));
   });
 
   afterAll(async () => {

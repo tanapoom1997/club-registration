@@ -114,6 +114,13 @@ fingerprint() {
   sql_value "$1" "${query};" >"$2"
 }
 same_file() { cmp -s "$1" "$2"; }
+# The dump carries club_app's GRANTs and the role lives in the cluster, so a restored database must
+# give the api the same rights: writing the event log, never rewriting it.
+app_grants_hold() {
+  [[ "$(sql_value "$1" "SELECT has_table_privilege('club_app', 'public.registration_events', 'INSERT')
+    AND NOT has_table_privilege('club_app', 'public.registration_events', 'UPDATE')
+    AND has_table_privilege('club_app', 'public.clubs', 'UPDATE')")" == t ]]
+}
 invariant_holds() {
   [[ "$(sql_value "$1" 'SELECT count(*) FROM clubs c WHERE c.registered <> (SELECT count(*) FROM registrations r WHERE r.club_id = c.id) OR c.registered > c.capacity')" == 0 ]]
 }
@@ -354,6 +361,7 @@ fingerprint "$DB" "$work_dir/fp-restored.txt"
 check 'every table matches the backup (row counts and checksums)' \
   same_file "$work_dir/fp-backup.txt" "$work_dir/fp-restored.txt"
 check 'the registration invariant holds after the restore' invariant_holds "$DB"
+check "club_app keeps the api's grants after the restore" app_grants_hold "$DB"
 login login_restored "$admin_password"
 check 'the admin logs in through Caddy with the password set before the backup' \
   status_is login_restored 200
