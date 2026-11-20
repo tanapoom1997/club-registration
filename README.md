@@ -97,6 +97,7 @@ club-registration/
 ├── compose.prod.yml    # stack ของ production (postgres, migrate, api, web)
 ├── Caddyfile       # อยู่ใน image web
 ├── .env.example
+├── LICENSE         # MIT (ฟอนต์ใช้ OFL ดูหัวข้อ License)
 └── pnpm-workspace.yaml
 ```
 
@@ -312,3 +313,7 @@ Admin เพิ่ม/ลบ/ย้ายนักเรียนแทน บ�
 1. ~~แก้ข้อ 13–14 ใน [รายการที่ยังเปิดอยู่](#รายการที่ยังเปิดอยู่) (หน้าเว็บ)~~ เสร็จแล้ว
 2. ทดสอบทั้งระบบด้วยมือตาม checklist บนเครื่อง arm64 (ปิดข้อ 15)
 3. เริ่ม **Phase 2** (เปลี่ยนชุมนุม + waitlist + admin แก้แทน) ทั้งที่ Phase 1 ยังเหลือ O4/O5 เพราะสองข้อนั้นต้องใช้เครื่องจริง Phase 2 ไม่ได้พึ่ง O4/O5 แต่ต้องรัน O5 ซ้ำหลัง Phase 2 เพราะการเลื่อนคิวทำให้ transaction ในรอบยาวขึ้น
+
+## License
+
+โค้ดใน repo นี้ใช้ [MIT License](LICENSE) ยกเว้นฟอนต์ Sarabun ใน `apps/api/assets/fonts/` ซึ่งใช้ SIL Open Font License 1.1 ตาม [`OFL.txt`](apps/api/assets/fonts/OFL.txt) ที่อยู่คู่กัน และ dependency จาก npm ซึ่งใช้ license ของแต่ละ package
