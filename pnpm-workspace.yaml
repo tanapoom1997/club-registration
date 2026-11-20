@@ -1,6 +1,8 @@
 packages:
   - apps/*
   - packages/*
+  # Browser tests of web + api + Postgres together (not part of pnpm test: they need a browser).
+  - e2e
 
 allowBuilds:
   esbuild: true

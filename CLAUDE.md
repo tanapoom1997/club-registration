@@ -39,7 +39,7 @@
 | Data fetching | TanStack Query | polling คิว/สถานะ |
 | Excel | `exceljs` | import/export .xlsx |
 | PDF | `pdfkit` + ฟอนต์ Sarabun (SIL OFL 1.1) | export รายชื่อ ฟอนต์อยู่ที่ `apps/api/assets/fonts/` (มี `OFL.txt` คู่กัน) และต้องไปกับ `dist/` ตอน deploy ห้ามเปลี่ยนฟอนต์โดยไม่ลองชื่อที่มีสระบน/ล่างและวรรณยุกต์ก่อน (README หัวข้อ Export รายชื่อ) |
-| Test | Vitest + Testcontainers | Postgres จริง ไม่ mock |
+| Test | Vitest + Testcontainers, Playwright (E2E) | Postgres จริง ไม่ mock E2E อยู่ใน `e2e/` แยกจาก `apps/web` เพราะ setup ใช้โค้ดของ api |
 | Deploy | Docker image 2 ตัว (`api` = Node, `web` = Caddy + ไฟล์ build ของ React) + Docker Compose | เครื่องเดียวบน EC2 (t4g = arm64) build บนเครื่องเอง ไม่มี registry Caddy เสิร์ฟหน้าเว็บ + SPA fallback และ proxy `/api/*` ไม่ใช้ `@fastify/static` base image pin ทั้ง tag และ digest ใน `Dockerfile` |
 
 **ไม่ใช้:** Next.js, Redis, ORM (Prisma/Drizzle), serverless, แยก repo FE/BE
@@ -73,6 +73,7 @@ pnpm lint
 pnpm format
 pnpm test               # Vitest + Testcontainers (ต้องเปิด Docker)
 pnpm audit:deps         # ล้มถ้า lockfile มี advisory ระดับ high/critical ที่ไม่ได้ ignore (ไม่ต้อง install)
+pnpm e2e                # Playwright (e2e/): Chromium กับ web + api + Postgres (Testcontainers) ด้วยข้อมูลสมมติ ต้องเปิด Docker และมี Chromium ของ Playwright
 pnpm build
 scripts/smoke-images.sh   # build image api + web แล้วรันกับ Postgres จริง ตรวจ health/headers/non-root/shutdown (ต้องเปิด Docker)
 scripts/smoke-compose.sh  # รัน compose.prod.yml ทั้ง stack ผ่าน HTTPS (CA ภายในของ Caddy) พอร์ต 18080/18443 แล้วลบทิ้ง
@@ -164,7 +165,7 @@ backup/restore (README หัวข้อ Backup และ Restore (O3)): dump �
 - `tsconfig`: `strict`, `noUncheckedIndexedAccess`, `exactOptionalPropertyTypes`, `noImplicitOverride`, `verbatimModuleSyntax`, `isolatedModules`
 - ESLint เปิดอย่างน้อย: `@typescript-eslint/no-floating-promises`, `no-misused-promises`, `no-explicit-any`, `consistent-type-imports`, `eqeqeq`, `no-restricted-imports` (กัน web↔api import กัน)
 - `apps/web`: `react-hooks` recommended (`exhaustive-deps` เป็น error เพราะ warning ไม่ทำให้ `pnpm lint`/CI ล้ม) และ `jsx-a11y` recommended (`<Label>` ถูกตรวจเหมือน `<label>`) ข้าม rule ได้เฉพาะ `eslint-disable-next-line <rule>` บรรทัดเดียวพร้อมเหตุผลในคอมเมนต์ ห้ามปิดทั้งไฟล์
-- CI/ก่อน commit ต้องผ่าน `typecheck` + `lint` + `test` ห้าม merge ถ้าแดง CI อยู่ที่ `.github/workflows/ci.yml` (job `check`: `scripts/check-no-data-files.sh`, `scripts/lint-shell.sh`, format:check, typecheck, lint, test, build และ job `images`: `scripts/smoke-images.sh`, `scripts/smoke-compose.sh` แล้ว `scripts/smoke-backup.sh` ซึ่งรันในเครื่องด้วยคำสั่งเดียวกันได้) รันทุก PR และทุก push เข้า `main` ส่วน `.github/workflows/audit.yml` รัน `pnpm audit:deps` ทุก PR, push เข้า `main` และทุกวัน action pin ด้วย commit SHA ถ้าเพิ่มขั้นตอนให้รันซ้ำในเครื่องได้ด้วยคำสั่ง `pnpm` เดียวกัน
+- CI/ก่อน commit ต้องผ่าน `typecheck` + `lint` + `test` ห้าม merge ถ้าแดง CI อยู่ที่ `.github/workflows/ci.yml` (job `check`: `scripts/check-no-data-files.sh`, `scripts/lint-shell.sh`, format:check, typecheck, lint, test, build และ job `images`: `scripts/smoke-images.sh`, `scripts/smoke-compose.sh` แล้ว `scripts/smoke-backup.sh` และ job `e2e`: `pnpm e2e` ทุกตัวรันในเครื่องด้วยคำสั่งเดียวกันได้) รันทุก PR และทุก push เข้า `main` ส่วน `.github/workflows/audit.yml` รัน `pnpm audit:deps` ทุก PR, push เข้า `main` และทุกวัน action pin ด้วย commit SHA ถ้าเพิ่มขั้นตอนให้รันซ้ำในเครื่องได้ด้วยคำสั่ง `pnpm` เดียวกัน
 
 ### Security
 - Password hash ด้วย **argon2id** (`crypto.argon2` ของ Node, เก็บเป็น PHC string) ห้าม MD5/SHA ธรรมดา เทียบด้วย `timingSafeEqual`
