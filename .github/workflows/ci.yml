@@ -85,8 +85,21 @@ jobs:
 
       - run: pnpm install --frozen-lockfile
 
-      # The Chromium build that the pinned @playwright/test expects, with its system libraries.
-      - run: pnpm --filter @club-registration/e2e exec playwright install --with-deps chromium
+      # Only the headless shell that the pinned @playwright/test runs headless tests with (about
+      # 115 MiB from Playwright's CDN, a few seconds), not the full Chromium build as well. Not
+      # cached: restoring a cache of this size takes about as long as downloading it.
+      - run: pnpm --filter @club-registration/e2e exec playwright install --only-shell chromium
+
+      # The ubuntu-24.04 image already ships Chromium's libraries; --with-deps on every run spent
+      # 9.5 minutes in apt on extra fonts and mesa upgrades the suite does not need (the page
+      # self-hosts its Thai font). apt runs only if the browser cannot start, and that launch
+      # error stays in the log above the install.
+      - name: Install Chromium's system libraries if the browser cannot start
+        working-directory: e2e
+        run: |
+          if ! node --input-type=module -e "import { chromium } from '@playwright/test'; await (await chromium.launch()).close();"; then
+            pnpm exec playwright install-deps chromium-headless-shell
+          fi
 
       - run: pnpm e2e
 
