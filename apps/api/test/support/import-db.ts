@@ -95,6 +95,20 @@ export const register = async (
   await pool.query('UPDATE clubs SET registered = registered + 1 WHERE id = $1', [clubId]);
 };
 
+// Puts a student on a club's waitlist directly, with no event: for the planning rules only, which
+// read the entry and nothing else.
+export const addWaitlistEntry = async (
+  pool: Pool,
+  roundId: number,
+  studentId: number,
+  clubId: number,
+): Promise<void> => {
+  await pool.query(
+    'INSERT INTO waitlist_entries (round_id, student_id, club_id) VALUES ($1, $2, $3)',
+    [roundId, studentId, clubId],
+  );
+};
+
 export const addAdvisor = async (pool: Pool, clubId: number, fullName: string): Promise<number> => {
   const { rows } = await pool.query<{ id: number }>(
     'INSERT INTO club_advisors (club_id, full_name) VALUES ($1, $2) RETURNING id',

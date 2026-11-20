@@ -1,39 +1,62 @@
 import type { Queryable } from '../db.js';
 
 // CLAUDE.md rule 3: every write transaction inside a round (register, change, cancel, waitlist join
-// and leave, an admin club edit, the import commit) starts with the round's transaction-scoped
-// advisory lock, so writers in one round run one at a time and see each other's commits. The
-// promote engine (waitlist-promote.ts) takes no lock of its own: it runs at the end of a cancel or
-// change, inside the transaction that already holds that round's lock. The lock is released by
-// COMMIT or ROLLBACK, never by hand.
+// and leave, an admin club edit, an admin round edit, the import commit) takes the round's
+// transaction-scoped advisory lock before it reads anything it decides by, so writers in one round
+// run one at a time and see each other's commits. The promote engine (waitlist-promote.ts) takes
+// no lock of its own: it runs at the end of a cancel, a change, a club edit or a round edit,
+// inside the transaction that already holds that round's lock, and at the end of the import
+// commit once per round it locked, in the same ascending id order, so it never needs a lock the
+// transaction does not hold yet. The lock is released by COMMIT or ROLLBACK, never by hand.
 //
 // Global lock order. Every writer takes its locks in this order, skipping the steps it does not
 // need; apart from the import's step 2, all advisory locks come before any row lock:
 //
-// 1. The import lock (lockImport): the import commit and the initial password issuance, each as
-//    its first statement, holding nothing yet.
+// 1. The import lock (lockImport): the import commit, the initial password issuance and the
+//    admin round edit, each as its first statement, holding nothing yet. The round edit takes it
+//    only to run apart from the import: it writes the rounds row the import holds FOR SHARE in
+//    step 2, after taking a round lock the import may be waiting for in step 3.
 // 2. FOR SHARE on every rounds row: the import commit only (lockRoundsForImport).
 // 3. Round locks in ascending id: the import commit takes the rounds it relies on
 //    (lockRoundsForImport); register, change, cancel, waitlist join and leave and the club edit
-//    take exactly one, holding nothing (a change, a waitlist move and a promotion cascade all stay
-//    within the clubs of one round, so one lock covers them).
-// 4. Row locks and writes.
+//    take exactly one, holding nothing, and the round edit takes exactly one holding only the
+//    import lock (a change, a waitlist move and a promotion cascade all stay within the clubs of
+//    one round, so one lock covers them).
+// 4. Row locks and writes, the promote engine's included: it runs last, only in rounds whose lock
+//    is already held (one for the club edit, the round edit, cancel and change; each round the
+//    import locked).
 //
 // No deadlock: a transaction only ever waits for an advisory lock while holding advisory locks
 // that come earlier in that order, plus (the import alone) the rounds row locks of step 2, so no
 // cycle of waits can form through these locks. The row locks cannot close one either:
 //
-// - The rounds row locks conflict only with an UPDATE or DELETE of a rounds row (the admin round
-//   edit and delete), which take no advisory lock and lock that one row only, so they wait for
-//   the import and never the other way round. Students' writes (and promote) touch rounds rows only
-//   through foreign-key checks, which take FOR KEY SHARE; that mode does not conflict with FOR
-//   SHARE (nor with a waiting UPDATE), so a register holding a round lock the import waits for
-//   never waits for the import's rounds row locks (test: import-commit-round-locks.test.ts).
+// - The import's rounds row locks conflict only with an UPDATE or DELETE of a rounds row. The
+//   admin round edit never meets them: it holds the import lock, so the import is not running.
+//   (Without that lock it would deadlock: the edit holds the round lock the import waits for
+//   while its UPDATE waits for the import's FOR SHARE; test: admin-promote.test.ts.) The round
+//   delete takes no advisory lock and locks that one row only, so it waits for the import and
+//   never the other way round. Students' writes (and promote) touch rounds rows only through
+//   foreign-key checks, which take FOR KEY SHARE; that mode does not conflict with FOR SHARE (nor
+//   with a waiting UPDATE), so a register holding a round lock the import waits for never waits
+//   for the import's rounds row locks (test: import-commit-round-locks.test.ts).
+// - The round edit's UPDATE changes no column of a unique index (only the window and max_active;
+//   the keys are id and (term, grade)), so it takes FOR NO KEY UPDATE on the one rounds row. That
+//   does not conflict with the FOR KEY SHARE of students' foreign-key checks; it conflicts with
+//   the import's FOR SHARE, which the import lock rules out, and with a round delete, which holds
+//   nothing else and waits for nothing else. Every other writer of the round waits for its round
+//   lock before the UPDATE, so the edit waits only for transactions that wait for nothing it holds
+//   (a round lock holder never takes the import lock).
 // - Rows of a round's clubs, registrations and waitlist_entries are written only by the one
 //   holder of its lock. The one conflicting row lock across rounds is a student's
 //   student_profiles row (the FOR SHARE of register, change and waitlist join against the
 //   import's grade update). A register, change or join that holds it in a round the import did
 //   not lock waits for nothing the import holds, so it simply commits first.
+// - The promote engine adds no wait of its own. It writes only clubs, registrations and
+//   waitlist_entries rows of a round whose lock its transaction already holds (the club or round
+//   edit's one round; each round the import locked), and reaches rounds, users and
+//   student_profiles rows only through foreign-key checks (FOR KEY SHARE, which conflicts with
+//   neither FOR SHARE, FOR NO KEY UPDATE nor a waiting UPDATE of a non-key column) and a plain
+//   read of the student's grade. In the round edit the rounds row is its own FOR NO KEY UPDATE.
 // - The import and the password issuance both lock many users and student_profiles rows, in no
 //   common order, so they must never hold row locks at the same time: the import lock makes them
 //   run one after the other. The issuance takes no round lock. Its row locks (FOR NO KEY UPDATE on
@@ -47,8 +70,8 @@ import type { Queryable } from '../db.js';
 // key spaces, so a round id can never collide with the import's key. Writers that skip a lock are
 // still stopped by the DB constraints (UNIQUE, CHECK); the locks only make the order simple.
 
-// A fixed key (not per term) because students are shared across terms. See import-commit.ts and
-// initial-passwords.ts for what each holder relies on it for.
+// A fixed key (not per term) because students are shared across terms. See import-commit.ts,
+// initial-passwords.ts and updateRound in rounds.ts for what each holder relies on it for.
 const IMPORT_LOCK_KEY: readonly [number, number] = Object.freeze([1, 1] as const);
 
 export const lockImport = async (db: Queryable): Promise<void> => {
@@ -89,8 +112,10 @@ export const lockRoundOfClub = async (
 // committing is harmless for the same reason: it ends as a seat in a closed round.
 //
 // FOR SHARE on every rounds row, not only the ones picked: it keeps every window still until
-// commit, so an admin cannot reopen a closed round (or extend one) of another term between this
-// pick and the import's writes; an edit in flight is waited for and its new window read here.
+// commit, so no rounds row can change between this pick and the import's writes. The admin round
+// edit (which could reopen a closed round of another term) is already kept out by the import lock:
+// one in flight commits first and its new window is read here. The row locks stay as a backstop
+// for any writer of rounds rows that skips the import lock (the round delete does).
 // A round inserted after this read needs no lock: a new round has no clubs, only the import
 // creates clubs, and imports run one at a time under the import lock, so until this transaction
 // commits no one can register, cancel or edit a club in it.

@@ -25,6 +25,7 @@ import { parseImportWorkbook } from '../import/parse.js';
 import { IMPORT_TEMPLATE_FILENAME, readImportTemplate } from '../import/template.js';
 import { assertXlsxUpload } from '../import/xlsx-file.js';
 import { commitImport } from '../services/import-commit.js';
+import type { ImportPromotion } from '../services/import-commit.js';
 import { planImport, summarizeImportPlan } from '../services/import-plan.js';
 import type { ImportPlan } from '../services/import-plan.js';
 
@@ -96,7 +97,21 @@ const rowCounts = (parsed: ParsedImport) => ({
 const summarize = (plan: ImportPlan, fileSha256: string, term: string) =>
   summarizeImportPlan(plan, { fileSha256, term, maxErrors: IMPORT_MAX_ERRORS_LISTED });
 
-// Counts and the hash only: cell values and the file name can hold personal data.
+const promotionCounts = (promotions: readonly ImportPromotion[]) => {
+  const byRound = promotions.reduce(
+    (counts, { roundId }) => counts.set(roundId, (counts.get(roundId) ?? 0) + 1),
+    new Map<number, number>(),
+  );
+  return {
+    promoted: promotions.length,
+    ...(byRound.size > 0
+      ? { promotedByRound: [...byRound].map(([roundId, count]) => ({ roundId, count })) }
+      : {}),
+  };
+};
+
+// Counts and the hash only: cell values and the file name can hold personal data. A commit also
+// logs how many waiters it moved up (promoted), and how many per round when there were any.
 const logImport = (
   request: FastifyRequest,
   message: string,
@@ -105,9 +120,10 @@ const logImport = (
     fileSha256: string;
     parsed: ParsedImport;
     summary: ImportPreviewResponse;
+    promotions?: readonly ImportPromotion[];
   },
 ) => {
-  const { adminId, fileSha256, parsed, summary } = details;
+  const { adminId, fileSha256, parsed, summary, promotions } = details;
   request.log.info(
     {
       adminId,
@@ -115,6 +131,7 @@ const logImport = (
       rows: rowCounts(parsed),
       changes: { students: summary.students, clubs: summary.clubs, advisors: summary.advisors },
       errorCount: summary.errorCount,
+      ...(promotions === undefined ? {} : promotionCounts(promotions)),
     },
     message,
   );
@@ -198,7 +215,9 @@ export const adminImportRoutes =
     // The key is still required, so this endpoint has the same contract as every other write
     // (CLAUDE.md rule 7), but it is not stored: registration_events needs a round and a student
     // per row and has no import event type, and an import table would only let a retry repeat the
-    // first summary, which the unchanged counts already make clear. Nothing is kept between
+    // first summary, which the unchanged counts already make clear. The waitlist_promote events of
+    // the waiters a commit moves up carry no key either, like every promotion, and a retry moves
+    // nobody: the seats it freed are taken. Nothing is kept between
     // preview and commit either (no state on disk): the file is sent again and fileSha256 ties it
     // to the preview the admin saw.
     app.post(
@@ -220,13 +239,18 @@ export const adminImportRoutes =
         await assertXlsxUpload(upload.filename, upload.bytes);
 
         const parsed = await parseImportWorkbook(upload.bytes);
-        const { status, plan } = await commitImport(pool, term, parsed);
+        const { status, plan, promotions } = await commitImport(pool, {
+          term,
+          parsed,
+          actorId: admin.id,
+        });
         const summary = summarize(plan, fileSha256, term);
         logImport(request, status === 'committed' ? 'import committed' : 'import rejected', {
           adminId: admin.id,
           fileSha256,
           parsed,
           summary,
+          promotions,
         });
         if (status === 'invalid') {
           const body: ImportInvalidResponse = {

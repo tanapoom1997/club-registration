@@ -1,18 +1,22 @@
 import type pg from 'pg';
 import { moveRegistration, releaseSeat } from './seats.js';
 
-// The promote engine (README Phase 2 "กติกา waitlist" rules 4–6). Whoever frees a seat in an open
-// round calls it at the end of their own transaction, after their own event, while still holding
-// the round lock they took first (round-lock.ts); it takes no lock of its own. Today that is a
-// student's cancel and change (registrations.ts); the admin club edit and the import commit come
-// in a later PR.
+// The promote engine (README Phase 2 "กติกา waitlist" rules 4–6). Whoever frees a seat in a round
+// that has not closed calls it at the end of their own transaction, after their own event, while
+// still holding the round lock they took first (round-lock.ts); it takes no lock of its own. The
+// callers: a student's cancel and change (registrations.ts), an admin club edit that sends a
+// capacity (clubs.ts), an admin round edit, which may reopen a closed round (rounds.ts), and the
+// import commit, once per round it locked (import-commit.ts).
 //
 // One loop, until a pass promotes nobody:
 //
 // 1. Pick the oldest entry, by (created_at, id), among the round's clubs that have a free seat,
-//    and delete it in the same statement. Only while the round is open by the DB clock
+//    and delete it in the same statement. Only until the round closes by the DB clock
 //    (statement_timestamp() of that statement; a closed round promotes nobody, rule 6) and only an
-//    entry whose student is still in the round's grade. Every pass deletes the entry it promotes,
+//    entry whose student is still in the round's grade. An upcoming round promotes too: entries
+//    exist there only if an admin moved an opened round back to upcoming, and when it opens by
+//    the clock no write runs the engine, so a free seat left beside a queue would stay until the
+//    next cancel or admin edit (README open item 18). Every pass deletes the entry it promotes,
 //    so the loop ends after at most as many passes as there are entries.
 // 2. Take the seat (+1, guarded by registered < capacity).
 // 3. A student who holds another club in the round is moved like a change: their old seat is
@@ -20,13 +24,16 @@ import { moveRegistration, releaseSeat } from './seats.js';
 //    a free seat, so the next pass may promote its oldest waiter: the cascade (rule 5). A student
 //    with no club gets a new registrations row.
 // 4. One waitlist_promote event: club_id = the new club, from_club_id = the club left (or NULL),
-//    actor_id = whoever freed the first seat (a cascade has no request of its own), and no
-//    idempotency key: the request's own event carries it, and UNIQUE (actor_id, idempotency_key)
-//    treats NULL keys as distinct.
+//    actor_id = whoever freed the first seat (the student who cancelled or changed, or the admin
+//    whose club edit or import raised a capacity or whose round edit reopened the round; a cascade
+//    has no request of its own), and no idempotency key: the request's own event carries it, and
+//    UNIQUE (actor_id, idempotency_key) treats NULL keys as distinct.
 //
 // The grade check needs no row lock on student_profiles: an import commit that could move the
 // student to another grade holds the lock of every round that has not closed yet
-// (lockRoundsForImport), this round included while it is open, so it cannot run in between.
+// (lockRoundsForImport), this round included until it closes, so it cannot run in between. It
+// is a backstop: the import refuses to change the grade of a student with an entry in such a
+// round (import-plan.ts), so in a round that has not closed every entry is in the round's grade.
 
 export type Promotion = { studentId: number; clubId: number; fromClubId: number | null };
 
@@ -53,7 +60,6 @@ const pickNextEntry = async (
          LIMIT 1
        ) first
        WHERE r.id = $1
-         AND statement_timestamp() >= r.opens_at
          AND statement_timestamp() < r.closes_at
        ORDER BY first.created_at, first.id
        LIMIT 1

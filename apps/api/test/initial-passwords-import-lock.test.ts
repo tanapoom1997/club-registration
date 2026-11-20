@@ -187,7 +187,9 @@ describe('initial password issuance and the import lock', () => {
       const issuing = settle(issue({ grade: GRADE, classroom, onlyUnissued: false }, students));
       const issueWaiter = await waitForLockWaiter(pool, ({ pid }) => pid !== blockerPid);
       expect(issueWaiter.query).toContain('FOR NO KEY UPDATE OF u');
-      const importing = settle(commitImport(pool, uniqueTerm(), parsed));
+      const importing = settle(
+        commitImport(pool, { term: uniqueTerm(), parsed, actorId: adminId }),
+      );
       const importWaiter = await waitForLockWaiter(
         pool,
         ({ pid }) => pid !== blockerPid && pid !== issueWaiter.pid,
@@ -232,7 +234,7 @@ describe('initial password issuance and the import lock', () => {
         settle(
           (async () => {
             await sleep(Math.floor(Math.random() * 6));
-            return await commitImport(pool, uniqueTerm(), parsed);
+            return await commitImport(pool, { term: uniqueTerm(), parsed, actorId: adminId });
           })(),
         ),
       ]),

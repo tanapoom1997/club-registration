@@ -33,6 +33,7 @@ import {
 import type { MultipartFile } from './support/import.js';
 import {
   addAdvisor,
+  addWaitlistEntry,
   createClub as createClubIn,
   createRound as createRoundIn,
   createStudent as createStudentIn,
@@ -547,6 +548,77 @@ describe('admin import preview', () => {
 
       expect(result.errors).toEqual([]);
       expect(result.students.update).toBe(1);
+    });
+
+    describe('a student on a waitlist', () => {
+      // A grade-1 student waiting for a club of a grade-1 round, with no seat anywhere.
+      const waitingIn = async (roundId: number) => {
+        const clubId = await createClub(roundId, uniqueCode());
+        const student = await createStudent({ grade: 1 });
+        await addWaitlistEntry(pool, roundId, student.id, clubId);
+        return student;
+      };
+
+      const moveToGrade2 = async (loginId: string) =>
+        await buildImportWorkbook({ students: [studentRow({ loginId, grade: 2 })] });
+
+      it('refuses a grade change for an entry in a round of their grade this term', async () => {
+        const term = uniqueTerm();
+        const student = await waitingIn(await createRound(term, 1));
+
+        const result = await previewOk(term, await moveToGrade2(student.loginId));
+
+        expect(result.errors).toEqual([
+          {
+            sheet: 'students',
+            row: 2,
+            column: COL.students.grade,
+            message: `นักเรียนอยู่ในรายชื่อรอชุมนุมของ ม.1 ในภาคเรียน ${term} จึงเปลี่ยนชั้นไม่ได้`,
+          },
+        ]);
+        expect(result.students.update).toBe(0);
+      });
+
+      it("refuses a grade change for an entry in another term's unclosed round", async () => {
+        const lastTerm = uniqueTerm();
+        const student = await waitingIn(await createRound(lastTerm, 1));
+
+        const result = await previewOk(uniqueTerm(), await moveToGrade2(student.loginId));
+
+        expect(result.errors).toEqual([
+          expect.objectContaining({
+            row: 2,
+            column: COL.students.grade,
+            message: `นักเรียนอยู่ในรายชื่อรอในรอบ ม.1 ของภาคเรียน ${lastTerm} ที่ยังไม่ปิด จึงเปลี่ยนชั้นไม่ได้ ให้ปิดรอบนั้นก่อนแล้วนำเข้าใหม่`,
+          }),
+        ]);
+      });
+
+      it("allows the grade change when the entry is in another term's closed round", async () => {
+        const closedId = await createRoundIn(pool, uniqueTerm(), 1, { closedDaysAgo: 1 });
+        const student = await waitingIn(closedId);
+
+        const result = await previewOk(uniqueTerm(), await moveToGrade2(student.loginId));
+
+        expect(result.errors).toEqual([]);
+        expect(result.students.update).toBe(1);
+      });
+
+      it('names the seat, not the entry, when the student has both in the round', async () => {
+        const term = uniqueTerm();
+        const roundId = await createRound(term, 1);
+        const student = await waitingIn(roundId);
+        const held = await createClub(roundId, uniqueCode());
+        await register(roundId, student.id, held);
+
+        const result = await previewOk(term, await moveToGrade2(student.loginId));
+
+        expect(result.errors).toEqual([
+          expect.objectContaining({
+            message: `นักเรียนลงทะเบียนชุมนุมของ ม.1 ในภาคเรียน ${term} แล้ว จึงเปลี่ยนชั้นไม่ได้`,
+          }),
+        ]);
+      });
     });
 
     it('reports a missing template column on the header row', async () => {
