@@ -1,6 +1,6 @@
 # CLAUDE.md
 
-ระบบลงทะเบียนชุมนุมโรงเรียน (นักเรียน ~2,500 คน, รอบละ ~450 concurrent) แผนเต็ม สถาปัตยกรรม data model และ roadmap อยู่ใน [README.md](README.md) อ่านก่อนเริ่มงานทุกครั้ง ไฟล์นี้เก็บเฉพาะกติกาการทำงานที่ต้องไม่หลุด
+ระบบลงทะเบียนชุมนุมโรงเรียน (นักเรียน ~2,500 คน, รอบละ ~450 concurrent) แผนเต็ม สถาปัตยกรรม data model และ roadmap อยู่ใน [README.md](README.md) อ่านก่อนเริ่มงานทุกครั้ง รายละเอียดเฉพาะเรื่องอยู่ใน `docs/` อ่านเมื่องานแตะเรื่องนั้น: [excel.md](docs/excel.md) (import/export Excel และ PDF), [security.md](docs/security.md), [operations.md](docs/operations.md) (image, compose production, backup/restore, env, dependency audit) ไฟล์นี้เก็บเฉพาะกติกาการทำงานที่ต้องไม่หลุด
 
 **สถานะ:** Phase 1 ข้อ 1–7 และ 9 เสร็จแล้ว (admin: รอบ, import, รหัสผ่านเริ่มต้น, ชุมนุม, export Excel/PDF; นักเรียน: ดูชุมนุม, ลง/ยกเลิก พร้อม concurrency test) เหลือข้อ 8 Ops: O1 image, O2 compose production, O3 backup/restore เสร็จแล้ว เหลือ O4 runbook EC2 + DNS → O5 load test ซึ่งเลื่อนไว้จนกว่าจะมีเครื่อง EC2 (ระหว่างนี้ทำบน local ตาม README หัวข้อขั้นตอนถัดไป) รายละเอียดและไฟล์ของแต่ละงานดู README หัวข้อ [Roadmap](README.md#roadmap) และเรื่องที่ค้างดู [รายการที่ยังเปิดอยู่](README.md#รายการที่ยังเปิดอยู่)
 
@@ -13,7 +13,7 @@
 5. **ไม่เชื่อ role หรือ `student_id` จาก client** ใช้ค่าจาก JWT เท่านั้น
 6. **`apps/web` กับ `apps/api` ห้าม import กัน** คุยผ่าน HTTP และ `packages/shared` เท่านั้น
 7. **ทุก endpoint เขียนต้อง idempotent** endpoint ที่แตะที่นั่งของนักเรียน (ลง/ยกเลิก และ Phase 2 เปลี่ยน/waitlist/admin แก้แทน) รับ `idempotency_key` และเขียน `registration_events` ส่วน admin endpoint ที่ส่งซ้ำแล้วได้ผลเดิมอยู่แล้ว (สร้าง/แก้/ลบรอบ, แก้ชุมนุม) ไม่รับ key แต่ต้องบันทึกว่า admin คนไหนทำอะไรด้วย `logAdminChange` (`apps/api/src/http/audit-log.ts`) หลัง commit
-8. **Export Excel ต้อง escape** ค่าที่ขึ้นต้นด้วย `=`, `+`, `-`, `@` (ใช้ `escapeCellText` ใน `apps/api/src/export/escape-cell.ts` ที่เดียว) และ export รายห้องต้องมีนักเรียนทุกคนในห้อง รวมคนที่ยังไม่ลง (สเปกเต็มดู README หัวข้อ Export รายชื่อ)
+8. **Export Excel ต้อง escape** ค่าที่ขึ้นต้นด้วย `=`, `+`, `-`, `@` (ใช้ `escapeCellText` ใน `apps/api/src/export/escape-cell.ts` ที่เดียว) และ export รายห้องต้องมีนักเรียนทุกคนในห้อง รวมคนที่ยังไม่ลง (สเปกเต็มดู [docs/excel.md](docs/excel.md#export-รายชื่อ))
 9. **ห้ามใส่ข้อมูลจริงใน repo**: ไฟล์ .xlsx ของนักเรียน, `.env*`, `*.dump`, รหัสผ่าน, secret ข้อมูลทดสอบใช้ข้อมูลสมมติเท่านั้น (`templates/` เก็บได้เฉพาะไฟล์เปล่า)
    ไฟล์จริงของโรงเรียนเก็บนอก repo (เช่น `~/club-registration-data/`) ไฟล์ตัวอย่างสร้างด้วย `generate-sample-import` ลง `samples/` (gitignored) ไม่ commit และ CI ตรวจด้วย `scripts/check-no-data-files.sh`
 10. **ห้ามใส่ secret/PII ใน log**
@@ -33,12 +33,12 @@
 | Validation | Zod | นิยามไว้ใน `packages/shared` ที่เดียว |
 | Database | PostgreSQL + `pg` | SQL ตรงๆ ใช้ parameterized query (`$1, $2`) เสมอ ห้ามต่อ string |
 | Migration | `node-pg-migrate` | migration เป็น SQL ไฟล์ แยกจาก app |
-| Auth | `@fastify/jwt` (HS256) + `@fastify/cookie`, argon2id จาก `node:crypto` | session cookie + `session_version` ดู README หัวข้อ Security |
+| Auth | `@fastify/jwt` (HS256) + `@fastify/cookie`, argon2id จาก `node:crypto` | session cookie + `session_version` ดู [docs/security.md](docs/security.md) |
 | Router (FE) | `react-router` (SPA mode) | route ทั้งหมดอยู่ที่ `apps/web/src/routes.tsx` หน้าเมนูโหลดแยก chunk ด้วย `React.lazy` (ไม่ใช้ route `lazy` เพราะจะโหลดก่อน `RequireSession` ตรวจ role) |
 | Frontend | Vite + React + Tailwind + shadcn/ui | SPA ไม่ใช้ SSR ธีมพื้นขาว (light อย่างเดียว) สีเป็น token ใน `apps/web/src/index.css` ใช้ token ไม่ hardcode สี ฟอนต์ Anuphan self-host (`@fontsource-variable/anuphan`) ห้ามโหลดฟอนต์จาก CDN (CSP `font-src 'self'`) |
 | Data fetching | TanStack Query | polling คิว/สถานะ |
 | Excel | `exceljs` | import/export .xlsx |
-| PDF | `pdfkit` + ฟอนต์ Sarabun (SIL OFL 1.1) | export รายชื่อ ฟอนต์อยู่ที่ `apps/api/assets/fonts/` (มี `OFL.txt` คู่กัน) และต้องไปกับ `dist/` ตอน deploy ห้ามเปลี่ยนฟอนต์โดยไม่ลองชื่อที่มีสระบน/ล่างและวรรณยุกต์ก่อน (README หัวข้อ Export รายชื่อ) |
+| PDF | `pdfkit` + ฟอนต์ Sarabun (SIL OFL 1.1) | export รายชื่อ ฟอนต์อยู่ที่ `apps/api/assets/fonts/` (มี `OFL.txt` คู่กัน) และต้องไปกับ `dist/` ตอน deploy ห้ามเปลี่ยนฟอนต์โดยไม่ลองชื่อที่มีสระบน/ล่างและวรรณยุกต์ก่อน ([docs/excel.md](docs/excel.md#export-รายชื่อ)) |
 | Test | Vitest + Testcontainers, Playwright (E2E) | Postgres จริง ไม่ mock E2E อยู่ใน `e2e/` แยกจาก `apps/web` เพราะ setup ใช้โค้ดของ api |
 | Deploy | Docker image 2 ตัว (`api` = Node, `web` = Caddy + ไฟล์ build ของ React) + Docker Compose | เครื่องเดียวบน EC2 (t4g = arm64) build บนเครื่องเอง ไม่มี registry Caddy เสิร์ฟหน้าเว็บ + SPA fallback และ proxy `/api/*` ไม่ใช้ `@fastify/static` base image pin ทั้ง tag และ digest ใน `Dockerfile` |
 
@@ -81,7 +81,7 @@ scripts/smoke-compose.sh  # รัน compose.prod.yml ทั้ง stack ผ่
 scripts/smoke-backup.sh   # backup/restore จริงกับ stack (:80, พอร์ต 18081/18444) + MinIO เป็น S3 ด้วยข้อมูลสมมติ แล้วลบทิ้ง
 ```
 
-Production (บนเครื่องจริง รายละเอียดดู README หัวข้อ Compose ของ production (O2)) ใช้ `compose.prod.yml` คู่กับ env file เสมอ ทุก service ใช้ `<<: *hardening` (`cap_drop: [ALL]`, `no-new-privileges`, `read_only` + tmpfs เท่าที่ต้องเขียน postgres รันเป็น uid 70) service ใหม่ต้องใส่ด้วย ไฟล์จริง `deploy/production.env` (gitignored ด้วย `*.env`) ทำจาก `deploy/production.env.example` ห้าม commit ค่าจริง และ `docker-compose.yml` ยังเป็น Postgres ของ dev อย่างเดียว
+Production (บนเครื่องจริง รายละเอียดดู [docs/operations.md](docs/operations.md#compose-ของ-production-o2)) ใช้ `compose.prod.yml` คู่กับ env file เสมอ ทุก service ใช้ `<<: *hardening` (`cap_drop: [ALL]`, `no-new-privileges`, `read_only` + tmpfs เท่าที่ต้องเขียน postgres รันเป็น uid 70) service ใหม่ต้องใส่ด้วย ไฟล์จริง `deploy/production.env` (gitignored ด้วย `*.env`) ทำจาก `deploy/production.env.example` ห้าม commit ค่าจริง และ `docker-compose.yml` ยังเป็น Postgres ของ dev อย่างเดียว
 
 ```bash
 alias dcp='docker compose -f compose.prod.yml --env-file deploy/production.env'
@@ -94,7 +94,7 @@ scripts/restore.sh --target-db drill_check latest   # ซ้อมกู้ล�
 scripts/restore.sh --yes latest|latest-local|<s3-uri|ไฟล์>   # กู้ production (ไม่มี --yes = ปฏิเสธ)
 ```
 
-backup/restore (README หัวข้อ Backup และ Restore (O3)): dump มี PII ทั้งหมด ไฟล์ 600 ในไดเรกทอรี 700 ห้ามพิมพ์เนื้อหาหรือแถวออก log ห้ามใส่ชื่อ bucket/account id/region จริงใน repo restore กู้ลง DB ใหม่แล้วสลับชื่อใน transaction เดียว (ห้ามเปลี่ยนเป็น `--clean` ลง DB เดิม เพราะได้ข้อมูลผสมเมื่อ schema ต่างกัน) ตรวจ dump ด้วยการอ่านทั้งไฟล์ (`--list` อย่างเดียวไม่จับไฟล์ที่ถูกตัด) แก้ script แล้วต้องรัน `scripts/smoke-backup.sh` และ `scripts/lint-shell.sh`
+backup/restore ([docs/operations.md](docs/operations.md#backup-และ-restore-o3)): dump มี PII ทั้งหมด ไฟล์ 600 ในไดเรกทอรี 700 ห้ามพิมพ์เนื้อหาหรือแถวออก log ห้ามใส่ชื่อ bucket/account id/region จริงใน repo restore กู้ลง DB ใหม่แล้วสลับชื่อใน transaction เดียว (ห้ามเปลี่ยนเป็น `--clean` ลง DB เดิม เพราะได้ข้อมูลผสมเมื่อ schema ต่างกัน) ตรวจ dump ด้วยการอ่านทั้งไฟล์ (`--list` อย่างเดียวไม่จับไฟล์ที่ถูกตัด) แก้ script แล้วต้องรัน `scripts/smoke-backup.sh` และ `scripts/lint-shell.sh`
 
 บัญชี demo (`demo-admin`, `demo1001`, `demo1002`, `demo2001`) เป็นข้อมูลสมมติ ไม่บังคับเปลี่ยนรหัส รหัสสุ่มตอนสร้างครั้งแรกแล้วเก็บใน `.dev-credentials.txt` (gitignored, 600) รัน `pnpm dev` ซ้ำไม่เปลี่ยนรหัส `seed-dev` ไม่ยอมรันเมื่อ `NODE_ENV=production` ส่วน production สร้าง admin ด้วย `node dist/create-admin.js <login_id>` หลัง `pnpm build` หรือใน image `docker run --rm -it -e DATABASE_URL club-registration-api node dist/create-admin.js <login_id>` ด้วย `DATABASE_URL` ของ `club_app` (migration ก็เช่นกัน: `node dist/migrate.js` ด้วย `DATABASE_URL` ของเจ้าของ DB และ `APP_DB_PASSWORD`) image `api` ไม่มี `seed-dev`/`generate-template`/`dist/dev/` (รวม `generate-sample-import`, ลบตอน build)
 
@@ -176,12 +176,12 @@ backup/restore (README หัวข้อ Backup และ Restore (O3)): dump �
 - Route เขียนที่ไม่ได้รับ JSON (เช่น multipart อัปโหลด ซึ่ง form ข้ามเว็บส่งได้โดยไม่มี preflight) ต้องเรียก `assertSameOrigin` (`apps/api/src/http/same-origin.ts`) ใน preHandler
 - Validate input ทุกจุดด้วย Zod ที่ขอบระบบ (body, query, params, ไฟล์ที่อัปโหลด) ไม่เชื่อข้อมูลภายนอก
 - Error response ไม่เปิดเผย stack trace หรือข้อความจาก DB ให้ client
-- Dependency: ใช้ lockfile และ `pnpm install --frozen-lockfile` ใน CI/Docker, Docker รันด้วย non-root user, `pnpm audit:deps` ล้มเมื่อมี advisory ระดับ high/critical การ ignore advisory ทำได้เฉพาะตัวที่ยังไม่มีเวอร์ชันแก้และเข้าไม่ถึง app ใส่ใน `auditConfig.ignoreGhsas` ของ `pnpm-workspace.yaml` พร้อมเหตุผล และลบทันทีที่มีเวอร์ชันแก้ ห้ามลด `--audit-level` เพื่อให้ผ่าน Dependabot (`.github/dependabot.yml`) เปิด PR อัปเดต npm และ GitHub Actions ทุกสัปดาห์ (README หัวข้อ Dependency audit)
+- Dependency: ใช้ lockfile และ `pnpm install --frozen-lockfile` ใน CI/Docker, Docker รันด้วย non-root user, `pnpm audit:deps` ล้มเมื่อมี advisory ระดับ high/critical การ ignore advisory ทำได้เฉพาะตัวที่ยังไม่มีเวอร์ชันแก้และเข้าไม่ถึง app ใส่ใน `auditConfig.ignoreGhsas` ของ `pnpm-workspace.yaml` พร้อมเหตุผล และลบทันทีที่มีเวอร์ชันแก้ ห้ามลด `--audit-level` เพื่อให้ผ่าน Dependabot (`.github/dependabot.yml`) เปิด PR อัปเดต npm และ GitHub Actions ทุกสัปดาห์ ([docs/operations.md](docs/operations.md#dependency-audit))
 
 ### Database
 - Timestamp ใช้ `timestamptz` เสมอ เก็บเป็น UTC แปลงเวลาไทยที่ชั้นแสดงผล
 - Migration เป็น forward-only ห้ามแก้ migration ที่ commit/deploy แล้ว ให้เพิ่มไฟล์ใหม่
-- api ต่อ DB ด้วย role `club_app` ที่มีสิทธิ์เฉพาะคำสั่งที่ใช้จริงรายตาราง (README หัวข้อ Security: Database role ของ api) ส่วน migrate ใช้เจ้าของ DB ตารางใหม่หรือคำสั่งชนิดใหม่ (เช่น `UPDATE`/`DELETE` ตารางที่เดิมไม่มี) ต้อง `GRANT` ใน migration ใหม่และแก้ `EXPECTED_PRIVILEGES` ใน `apps/api/test/db-role.test.ts` ในงานเดียวกัน ให้เท่าที่ api ใช้เท่านั้น ห้ามให้ api ต่อด้วยเจ้าของ DB และห้าม grant `UPDATE`/`DELETE` บน `registration_events` เทสต์ต่อด้วย `club_app` อยู่แล้ว (`appConnectionUri`) งาน fixture ที่ api ไม่ทำ (`TRUNCATE`) ใช้ `truncateAsOwner`
+- api ต่อ DB ด้วย role `club_app` ที่มีสิทธิ์เฉพาะคำสั่งที่ใช้จริงรายตาราง ([docs/security.md](docs/security.md) หัวข้อย่อย Database role ของ api) ส่วน migrate ใช้เจ้าของ DB ตารางใหม่หรือคำสั่งชนิดใหม่ (เช่น `UPDATE`/`DELETE` ตารางที่เดิมไม่มี) ต้อง `GRANT` ใน migration ใหม่และแก้ `EXPECTED_PRIVILEGES` ใน `apps/api/test/db-role.test.ts` ในงานเดียวกัน ให้เท่าที่ api ใช้เท่านั้น ห้ามให้ api ต่อด้วยเจ้าของ DB และห้าม grant `UPDATE`/`DELETE` บน `registration_events` เทสต์ต่อด้วย `club_app` อยู่แล้ว (`appConnectionUri`) งาน fixture ที่ api ไม่ทำ (`TRUNCATE`) ใช้ `truncateAsOwner`
 - ทุก transaction ต้อง `COMMIT` หรือ `ROLLBACK` เสมอ (ใช้ `try/finally` คืน client เข้า pool)
 - ตั้ง `statement_timeout` และ `idle_in_transaction_session_timeout` กัน query ค้าง
 - Index ทุก foreign key และคอลัมน์ที่ใช้ filter บ่อย ตรวจ query หนักด้วย `EXPLAIN`

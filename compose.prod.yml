@@ -1,4 +1,4 @@
-# Production stack on one host (README "Infra และ Deployment"). Always run with the env file:
+# Production stack on one host (docs/operations.md "Infra และ Deployment"). Always run with the env file:
 #
 #   docker compose -f compose.prod.yml --env-file deploy/production.env build
 #   docker compose -f compose.prod.yml --env-file deploy/production.env up -d --wait
@@ -165,7 +165,7 @@ services:
       # client IP and a client cannot spoof it (Caddyfile).
       TRUST_PROXY: 'true'
       # club_app, never the owner: the api cannot change the schema or the event log's history
-      # (README "Database role ของ api"). create-admin run in this service uses it too.
+      # (docs/security.md "Database role ของ api"). create-admin run in this service uses it too.
       DATABASE_URL: ${APP_DATABASE_URL:?set APP_DATABASE_URL in the env file}
       JWT_SECRET: ${JWT_SECRET:?set JWT_SECRET in the env file (openssl rand -base64 48)}
       # Optional; empty means the api's default (config.ts).

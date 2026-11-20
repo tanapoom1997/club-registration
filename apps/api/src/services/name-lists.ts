@@ -8,7 +8,7 @@ import { compareClassrooms } from './classroom-order.js';
 import { ADVISOR_NAMES_JOIN } from './clubs.js';
 import { findRound } from './rounds.js';
 
-// Name lists for teachers (README "Export รายชื่อ"). Each export reads everything in one read-only
+// Name lists for teachers (docs/excel.md "Export รายชื่อ"). Each export reads everything in one read-only
 // snapshot, so the counts in a sheet header always match the rows under it, even while students
 // are registering.
 //

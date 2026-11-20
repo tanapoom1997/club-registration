@@ -26,4 +26,4 @@ _English summary: please report vulnerabilities privately through GitHub's "Repo
 
 ## มาตรการที่มีอยู่แล้ว
 
-สรุปอยู่ใน [README หัวข้อ Security](README.md#security) เช่น argon2id, session cookie แบบ `HttpOnly`/`SameSite=Strict`, api ต่อ DB ด้วย role ที่สิทธิ์จำกัด, container แบบ read-only ไม่มี capability และ log ที่ไม่เก็บ IP หรือข้อมูลส่วนบุคคล
+สรุปอยู่ใน [docs/security.md](docs/security.md) เช่น argon2id, session cookie แบบ `HttpOnly`/`SameSite=Strict`, api ต่อ DB ด้วย role ที่สิทธิ์จำกัด, container แบบ read-only ไม่มี capability และ log ที่ไม่เก็บ IP หรือข้อมูลส่วนบุคคล

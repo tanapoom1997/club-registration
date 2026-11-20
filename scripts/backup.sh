@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Backs up the production database (README "Backup และ Restore"):
+# Backs up the production database (docs/operations.md "Backup และ Restore"):
 #
 #   scripts/backup.sh [--local-only] [--include-certs]
 #

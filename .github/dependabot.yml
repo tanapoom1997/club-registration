@@ -1,4 +1,4 @@
-# Version updates (README "Dependency audit"). Security updates for known advisories come from
+# Version updates (docs/operations.md "Dependency audit"). Security updates for known advisories come from
 # the repository's Dependabot security updates setting, not from this file.
 version: 2
 updates:

@@ -18,7 +18,7 @@
 #
 # The AWS CLI on the host is used when present (GitHub's ubuntu-24.04 runner has it). Without one,
 # a pinned amazon/aws-cli image stands in through a wrapper on PATH for this test only;
-# production always uses the host's CLI (README "Backup และ Restore"). SMOKE_AWS_CONTAINER=1
+# production always uses the host's CLI (docs/operations.md "Backup และ Restore"). SMOKE_AWS_CONTAINER=1
 # forces the wrapper. Host ports default to 18081/18444 (SMOKE_BACKUP_HTTP_PORT,
 # SMOKE_BACKUP_HTTPS_PORT); behind a TLS-intercepting proxy set EXTRA_CA_FILE=<pem> for the build.
 #
