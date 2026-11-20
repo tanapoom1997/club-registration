@@ -1,5 +1,7 @@
 import js from '@eslint/js';
 import prettier from 'eslint-config-prettier';
+import jsxA11y from 'eslint-plugin-jsx-a11y';
+import reactHooks from 'eslint-plugin-react-hooks';
 import globals from 'globals';
 import tseslint from 'typescript-eslint';
 
@@ -49,6 +51,35 @@ export default tseslint.config(
     files: ['apps/web/**/*.{ts,tsx}'],
     languageOptions: { globals: globals.browser },
     rules: restrictImports('api'),
+  },
+  {
+    ...reactHooks.configs.flat.recommended,
+    files: ['apps/web/**/*.{ts,tsx}'],
+    rules: {
+      ...reactHooks.configs.flat.recommended.rules,
+      // A missing dependency shows stale data (e.g. a poll for the wrong round); as a warning it
+      // would never fail `pnpm lint` or CI.
+      'react-hooks/exhaustive-deps': 'error',
+    },
+  },
+  {
+    // Students and teachers use whatever device the school has, keyboards and screen readers
+    // included. eslint-plugin-jsx-a11y declares ESLint <= 9 as its peer but runs on 10
+    // (pnpm-workspace.yaml peerDependencyRules).
+    ...jsxA11y.flatConfigs.recommended,
+    files: ['apps/web/**/*.tsx'],
+    rules: {
+      ...jsxA11y.flatConfigs.recommended.rules,
+      'jsx-a11y/label-has-associated-control': [
+        'error',
+        {
+          // Checks every <Label> usage too, not only raw <label>.
+          labelComponents: ['Label'],
+          // Radio cards put their text in label > span > span (admin export page).
+          depth: 3,
+        },
+      ],
+    },
   },
   {
     files: ['**/*.test.{ts,tsx}'],

@@ -10,7 +10,12 @@ import { commitImport } from '../src/services/import-commit.js';
 import { planImport, summarizeImportPlan } from '../src/services/import-plan.js';
 import type { ImportPlan } from '../src/services/import-plan.js';
 import { createRound, uniqueTerm } from './support/import-db.js';
-import { startMigratedPostgres, stopPostgres } from './support/postgres.js';
+import {
+  appConnectionUri,
+  startMigratedPostgres,
+  stopPostgres,
+  truncateAsOwner,
+} from './support/postgres.js';
 
 const ALL = 'import-all-fictional.xlsx';
 const DEMO_IDS = DEMO_ACCOUNTS.map(({ loginId }) => loginId);
@@ -52,7 +57,7 @@ describe('fictional sample import against a database with the demo accounts', ()
 
   beforeAll(async () => {
     container = await startMigratedPostgres();
-    pool = createPool(container.getConnectionUri());
+    pool = createPool(appConnectionUri(container));
     const all = (await buildSampleImportWorkbooks()).find(({ filename }) => filename === ALL);
     if (!all) throw new Error(`No sample named ${ALL}`);
     parsed = await parseImportWorkbook(all.bytes);
@@ -65,7 +70,7 @@ describe('fictional sample import against a database with the demo accounts', ()
   // Every test starts from the state after `pnpm dev`: demo accounts only, plus the rounds the
   // sample's grades need in a fresh term.
   beforeEach(async () => {
-    await pool.query('TRUNCATE rounds, users CASCADE');
+    await truncateAsOwner(container, ['rounds', 'users']);
     await seedDemoAccounts(pool);
     term = uniqueTerm();
     await createRound(pool, term, 1);

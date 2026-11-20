@@ -19,7 +19,13 @@ import {
   uniqueTerm,
 } from './support/import-db.js';
 import { buildImportWorkbook, clubRow, multipartBody, studentRow } from './support/import.js';
-import { startMigratedPostgres, stopPostgres } from './support/postgres.js';
+import { waitForLockWaiter } from './support/lock-waiter.js';
+import {
+  appConnectionUri,
+  startMigratedPostgres,
+  stopPostgres,
+  truncateAsOwner,
+} from './support/postgres.js';
 import {
   createStudents,
   eventsOf,
@@ -36,8 +42,6 @@ import {
 // for the import to commit. Each race is made deterministic by holding a lock
 // on a separate connection and watching pg_stat_activity until the other side is blocked on it.
 // Every value is made up.
-
-type LockWaiter = { pid: number; waitEvent: string; query: string };
 
 type Settled<T> = { ok: true; value: T } | { ok: false; error: unknown };
 
@@ -89,20 +93,6 @@ describe('import commit and the round locks', () => {
   };
 
   // Polls until a backend in this database waits on a heavyweight lock and matches.
-  const waitForLockWaiter = async (matches: (waiter: LockWaiter) => boolean) => {
-    for (let attempt = 0; attempt < 200; attempt += 1) {
-      const { rows } = await pool.query<{ pid: number; wait_event: string; query: string }>(
-        `SELECT pid, wait_event, query FROM pg_stat_activity
-         WHERE wait_event_type = 'Lock' AND datname = current_database()`,
-      );
-      const waiter = rows
-        .map(({ pid, wait_event: waitEvent, query }) => ({ pid, waitEvent, query }))
-        .find(matches);
-      if (waiter) return waiter;
-      await sleep(25);
-    }
-    throw new Error('No backend ever waited for the expected lock');
-  };
 
   const gradeOf = async (studentId: number) => {
     const { rows } = await pool.query<{ grade: number }>(
@@ -135,7 +125,7 @@ describe('import commit and the round locks', () => {
 
   beforeAll(async () => {
     container = await startMigratedPostgres();
-    pool = createPool(container.getConnectionUri());
+    pool = createPool(appConnectionUri(container));
   });
 
   afterAll(async () => {
@@ -144,7 +134,7 @@ describe('import commit and the round locks', () => {
 
   beforeEach(async () => {
     // A student registers in their grade's selected round, so each test starts with no rounds.
-    await pool.query('TRUNCATE rounds CASCADE');
+    await truncateAsOwner(container, ['rounds']);
   });
 
   afterEach(async () => {
@@ -173,7 +163,7 @@ describe('import commit and the round locks', () => {
       await registerForClub(registrar, { studentId: student.id, clubId, idempotencyKey: newKey() });
 
       const importing = settle(commitImport(pool, term, parsed));
-      const waiter = await waitForLockWaiter(({ pid }) => pid !== registrarPid);
+      const waiter = await waitForLockWaiter(pool, ({ pid }) => pid !== registrarPid);
       await registrar.query('COMMIT');
       finished = true;
       const result = await importing;
@@ -223,7 +213,7 @@ describe('import commit and the round locks', () => {
       await blocker.query('SELECT 1 FROM users WHERE id = $1 FOR UPDATE', [other.id]);
 
       const importing = settle(commitImport(pool, term, parsed));
-      const importWaiter = await waitForLockWaiter(({ pid }) => pid !== blockerPid);
+      const importWaiter = await waitForLockWaiter(pool, ({ pid }) => pid !== blockerPid);
       expect(importWaiter.query).toContain('INSERT INTO users');
       const registering = settle(
         withTransaction(
@@ -238,6 +228,7 @@ describe('import commit and the round locks', () => {
       );
       // The registration queues on the round lock the import holds.
       await waitForLockWaiter(
+        pool,
         ({ pid, waitEvent }) => pid !== importWaiter.pid && waitEvent === 'advisory',
       );
       await blocker.query('ROLLBACK');
@@ -394,7 +385,7 @@ describe('import commit and the round locks', () => {
         });
 
         const importing = settle(commitImport(pool, term, parsed));
-        const waiter = await waitForLockWaiter(({ pid }) => pid !== registrarPid);
+        const waiter = await waitForLockWaiter(pool, ({ pid }) => pid !== registrarPid);
         await registrar.query('COMMIT');
         finished = true;
         const result = await importing;
@@ -469,7 +460,7 @@ describe('import commit and the round locks', () => {
         const blockerPid = await backendPid(blocker);
         await blocker.query('SELECT 1 FROM users WHERE id = $1 FOR UPDATE', [other.id]);
         const importing = settle(commitImport(pool, uniqueTerm(), parsed));
-        const importWaiter = await waitForLockWaiter(({ pid }) => pid !== blockerPid);
+        const importWaiter = await waitForLockWaiter(pool, ({ pid }) => pid !== blockerPid);
         expect(importWaiter.query).toContain('INSERT INTO users');
 
         // Reopening a closed round of another term would add a round the import has not locked.
@@ -477,6 +468,7 @@ describe('import commit and the round locks', () => {
           moveWindow(pool, closedId, { opensInSeconds: -HOUR, closesInSeconds: HOUR }),
         );
         const editWaiter = await waitForLockWaiter(
+          pool,
           ({ pid }) => pid !== blockerPid && pid !== importWaiter.pid,
         );
         expect(editWaiter.query).toContain('UPDATE rounds');
@@ -505,13 +497,14 @@ describe('import commit and the round locks', () => {
         // The registration's first step only: it holds the round lock, nothing else yet.
         await lockRound(registrar, roundId);
         const importing = settle(commitImport(pool, uniqueTerm(), parsed));
-        const importWaiter = await waitForLockWaiter(({ pid }) => pid !== registrarPid);
+        const importWaiter = await waitForLockWaiter(pool, ({ pid }) => pid !== registrarPid);
         expect(importWaiter.waitEvent).toBe('advisory');
         // An admin edit of that round queues behind the import's FOR SHARE on the rounds row.
         const editing = settle(
           pool.query('UPDATE rounds SET max_active = max_active + 1 WHERE id = $1', [roundId]),
         );
         await waitForLockWaiter(
+          pool,
           ({ pid, query }) => pid !== importWaiter.pid && query.includes('UPDATE rounds'),
         );
 

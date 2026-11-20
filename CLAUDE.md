@@ -12,7 +12,7 @@
 4. **ห้าม mock Postgres ในเทสต์** ใช้ Testcontainers เสมอ การเปลี่ยนแปลงที่แตะ logic ลง/ยกเลิก/เปลี่ยน/waitlist ต้องมี concurrency test และ invariant check คู่กัน
 5. **ไม่เชื่อ role หรือ `student_id` จาก client** ใช้ค่าจาก JWT เท่านั้น
 6. **`apps/web` กับ `apps/api` ห้าม import กัน** คุยผ่าน HTTP และ `packages/shared` เท่านั้น
-7. **ทุก endpoint เขียนต้อง idempotent** รับ `idempotency_key` และเขียน `registration_events`
+7. **ทุก endpoint เขียนต้อง idempotent** endpoint ที่แตะที่นั่งของนักเรียน (ลง/ยกเลิก และ Phase 2 เปลี่ยน/waitlist/admin แก้แทน) รับ `idempotency_key` และเขียน `registration_events` ส่วน admin endpoint ที่ส่งซ้ำแล้วได้ผลเดิมอยู่แล้ว (สร้าง/แก้/ลบรอบ, แก้ชุมนุม) ไม่รับ key แต่ต้องบันทึกว่า admin คนไหนทำอะไรด้วย `logAdminChange` (`apps/api/src/http/audit-log.ts`) หลัง commit
 8. **Export Excel ต้อง escape** ค่าที่ขึ้นต้นด้วย `=`, `+`, `-`, `@` (ใช้ `escapeCellText` ใน `apps/api/src/export/escape-cell.ts` ที่เดียว) และ export รายห้องต้องมีนักเรียนทุกคนในห้อง รวมคนที่ยังไม่ลง (สเปกเต็มดู README หัวข้อ Export รายชื่อ)
 9. **ห้ามใส่ข้อมูลจริงใน repo**: ไฟล์ .xlsx ของนักเรียน, `.env*`, `*.dump`, รหัสผ่าน, secret ข้อมูลทดสอบใช้ข้อมูลสมมติเท่านั้น (`templates/` เก็บได้เฉพาะไฟล์เปล่า)
    ไฟล์จริงของโรงเรียนเก็บนอก repo (เช่น `~/club-registration-data/`) ไฟล์ตัวอย่างสร้างด้วย `generate-sample-import` ลง `samples/` (gitignored) ไม่ commit และ CI ตรวจด้วย `scripts/check-no-data-files.sh`
@@ -44,7 +44,7 @@
 
 **ไม่ใช้:** Next.js, Redis, ORM (Prisma/Drizzle), serverless, แยก repo FE/BE
 
-**เครื่องมือคุณภาพโค้ด:** ESLint (flat config) + Prettier, `tsc --noEmit` เป็น typecheck
+**เครื่องมือคุณภาพโค้ด:** ESLint (flat config) + Prettier, `tsc --noEmit` เป็น typecheck, `apps/web` เพิ่ม `eslint-plugin-react-hooks` และ `eslint-plugin-jsx-a11y`
 
 ## Commands
 
@@ -66,18 +66,20 @@ pnpm --filter api seed-dev --reset   # สุ่มรหัสบัญชี d
 pnpm --filter api create-admin <login_id>   # admin จริง แสดงรหัสครั้งเดียว บังคับเปลี่ยนตอน login แรก
 pnpm --filter api generate-template   # สร้าง templates/import-template.xlsx ใหม่หลังแก้คอลัมน์ใน packages/shared
 pnpm --filter api generate-sample-import   # ไฟล์ import สมมติ 3 ไฟล์ลง samples/ (gitignored ห้าม commit) รวมนักเรียน demo ตรงกับ seed-dev
+scripts/lint-shell.sh   # shellcheck ทุก shell script ที่ git track (pnpm lint:sh ต้องมี shellcheck ในเครื่อง CI ใช้ของ Ubuntu 24.04)
 scripts/check-no-data-files.sh   # ล้มถ้า git track .xlsx/.xls/.csv/.dump/.sql.gz/.tar.gz นอก templates/ หรือ env file ที่ไม่ใช่ *.example (ขั้นแรกของ CI)
 pnpm typecheck
 pnpm lint
 pnpm format
 pnpm test               # Vitest + Testcontainers (ต้องเปิด Docker)
+pnpm audit:deps         # ล้มถ้า lockfile มี advisory ระดับ high/critical ที่ไม่ได้ ignore (ไม่ต้อง install)
 pnpm build
 scripts/smoke-images.sh   # build image api + web แล้วรันกับ Postgres จริง ตรวจ health/headers/non-root/shutdown (ต้องเปิด Docker)
 scripts/smoke-compose.sh  # รัน compose.prod.yml ทั้ง stack ผ่าน HTTPS (CA ภายในของ Caddy) พอร์ต 18080/18443 แล้วลบทิ้ง
 scripts/smoke-backup.sh   # backup/restore จริงกับ stack (:80, พอร์ต 18081/18444) + MinIO เป็น S3 ด้วยข้อมูลสมมติ แล้วลบทิ้ง
 ```
 
-Production (บนเครื่องจริง รายละเอียดดู README หัวข้อ Compose ของ production (O2)) ใช้ `compose.prod.yml` คู่กับ env file เสมอ ไฟล์จริง `deploy/production.env` (gitignored ด้วย `*.env`) ทำจาก `deploy/production.env.example` ห้าม commit ค่าจริง และ `docker-compose.yml` ยังเป็น Postgres ของ dev อย่างเดียว
+Production (บนเครื่องจริง รายละเอียดดู README หัวข้อ Compose ของ production (O2)) ใช้ `compose.prod.yml` คู่กับ env file เสมอ ทุก service ใช้ `<<: *hardening` (`cap_drop: [ALL]`, `no-new-privileges`, `read_only` + tmpfs เท่าที่ต้องเขียน postgres รันเป็น uid 70) service ใหม่ต้องใส่ด้วย ไฟล์จริง `deploy/production.env` (gitignored ด้วย `*.env`) ทำจาก `deploy/production.env.example` ห้าม commit ค่าจริง และ `docker-compose.yml` ยังเป็น Postgres ของ dev อย่างเดียว
 
 ```bash
 alias dcp='docker compose -f compose.prod.yml --env-file deploy/production.env'
@@ -90,9 +92,9 @@ scripts/restore.sh --target-db drill_check latest   # ซ้อมกู้ล�
 scripts/restore.sh --yes latest|latest-local|<s3-uri|ไฟล์>   # กู้ production (ไม่มี --yes = ปฏิเสธ)
 ```
 
-backup/restore (README หัวข้อ Backup และ Restore (O3)): dump มี PII ทั้งหมด ไฟล์ 600 ในไดเรกทอรี 700 ห้ามพิมพ์เนื้อหาหรือแถวออก log ห้ามใส่ชื่อ bucket/account id/region จริงใน repo restore กู้ลง DB ใหม่แล้วสลับชื่อใน transaction เดียว (ห้ามเปลี่ยนเป็น `--clean` ลง DB เดิม เพราะได้ข้อมูลผสมเมื่อ schema ต่างกัน) ตรวจ dump ด้วยการอ่านทั้งไฟล์ (`--list` อย่างเดียวไม่จับไฟล์ที่ถูกตัด) แก้ script แล้วต้องรัน `scripts/smoke-backup.sh` และ shellcheck
+backup/restore (README หัวข้อ Backup และ Restore (O3)): dump มี PII ทั้งหมด ไฟล์ 600 ในไดเรกทอรี 700 ห้ามพิมพ์เนื้อหาหรือแถวออก log ห้ามใส่ชื่อ bucket/account id/region จริงใน repo restore กู้ลง DB ใหม่แล้วสลับชื่อใน transaction เดียว (ห้ามเปลี่ยนเป็น `--clean` ลง DB เดิม เพราะได้ข้อมูลผสมเมื่อ schema ต่างกัน) ตรวจ dump ด้วยการอ่านทั้งไฟล์ (`--list` อย่างเดียวไม่จับไฟล์ที่ถูกตัด) แก้ script แล้วต้องรัน `scripts/smoke-backup.sh` และ `scripts/lint-shell.sh`
 
-บัญชี demo (`demo-admin`, `demo1001`, `demo1002`, `demo2001`) เป็นข้อมูลสมมติ ไม่บังคับเปลี่ยนรหัส รหัสสุ่มตอนสร้างครั้งแรกแล้วเก็บใน `.dev-credentials.txt` (gitignored, 600) รัน `pnpm dev` ซ้ำไม่เปลี่ยนรหัส `seed-dev` ไม่ยอมรันเมื่อ `NODE_ENV=production` ส่วน production สร้าง admin ด้วย `node dist/create-admin.js <login_id>` หลัง `pnpm build` หรือใน image `docker run --rm -it -e DATABASE_URL club-registration-api node dist/create-admin.js <login_id>` (migration ก็เช่นกัน: `node dist/migrate.js`) image `api` ไม่มี `seed-dev`/`generate-template`/`dist/dev/` (รวม `generate-sample-import`, ลบตอน build)
+บัญชี demo (`demo-admin`, `demo1001`, `demo1002`, `demo2001`) เป็นข้อมูลสมมติ ไม่บังคับเปลี่ยนรหัส รหัสสุ่มตอนสร้างครั้งแรกแล้วเก็บใน `.dev-credentials.txt` (gitignored, 600) รัน `pnpm dev` ซ้ำไม่เปลี่ยนรหัส `seed-dev` ไม่ยอมรันเมื่อ `NODE_ENV=production` ส่วน production สร้าง admin ด้วย `node dist/create-admin.js <login_id>` หลัง `pnpm build` หรือใน image `docker run --rm -it -e DATABASE_URL club-registration-api node dist/create-admin.js <login_id>` ด้วย `DATABASE_URL` ของ `club_app` (migration ก็เช่นกัน: `node dist/migrate.js` ด้วย `DATABASE_URL` ของเจ้าของ DB และ `APP_DB_PASSWORD`) image `api` ไม่มี `seed-dev`/`generate-template`/`dist/dev/` (รวม `generate-sample-import`, ลบตอน build)
 
 `packages/shared` ไม่ต้อง build ตอน dev และ test เพราะ export condition `@club-registration/source` ชี้ไปที่ `src/` (Vitest ของ api ใช้ alias แทน) ส่วน production ใช้ `dist/` จาก `pnpm build`
 
@@ -106,7 +108,7 @@ backup/restore (README หัวข้อ Backup และ Restore (O3)): dump �
 ## ภาษาและสไตล์
 
 - คุยและเขียนเอกสารเป็นภาษาไทย ส่วนโค้ด ชื่อตัวแปร ชื่อตาราง และ commit message เป็นภาษาอังกฤษ
-- Schema ของ request/response นิยามเป็น Zod ใน `packages/shared` ที่เดียว
+- Schema ของ request/response นิยามเป็น Zod ใน `packages/shared` ที่เดียว แก้กฎ validate หรือ normalize แล้วต้องมีเทสต์ใน `packages/shared/test/` (`pnpm --filter @club-registration/shared test` ไม่ต้องใช้ Docker)
 
 ### Code style (ES6+ / modern TypeScript)
 
@@ -161,7 +163,8 @@ backup/restore (README หัวข้อ Backup และ Restore (O3)): dump �
 ### TypeScript / Lint
 - `tsconfig`: `strict`, `noUncheckedIndexedAccess`, `exactOptionalPropertyTypes`, `noImplicitOverride`, `verbatimModuleSyntax`, `isolatedModules`
 - ESLint เปิดอย่างน้อย: `@typescript-eslint/no-floating-promises`, `no-misused-promises`, `no-explicit-any`, `consistent-type-imports`, `eqeqeq`, `no-restricted-imports` (กัน web↔api import กัน)
-- CI/ก่อน commit ต้องผ่าน `typecheck` + `lint` + `test` ห้าม merge ถ้าแดง CI อยู่ที่ `.github/workflows/ci.yml` (job `check`: `scripts/check-no-data-files.sh`, format:check, typecheck, lint, test, build และ job `images`: `scripts/smoke-images.sh`, `scripts/smoke-compose.sh` แล้ว `scripts/smoke-backup.sh` ซึ่งรันในเครื่องด้วยคำสั่งเดียวกันได้) รันทุก PR และทุก push เข้า `main` action pin ด้วย commit SHA ถ้าเพิ่มขั้นตอนให้รันซ้ำในเครื่องได้ด้วยคำสั่ง `pnpm` เดียวกัน
+- `apps/web`: `react-hooks` recommended (`exhaustive-deps` เป็น error เพราะ warning ไม่ทำให้ `pnpm lint`/CI ล้ม) และ `jsx-a11y` recommended (`<Label>` ถูกตรวจเหมือน `<label>`) ข้าม rule ได้เฉพาะ `eslint-disable-next-line <rule>` บรรทัดเดียวพร้อมเหตุผลในคอมเมนต์ ห้ามปิดทั้งไฟล์
+- CI/ก่อน commit ต้องผ่าน `typecheck` + `lint` + `test` ห้าม merge ถ้าแดง CI อยู่ที่ `.github/workflows/ci.yml` (job `check`: `scripts/check-no-data-files.sh`, `scripts/lint-shell.sh`, format:check, typecheck, lint, test, build และ job `images`: `scripts/smoke-images.sh`, `scripts/smoke-compose.sh` แล้ว `scripts/smoke-backup.sh` ซึ่งรันในเครื่องด้วยคำสั่งเดียวกันได้) รันทุก PR และทุก push เข้า `main` ส่วน `.github/workflows/audit.yml` รัน `pnpm audit:deps` ทุก PR, push เข้า `main` และทุกวัน action pin ด้วย commit SHA ถ้าเพิ่มขั้นตอนให้รันซ้ำในเครื่องได้ด้วยคำสั่ง `pnpm` เดียวกัน
 
 ### Security
 - Password hash ด้วย **argon2id** (`crypto.argon2` ของ Node, เก็บเป็น PHC string) ห้าม MD5/SHA ธรรมดา เทียบด้วย `timingSafeEqual`
@@ -171,11 +174,12 @@ backup/restore (README หัวข้อ Backup และ Restore (O3)): dump �
 - Route เขียนที่ไม่ได้รับ JSON (เช่น multipart อัปโหลด ซึ่ง form ข้ามเว็บส่งได้โดยไม่มี preflight) ต้องเรียก `assertSameOrigin` (`apps/api/src/http/same-origin.ts`) ใน preHandler
 - Validate input ทุกจุดด้วย Zod ที่ขอบระบบ (body, query, params, ไฟล์ที่อัปโหลด) ไม่เชื่อข้อมูลภายนอก
 - Error response ไม่เปิดเผย stack trace หรือข้อความจาก DB ให้ client
-- Dependency: ใช้ lockfile และ `pnpm install --frozen-lockfile` ใน CI/Docker, เปิด Dependabot/`pnpm audit` (เสนอ), Docker รันด้วย non-root user
+- Dependency: ใช้ lockfile และ `pnpm install --frozen-lockfile` ใน CI/Docker, Docker รันด้วย non-root user, `pnpm audit:deps` ล้มเมื่อมี advisory ระดับ high/critical การ ignore advisory ทำได้เฉพาะตัวที่ยังไม่มีเวอร์ชันแก้และเข้าไม่ถึง app ใส่ใน `auditConfig.ignoreGhsas` ของ `pnpm-workspace.yaml` พร้อมเหตุผล และลบทันทีที่มีเวอร์ชันแก้ ห้ามลด `--audit-level` เพื่อให้ผ่าน Dependabot (`.github/dependabot.yml`) เปิด PR อัปเดต npm และ GitHub Actions ทุกสัปดาห์ (README หัวข้อ Dependency audit)
 
 ### Database
 - Timestamp ใช้ `timestamptz` เสมอ เก็บเป็น UTC แปลงเวลาไทยที่ชั้นแสดงผล
 - Migration เป็น forward-only ห้ามแก้ migration ที่ commit/deploy แล้ว ให้เพิ่มไฟล์ใหม่
+- api ต่อ DB ด้วย role `club_app` ที่มีสิทธิ์เฉพาะคำสั่งที่ใช้จริงรายตาราง (README หัวข้อ Security: Database role ของ api) ส่วน migrate ใช้เจ้าของ DB ตารางใหม่หรือคำสั่งชนิดใหม่ (เช่น `UPDATE`/`DELETE` ตารางที่เดิมไม่มี) ต้อง `GRANT` ใน migration ใหม่และแก้ `EXPECTED_PRIVILEGES` ใน `apps/api/test/db-role.test.ts` ในงานเดียวกัน ให้เท่าที่ api ใช้เท่านั้น ห้ามให้ api ต่อด้วยเจ้าของ DB และห้าม grant `UPDATE`/`DELETE` บน `registration_events` เทสต์ต่อด้วย `club_app` อยู่แล้ว (`appConnectionUri`) งาน fixture ที่ api ไม่ทำ (`TRUNCATE`) ใช้ `truncateAsOwner`
 - ทุก transaction ต้อง `COMMIT` หรือ `ROLLBACK` เสมอ (ใช้ `try/finally` คืน client เข้า pool)
 - ตั้ง `statement_timeout` และ `idle_in_transaction_session_timeout` กัน query ค้าง
 - Index ทุก foreign key และคอลัมน์ที่ใช้ filter บ่อย ตรวจ query หนักด้วย `EXPLAIN`

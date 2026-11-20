@@ -106,12 +106,32 @@ log_rotation_set() {
   [[ "$(inspect "$1" '{{.HostConfig.LogConfig.Type}} {{index .HostConfig.LogConfig.Config "max-size"}} {{index .HostConfig.LogConfig.Config "max-file"}}')" == 'json-file 10m 5' ]]
 }
 memory_limited() { (($(inspect "$1" '{{.HostConfig.Memory}}') > 0)); }
+# compose.prod.yml's x-hardening, read back from the container Docker actually created.
+hardened() {
+  [[ "$(inspect "$1" '{{.HostConfig.ReadonlyRootfs}} {{json .HostConfig.CapDrop}} {{json .HostConfig.SecurityOpt}}')" == 'true ["ALL"] ["no-new-privileges:true"]' ]]
+}
+# The effective capabilities of the service's main process: all zero once cap_drop ALL holds.
+no_effective_caps() {
+  [[ "$(compose exec -T "$1" sh -c 'grep "^CapEff:" /proc/1/status')" =~ ^CapEff:[[:space:]]+0+$ ]]
+}
+root_fs_read_only() { ! compose exec -T "$1" sh -c 'touch /smoke-write-test' >/dev/null 2>&1; }
+# migrate's own report (run-migrations.ts): one JSON line naming what it applied.
+migrate_logged() { compose logs --no-log-prefix migrate | grep -qF "\"msg\":\"$1\""; }
 migrate_done_once() {
   [[ "$(inspect migrate '{{.State.Status}} {{.State.ExitCode}} {{.RestartCount}} {{.HostConfig.RestartPolicy.Name}}')" == 'exited 0 0 no' ]]
 }
 postgres_setting_is() {
   # shellcheck disable=SC2016 # expanded by sh inside the container, not here
   [[ "$(compose exec -T postgres sh -c 'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -tAc "SHOW $1"' sh "$1")" == "$2" ]]
+}
+# Every client connection to the database other than this psql, by role. Right after a request
+# the api's pool still holds its connection (pg's idle timeout is 10 s), and it must be club_app.
+database_client_roles() {
+  # shellcheck disable=SC2016 # expanded by sh inside the container, not here
+  compose exec -T postgres sh -c 'psql -X -U "$POSTGRES_USER" -d "$POSTGRES_DB" -tA' <<'SQL'
+SELECT string_agg(DISTINCT usename, ',') FROM pg_stat_activity
+WHERE datname = current_database() AND backend_type = 'client backend' AND pid <> pg_backend_pid();
+SQL
 }
 api_heap_limit_mib() {
   compose exec -T api node -p 'Math.round(require("v8").getHeapStatistics().heap_size_limit / 2 ** 20)'
@@ -135,6 +155,7 @@ check 'postgres is healthy' is_healthy postgres
 check 'api is healthy' is_healthy api
 check 'web is healthy (loopback health listener)' is_healthy web
 check 'migrate exited 0, once, with restart policy "no"' migrate_done_once
+check 'migrate logged the migrations it applied' migrate_logged 'migrations applied'
 
 log "Checking HTTP on 127.0.0.1:${HTTP_PORT}"
 fetch redirect http /student/clubs
@@ -159,6 +180,8 @@ check '/ has Content-Security-Policy' \
 fetch health https /api/health
 check '/api/health is 200 over HTTPS' status_is health 200
 check '/api/health reports database up' body_contains health '"database":"up"'
+check 'the api connects to the database as club_app only' \
+  test "$(database_client_roles)" == club_app
 check '/api/health has one Strict-Transport-Security (helmet; Caddy adds none)' \
   test "$(header_count health strict-transport-security)" -eq 1
 check '/api/health Strict-Transport-Security is the same as the site' \
@@ -185,7 +208,13 @@ check "api heap limit (${heap_mib} MiB) is under its 512 MiB container limit" \
 for service in postgres migrate api web; do
   check "${service} logs rotate (json-file, 10m x 5)" log_rotation_set "$service"
   check "${service} has a memory limit" memory_limited "$service"
+  check "${service} is read-only, drops every capability, no new privileges" hardened "$service"
 done
+for service in postgres api web; do
+  check "${service}'s main process has no effective capabilities" no_effective_caps "$service"
+  check "${service} cannot write to its root filesystem" root_fs_read_only "$service"
+done
+check 'postgres runs as uid 70 (postgres), not root' test "$(compose exec -T postgres id -u)" == 70
 
 log 'Creating an admin (docker compose run --rm --no-deps api node dist/create-admin.js)'
 # Output holds the initial password: kept in a variable, never echoed.
@@ -221,6 +250,7 @@ if ! compose up -d --wait --wait-timeout 180 >/dev/null 2>&1; then
   exit 1
 fi
 check 'migrate ran again on up and exited 0 (nothing to apply)' migrate_done_once
+check 'migrate logged that nothing was pending' migrate_logged 'no pending migrations'
 login login_after_down
 check 'the admin still logs in after down/up (postgres volume kept)' status_is login_after_down 200
 wait_for "Caddy's local CA after up" 30 copy_from_web "$CA_PATH" "$work_dir/root-after.crt"

@@ -15,7 +15,7 @@ import { createPool } from '../src/db.js';
 import { TEST_JWT_SECRET, createTestUser } from './support/app.js';
 import type { TestUser } from './support/app.js';
 import { createClub, createRound, uniqueCode, uniqueTerm } from './support/import-db.js';
-import { startMigratedPostgres, stopPostgres } from './support/postgres.js';
+import { appConnectionUri, startMigratedPostgres, stopPostgres } from './support/postgres.js';
 import { waitForAdvisoryLockWaiter } from './support/registration.js';
 
 type InjectResponse = Awaited<ReturnType<FastifyInstance['inject']>>;
@@ -45,6 +45,7 @@ describe('admin clubs', () => {
   let container: StartedPostgreSqlContainer;
   let pool: Pool;
   let app: Awaited<ReturnType<typeof buildApp>>;
+  let adminId: number;
   let adminToken: string;
   let logLines: string[];
 
@@ -109,7 +110,7 @@ describe('admin clubs', () => {
 
   beforeAll(async () => {
     container = await startMigratedPostgres();
-    pool = createPool(container.getConnectionUri());
+    pool = createPool(appConnectionUri(container));
   });
 
   afterAll(async () => {
@@ -123,7 +124,9 @@ describe('admin clubs', () => {
       jwtSecret: TEST_JWT_SECRET,
       logger: { level: 'info', stream: { write: (line) => logLines.push(line) } },
     });
-    adminToken = await loginAs(await createTestUser(pool, { role: 'admin' }));
+    const admin = await createTestUser(pool, { role: 'admin' });
+    adminId = admin.id;
+    adminToken = await loginAs(admin);
   });
 
   afterEach(async () => {
@@ -456,6 +459,40 @@ describe('admin clubs', () => {
       const response = await app.inject({ method, url, payload: { capacity: 1 } });
 
       expect(response.statusCode).toBe(401);
+    });
+  });
+
+  describe('audit log', () => {
+    const clubUpdates = () =>
+      logLines
+        .map((line) => JSON.parse(line) as Record<string, unknown>)
+        .filter(({ audit }) => audit === 'club.update');
+
+    it('records which admin changed a club, the fields sent and the capacity after', async () => {
+      const { roundId, clubId } = await newClub();
+
+      const response = await patchClub(clubId, { capacity: 40, description: 'ข้อความสมมติ' });
+
+      expect(response.statusCode).toBe(200);
+      expect(clubUpdates()).toEqual([
+        expect.objectContaining({
+          adminId,
+          clubId,
+          roundId,
+          changed: ['capacity', 'description'],
+          capacity: 40,
+        }),
+      ]);
+    });
+
+    it('records nothing when the change is refused', async () => {
+      const { clubId } = await newClub();
+      await setRegistered(clubId, 5);
+
+      const response = await patchClub(clubId, { capacity: 2 });
+
+      expect(response.statusCode).toBe(409);
+      expect(clubUpdates()).toEqual([]);
     });
   });
 

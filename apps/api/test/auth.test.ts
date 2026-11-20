@@ -5,11 +5,13 @@ import type { FastifyInstance } from 'fastify';
 import type { Pool } from 'pg';
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { buildApp } from '../src/app.js';
+import { UNISSUED_PASSWORD_HASH } from '../src/auth/password.js';
 import { createAuthGuard, SESSION_COOKIE, SESSION_TTL_SECONDS } from '../src/auth/session.js';
 import { createPool } from '../src/db.js';
 import { buildTestApp, createTestUser } from './support/app.js';
 import type { TestUser } from './support/app.js';
-import { startMigratedPostgres, stopPostgres } from './support/postgres.js';
+import { appConnectionUri, startMigratedPostgres, stopPostgres } from './support/postgres.js';
+import { interleavedMedianMs } from './support/timing.js';
 
 type InjectResponse = Awaited<ReturnType<FastifyInstance['inject']>>;
 
@@ -37,7 +39,7 @@ describe('auth', () => {
 
   beforeAll(async () => {
     container = await startMigratedPostgres();
-    pool = createPool(container.getConnectionUri());
+    pool = createPool(appConnectionUri(container));
   });
 
   afterAll(async () => {
@@ -120,6 +122,34 @@ describe('auth', () => {
 
       expect(response.statusCode).toBe(401);
       expect(errorCodeOf(response)).toBe('invalid_credentials');
+    });
+
+    // The import creates students with no password until an admin issues one. If refusing them
+    // were quicker than refusing a wrong password, timing the login would list which student IDs
+    // are in the system and still waiting for a password.
+    it('takes as long to refuse an unknown ID or an account without a password as a wrong one', async () => {
+      const user = await createTestUser(pool);
+      const unissuedLoginId = `fictional-unissued-${randomBytes(3).toString('hex')}`;
+      await pool.query(
+        `INSERT INTO users (login_id, full_name, role, password_hash)
+         VALUES ($1, 'Fictional Student', 'student', $2)`,
+        [unissuedLoginId, UNISSUED_PASSWORD_HASH],
+      );
+      const refusals: string[] = [];
+      const attempt = (loginId: string) => async () => {
+        const response = await postLogin(loginId, 'wrong-password');
+        refusals.push(errorCodeOf(response) ?? String(response.statusCode));
+      };
+
+      // 5 rounds stay under the per-account rate limit (10 per 15 minutes).
+      const [wrongPasswordMs, unissuedMs, unknownMs] = await interleavedMedianMs(
+        [attempt(user.loginId), attempt(unissuedLoginId), attempt('fictional-nobody-here')],
+        5,
+      );
+
+      expect(new Set(refusals)).toEqual(new Set(['invalid_credentials']));
+      expect(unissuedMs).toBeGreaterThan((wrongPasswordMs ?? 0) * 0.5);
+      expect(unknownMs).toBeGreaterThan((wrongPasswordMs ?? 0) * 0.5);
     });
 
     it('rejects a malformed body with validation_error', async () => {

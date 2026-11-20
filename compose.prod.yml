@@ -26,12 +26,36 @@ x-logging: &logging
     max-size: 10m
     max-file: '5'
 
+# Every container, so a compromised process has as little as possible to work with:
+#   cap_drop ALL         no Linux capability is needed: postgres runs as its own user, the api and
+#                        Caddy as theirs (Dockerfile), and Docker lets an unprivileged process bind
+#                        80/443 (net.ipv4.ip_unprivileged_port_start=0). Caddy's binary carries
+#                        cap_net_bind_service as permitted-only, so it still starts without it.
+#   no-new-privileges    setuid binaries and file capabilities grant nothing.
+#   read_only            the image cannot be changed at run time; each service writes only to its
+#                        volumes and to the tmpfs mounts it lists (RAM, counted in its memory limit).
+x-hardening: &hardening
+  cap_drop: [ALL]
+  security_opt: ['no-new-privileges:true']
+  read_only: true
+
 services:
   postgres:
     # Same major as the tests (Testcontainers, postgres:18-alpine). Tag for people, digest for
     # Docker: a multi-arch index, so the arm64 host and amd64 CI pull the same pin. Bump together.
     image: postgres:18.7-alpine@sha256:b6972e1115a4ff8eba5d7f7d19184926d1e16d7d1136ae1e1a7ebf286da0f015
     restart: unless-stopped
+    <<: *hardening
+    # The image's postgres user (alpine: 70) from the start, instead of the entrypoint starting as
+    # root to chown the data directory and then dropping to it: the image's /var/lib/postgresql is
+    # already postgres's, and so is everything in a volume an earlier root start created. Its
+    # entrypoint supports this (initdb as well). docker compose exec therefore runs as postgres too,
+    # which is what the backup and restore scripts' pg_dump/psql over the socket need.
+    user: '70:70'
+    tmpfs:
+      # The Unix socket (pg_isready, compose exec psql) and its lock file.
+      - /var/run/postgresql:uid=70,gid=70,mode=2775
+      - /tmp
     environment:
       POSTGRES_USER: ${POSTGRES_USER:?set POSTGRES_USER in the env file}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in the env file}
@@ -99,11 +123,15 @@ services:
     pull_policy: never
     command: ['node', 'dist/migrate.js']
     restart: 'no'
+    # Reads migrations/ and talks to postgres; writes nothing.
+    <<: *hardening
     depends_on:
       postgres:
         condition: service_healthy
     environment:
+      # The owner: migrations change the schema, then give club_app its login (migrate.ts).
       DATABASE_URL: ${DATABASE_URL:?set DATABASE_URL in the env file}
+      APP_DB_PASSWORD: ${APP_DB_PASSWORD:?set APP_DB_PASSWORD in the env file (openssl rand -hex 24)}
     networks:
       - backend
     deploy:
@@ -118,6 +146,11 @@ services:
       context: .
       target: api
     restart: unless-stopped
+    <<: *hardening
+    # Uploads and exports stay in memory (admin-import.ts reads the file with toBuffer); /tmp only
+    # for a library that wants a scratch file.
+    tmpfs:
+      - /tmp:size=16m
     # tini as PID 1 reaps zombies and passes docker stop's SIGTERM on to node, which then closes
     # Fastify and the pool (server.ts).
     init: true
@@ -131,7 +164,9 @@ services:
       # Caddy is the only client and overwrites X-Forwarded-For, so the rate limits see the real
       # client IP and a client cannot spoof it (Caddyfile).
       TRUST_PROXY: 'true'
-      DATABASE_URL: ${DATABASE_URL:?set DATABASE_URL in the env file}
+      # club_app, never the owner: the api cannot change the schema or the event log's history
+      # (README "Database role ของ api"). create-admin run in this service uses it too.
+      DATABASE_URL: ${APP_DATABASE_URL:?set APP_DATABASE_URL in the env file}
       JWT_SECRET: ${JWT_SECRET:?set JWT_SECRET in the env file (openssl rand -base64 48)}
       # Optional; empty means the api's default (config.ts).
       DB_POOL_MAX: ${DB_POOL_MAX:-}
@@ -157,6 +192,10 @@ services:
       context: .
       target: web
     restart: unless-stopped
+    <<: *hardening
+    # Certificates and autosaved config go to the /data and /config volumes.
+    tmpfs:
+      - /tmp:size=16m
     depends_on:
       api:
         condition: service_healthy

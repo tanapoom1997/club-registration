@@ -73,8 +73,11 @@ log 'Starting postgres'
 docker network create "$network" >/dev/null
 POSTGRES_PASSWORD="$(random_secret)"
 JWT_SECRET="$(random_secret)"
+APP_DB_PASSWORD="$(random_hex)"
+# The owner (migrate) and club_app (create-admin, the api), as in compose.prod.yml.
 DATABASE_URL="postgres://club:${POSTGRES_PASSWORD}@${pg_container}:5432/club"
-export POSTGRES_PASSWORD JWT_SECRET DATABASE_URL
+APP_DATABASE_URL="postgres://club_app:${APP_DB_PASSWORD}@${pg_container}:5432/club"
+export POSTGRES_PASSWORD JWT_SECRET DATABASE_URL APP_DB_PASSWORD APP_DATABASE_URL
 # -e NAME (no value) copies it from this script's environment, keeping secrets out of `ps`.
 docker run -d --name "$pg_container" --network "$network" \
   -e POSTGRES_USER=club -e POSTGRES_DB=club -e POSTGRES_PASSWORD \
@@ -83,18 +86,30 @@ docker run -d --name "$pg_container" --network "$network" \
 wait_for 'postgres' 60 docker exec "$pg_container" pg_isready -h 127.0.0.1 -U club -d club
 
 log 'Running migrations (one-off container)'
-docker run --rm --network "$network" -e DATABASE_URL "$API_IMAGE" node dist/migrate.js
+docker run --rm --network "$network" -e DATABASE_URL -e APP_DB_PASSWORD "$API_IMAGE" \
+  node dist/migrate.js
 
 log 'Creating an admin with create-admin (one-off container)'
 # Output holds the initial password: kept in a variable, never echoed.
-admin_output="$(docker run --rm --network "$network" -e DATABASE_URL "$API_IMAGE" \
-  node dist/create-admin.js smoke-admin)"
+# DATABASE_URL=... as a prefix, then -e NAME: the secret stays out of `ps`, as above.
+admin_output="$(DATABASE_URL="$APP_DATABASE_URL" docker run --rm --network "$network" \
+  -e DATABASE_URL "$API_IMAGE" node dist/create-admin.js smoke-admin)"
 admin_password="$(sed -n 's/^Initial password (shown once, not stored): //p' <<<"$admin_output")"
+
+log 'Checking that the api refuses to start as the database owner'
+# NODE_ENV=production comes from the image. Output is kept for the check, never printed: it is
+# the api's own error, but the rule is that nothing from a container run with secrets is echoed.
+owner_rc=0
+owner_output="$(docker run --rm --network "$network" -e DATABASE_URL -e JWT_SECRET \
+  "$API_IMAGE" 2>&1)" || owner_rc=$?
+check 'api exits non-zero with the owner DATABASE_URL' test "$owner_rc" -ne 0
+check 'api names club_app as the role it must use' \
+  grep -q 'the api must connect as club_app' <<<"$owner_output"
 
 log 'Starting api and web'
 # The alias makes the Caddyfile's default upstream (api:3000) resolve, so the default is tested.
-docker run -d --name "$api_container" --network "$network" --network-alias api \
-  -e DATABASE_URL -e JWT_SECRET -e TRUST_PROXY=true "$API_IMAGE" >/dev/null
+DATABASE_URL="$APP_DATABASE_URL" docker run -d --name "$api_container" --network "$network" \
+  --network-alias api -e DATABASE_URL -e JWT_SECRET -e TRUST_PROXY=true "$API_IMAGE" >/dev/null
 docker run -d --name "$web_container" --network "$network" -p 127.0.0.1::80 \
   "$WEB_IMAGE" >/dev/null
 web_port="$(docker port "$web_container" 80/tcp | head -n 1 | sed 's/.*://')"

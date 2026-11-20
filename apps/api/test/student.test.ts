@@ -19,7 +19,12 @@ import {
   uniqueCode,
   uniqueTerm,
 } from './support/import-db.js';
-import { startMigratedPostgres, stopPostgres } from './support/postgres.js';
+import {
+  appConnectionUri,
+  startMigratedPostgres,
+  stopPostgres,
+  truncateAsOwner,
+} from './support/postgres.js';
 
 type InjectResponse = Awaited<ReturnType<FastifyInstance['inject']>>;
 
@@ -122,7 +127,7 @@ describe('student read API', () => {
 
   beforeAll(async () => {
     container = await startMigratedPostgres();
-    pool = createPool(container.getConnectionUri());
+    pool = createPool(appConnectionUri(container));
   });
 
   afterAll(async () => {
@@ -131,7 +136,7 @@ describe('student read API', () => {
 
   beforeEach(async () => {
     // A student sees whatever rounds their grade has, so each test starts with none at all.
-    await pool.query('TRUNCATE rounds CASCADE');
+    await truncateAsOwner(container, ['rounds']);
     logLines = [];
     app = await buildApp({
       pool,

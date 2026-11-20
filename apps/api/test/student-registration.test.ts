@@ -13,7 +13,12 @@ import {
 } from '../src/services/registrations.js';
 import { TEST_JWT_SECRET, createTestUser } from './support/app.js';
 import { createClub, uniqueCode } from './support/import-db.js';
-import { startMigratedPostgres, stopPostgres } from './support/postgres.js';
+import {
+  appConnectionUri,
+  startMigratedPostgres,
+  stopPostgres,
+  truncateAsOwner,
+} from './support/postgres.js';
 import {
   STUDENT_NAME,
   createClosedRound,
@@ -89,7 +94,7 @@ describe('student register and cancel', () => {
 
   beforeAll(async () => {
     container = await startMigratedPostgres();
-    pool = createPool(container.getConnectionUri());
+    pool = createPool(appConnectionUri(container));
   });
 
   afterAll(async () => {
@@ -98,7 +103,7 @@ describe('student register and cancel', () => {
 
   beforeEach(async () => {
     // A student writes to their grade's selected round, so each test starts with no rounds.
-    await pool.query('TRUNCATE rounds CASCADE');
+    await truncateAsOwner(container, ['rounds']);
     logLines = [];
     app = await buildApp({
       pool,
