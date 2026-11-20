@@ -6,7 +6,7 @@ import type { ClassroomList, ClubList, ExportRound } from '../services/name-list
 import { classroomListSection, clubListSection, formatExportTime } from './name-list-content.js';
 import type { ListCell, ListSection } from './name-list-content.js';
 
-// Name lists as PDF (README "Export รายชื่อ"): A4 portrait, one section per club or classroom
+// Name lists as PDF (docs/excel.md "Export รายชื่อ"): A4 portrait, one section per club or classroom
 // starting on a new page, the table header repeated on every page a long list continues onto, and
 // a footer with the export time (Thai time) and page number on every page. Pages are numbered
 // within their section ("หน้า 1/2" of that club or classroom), not across the file, so each

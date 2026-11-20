@@ -2,7 +2,7 @@ import { z } from 'zod';
 import { STUDENT_COLUMNS, classroomSchema } from './import.js';
 import { dbIdSchema, roundSchema } from './rounds.js';
 
-// Name lists an admin downloads for teachers (README "Export รายชื่อ"), as Excel or PDF. The
+// Name lists an admin downloads for teachers (docs/excel.md "Export รายชื่อ"), as Excel or PDF. The
 // format is always named, so a client written before a format was added keeps getting its own.
 export const EXPORT_VIEWS = Object.freeze(['club', 'classroom'] as const);
 export const EXPORT_FORMATS = Object.freeze(['xlsx', 'pdf'] as const);

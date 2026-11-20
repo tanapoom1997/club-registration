@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Restores the production database from a backup made by scripts/backup.sh (README "Backup และ
+# Restores the production database from a backup made by scripts/backup.sh (docs/operations.md "Backup และ
 # Restore"):
 #
 #   scripts/restore.sh --yes <source>                       replace production with the backup

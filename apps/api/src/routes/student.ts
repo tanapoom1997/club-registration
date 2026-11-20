@@ -92,7 +92,7 @@ export const studentRoutes =
     );
 
     // JSON bodies only (Fastify refuses other content types), which with the SameSite=Strict
-    // cookie is the CSRF defence (README Security): a cross-site form cannot send JSON.
+    // cookie is the CSRF defence (docs/security.md): a cross-site form cannot send JSON.
     app.post(
       '/student/registration',
       {

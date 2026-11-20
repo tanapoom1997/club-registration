@@ -32,7 +32,7 @@ export const studentRegistrationSchema = z.object({
 export type StudentRegistration = z.infer<typeof studentRegistrationSchema>;
 
 // Advisors are names only. Their phone, email and LINE ID are personal data that ~2,500 students
-// would see, so they stay on admin routes (README "Security").
+// would see, so they stay on admin routes (docs/security.md).
 export const studentClubSchema = z.object({
   id: z.number().int().positive(),
   clubCode: z.string(),

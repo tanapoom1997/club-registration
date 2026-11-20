@@ -1,4 +1,4 @@
-# Production images (README "Infra และ Deployment"). Build from the repo root:
+# Production images (docs/operations.md "Infra และ Deployment"). Build from the repo root:
 #
 #   docker build --target api -t club-registration-api .
 #   docker build --target web -t club-registration-web .

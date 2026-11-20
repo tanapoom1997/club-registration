@@ -156,7 +156,7 @@ const INVARIANTS: Readonly<Record<string, string>> = Object.freeze({
     SELECT round_id, student_id, count(*)::int AS rows
     FROM registrations GROUP BY round_id, student_id HAVING count(*) > 1`,
   // Until the round closes: a seat in a closed round is history, and an import of a later term
-  // may move the student up a grade (README Import, item 3). It never may while the round is open
+  // may move the student up a grade (docs/excel.md, item 3). It never may while the round is open
   // or upcoming.
   "a registration's student is in the round's grade until the round closes": `
     SELECT r.id, sp.grade AS student_grade, ro.grade AS round_grade
