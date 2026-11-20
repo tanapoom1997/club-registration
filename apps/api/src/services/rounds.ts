@@ -7,9 +7,13 @@ import type {
   RoundStatus,
   UpdateRoundRequest,
 } from '@club-registration/shared';
+import type pg from 'pg';
 import { isPgError, PG_ERROR_CODES } from '../db.js';
 import type { Queryable } from '../db.js';
 import { AppError } from '../errors.js';
+import { lockImport, lockRound } from './round-lock.js';
+import { promoteWaitlist } from './waitlist-promote.js';
+import type { Promotion } from './waitlist-promote.js';
 
 const TERM_GRADE_UNIQUE = 'rounds_term_grade_key';
 const WINDOW_CHECK = 'rounds_check';
@@ -84,13 +88,13 @@ const toRoundWriteError = (error: unknown): unknown => {
   return error;
 };
 
-const runRoundWrite = async (
+const runRoundWrite = async <Row extends pg.QueryResultRow = RoundRow>(
   db: Queryable,
   sql: string,
   params: readonly unknown[],
-): Promise<RoundRow[]> => {
+): Promise<Row[]> => {
   try {
-    const { rows } = await db.query<RoundRow>(sql, [...params]);
+    const { rows } = await db.query<Row>(sql, [...params]);
     return rows;
   } catch (error) {
     throw toRoundWriteError(error);
@@ -162,28 +166,50 @@ export const createRoundBatch = async (
 
 // Only the window and max_active are updatable; term and grade identify the round. A half-given
 // window is checked against the stored half by the CHECK (closes_at > opens_at) constraint.
+//
+// An in-round write (CLAUDE.md rule 3), because a new window can open a round: after a close an
+// admin may raise a capacity (the engine promotes nobody in a closed round) and then reopen the
+// round, which would leave a club with both a free seat and waiters in an open round. So the edit
+// promotes in the same transaction, under the round lock, with the admin as actor. The engine
+// decides by the DB clock, so an edit that leaves the round upcoming or closed promotes nobody.
+//
+// Locks in the global order of round-lock.ts: the import lock first, then the round lock, then
+// the UPDATE. The import holds FOR SHARE on every rounds row and then waits for round locks, so
+// an edit that took the round lock and then waited for that row would deadlock with it; holding
+// the import lock makes the edit and the import run one after the other instead.
+//
+// A round create needs none of this (a new round has no clubs, so no seats or waiters), nor does
+// a delete (a round it can delete has no clubs either).
 export const updateRound = async (
-  db: Queryable,
-  id: number,
-  { opensAt, closesAt, maxActive }: UpdateRoundRequest,
-  now: Date,
-): Promise<Round> => {
-  const rows = await runRoundWrite(
+  db: pg.PoolClient,
+  {
+    id,
+    changes: { opensAt, closesAt, maxActive },
+    actorId,
+    now,
+  }: { id: number; changes: UpdateRoundRequest; actorId: number; now: Date },
+): Promise<{ round: Round; promotions: Promotion[] }> => {
+  await lockImport(db);
+  await lockRound(db, id);
+  const updated = await runRoundWrite<{ id: number }>(
     db,
-    `WITH updated AS (
-       UPDATE rounds
-       SET opens_at = COALESCE($2::timestamptz, opens_at),
-           closes_at = COALESCE($3::timestamptz, closes_at),
-           max_active = COALESCE($4::int, max_active)
-       WHERE id = $1
-       RETURNING ${ROUND_COLUMNS}
-     )
-     ${selectWithTotals('updated')}`,
+    `UPDATE rounds
+     SET opens_at = COALESCE($2::timestamptz, opens_at),
+         closes_at = COALESCE($3::timestamptz, closes_at),
+         max_active = COALESCE($4::int, max_active)
+     WHERE id = $1
+     RETURNING id`,
     [id, opensAt ?? null, closesAt ?? null, maxActive ?? null],
   );
-  const row = rows[0];
-  if (!row) throw new AppError(ERROR_CODES.notFound, 'Round not found');
-  return toRound(row, now);
+  if (updated.length === 0) throw new AppError(ERROR_CODES.notFound, 'Round not found');
+  // Outside runRoundWrite's error mapping: a fault in the engine is never a validation error.
+  const promotions = await promoteWaitlist(db, { roundId: id, actorId });
+  // Read after promoting: each waiter promoted without a club of their own adds to the totals.
+  const round = await findRound(db, id, now);
+  // The UPDATE found the row under its round lock and the delete cannot remove a round mid-edit
+  // (it waits for this row), so this is a broken invariant.
+  if (!round) throw new Error('Round vanished after its update');
+  return { round, promotions };
 };
 
 // No pre-check for clubs: a club inserted concurrently would slip past it. The foreign keys from

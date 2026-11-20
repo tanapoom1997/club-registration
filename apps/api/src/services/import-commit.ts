@@ -16,6 +16,7 @@ import type { Promotion } from './waitlist-promote.js';
 // same file end with one creating everything and the other finding it unchanged, never with a
 // half-merged mix. The initial password issuance takes the same lock before its row locks, so the
 // two never hold users rows at once (they lock them in no common order, which could deadlock).
+// The admin round edit takes it too, so it never writes a rounds row this commit holds FOR SHARE.
 // commitImport takes the round locks right after it (CLAUDE.md rule 3; round-lock.ts has the whole
 // order). The UNIQUE constraints used by ON CONFLICT below stay the backstop against writers that
 // do not take this lock.

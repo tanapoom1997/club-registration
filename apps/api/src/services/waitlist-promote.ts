@@ -5,7 +5,8 @@ import { moveRegistration, releaseSeat } from './seats.js';
 // round calls it at the end of their own transaction, after their own event, while still holding
 // the round lock they took first (round-lock.ts); it takes no lock of its own. The callers: a
 // student's cancel and change (registrations.ts), an admin club edit that sends a capacity
-// (clubs.ts), and the import commit, once per round it locked (import-commit.ts).
+// (clubs.ts), an admin round edit, which may open the round (rounds.ts), and the import commit,
+// once per round it locked (import-commit.ts).
 //
 // One loop, until a pass promotes nobody:
 //
@@ -21,9 +22,9 @@ import { moveRegistration, releaseSeat } from './seats.js';
 //    with no club gets a new registrations row.
 // 4. One waitlist_promote event: club_id = the new club, from_club_id = the club left (or NULL),
 //    actor_id = whoever freed the first seat (the student who cancelled or changed, or the admin
-//    whose club edit or import raised a capacity; a cascade has no request of its own), and no
-//    idempotency key: the request's own event carries it, and UNIQUE (actor_id, idempotency_key)
-//    treats NULL keys as distinct.
+//    whose club edit or import raised a capacity or whose round edit opened the round; a cascade
+//    has no request of its own), and no idempotency key: the request's own event carries it, and
+//    UNIQUE (actor_id, idempotency_key) treats NULL keys as distinct.
 //
 // The grade check needs no row lock on student_profiles: an import commit that could move the
 // student to another grade holds the lock of every round that has not closed yet

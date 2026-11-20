@@ -117,8 +117,9 @@ export const seatStudent = async (pool: Pool, studentId: number, clubId: number)
 
 // A waitlist entry with its waitlist_join event, written straight to the tables because the API
 // only lets a student join a club that is full: this builds the state no request leaves behind, a
-// free seat with a queue in an open round (every writer that frees a seat promotes before it
-// commits; only reopening a closed round could bring it back, README open items). That state
+// free seat with a queue in an open round (every writer that frees a seat or opens a round
+// promotes before it commits; only a round that opens by the clock after a capacity was raised
+// while it was upcoming could bring it back, README open items). That state
 // breaks the open-round invariant on purpose, so a test that uses it ends by having the student
 // leave through the API, or promotes them, which brings the log and the tables back in step.
 export const addWaitingDirectly = async (

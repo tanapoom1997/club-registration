@@ -450,7 +450,10 @@ describe('import commit and the round locks', () => {
       expect(await seatsOf(student.id)).toEqual([clubId]);
     });
 
-    it('makes an edit of a round window wait until the import commits', async () => {
+    // The admin round edit takes the import lock first and so never reaches the rounds row while
+    // an import runs (admin-promote.test.ts). These two cover the import's FOR SHARE backstop
+    // against a rounds row write that skips that lock, as a plain UPDATE here does.
+    it('makes a write of a round window that skips the import lock wait until the import commits', async () => {
       const closedId = await createRoundInTerm(uniqueTerm(), 1, CLOSED);
       // A student in the file whose users row is held, so the import stops at its first write,
       // after taking its locks.
@@ -490,7 +493,7 @@ describe('import commit and the round locks', () => {
       }
     });
 
-    it('does not deadlock a registration whose round edit queues behind the import', async () => {
+    it('does not deadlock a registration whose rounds row write queues behind the import', async () => {
       const roundId = await createOpenRoundInTerm(uniqueTerm(), 1);
       const clubId = await createClub(pool, roundId, uniqueCode());
       const student = await createStudent(pool, { grade: 1 });
@@ -508,7 +511,7 @@ describe('import commit and the round locks', () => {
         );
         const importWaiter = await waitForLockWaiter(pool, ({ pid }) => pid !== registrarPid);
         expect(importWaiter.waitEvent).toBe('advisory');
-        // An admin edit of that round queues behind the import's FOR SHARE on the rounds row.
+        // A write of that round's row queues behind the import's FOR SHARE on the rounds row.
         const editing = settle(
           pool.query('UPDATE rounds SET max_active = max_active + 1 WHERE id = $1', [roundId]),
         );
@@ -518,7 +521,7 @@ describe('import commit and the round locks', () => {
         );
 
         // The rest of the registration checks its foreign keys with FOR KEY SHARE on that same
-        // rounds row; it must not queue behind the edit (which waits for the import, which waits
+        // rounds row; it must not queue behind the write (which waits for the import, which waits
         // for this registration). Postgres would break such a cycle with 40P01.
         const registered = await settle(
           registerForClub(registrar, { studentId: student.id, clubId, idempotencyKey: newKey() }),
