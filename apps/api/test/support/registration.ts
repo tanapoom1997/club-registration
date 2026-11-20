@@ -318,8 +318,9 @@ const INVARIANTS: Readonly<Record<string, string>> = Object.freeze({
   // A promotion is no request of its own: it has no key, and its actor is whoever freed the seat:
   // the student who cancelled or changed, or the admin whose club edit or import commit raised a
   // capacity, whose round edit reopened the round or who moved or removed a student. admin_* are
-  // an admin's keyed request for a student, so their actor is an admin account. Everything else is
-  // a student's own keyed request.
+  // an admin's keyed request for a student, so their actor is an admin account. A waitlist_leave
+  // is either the student's own keyed request or an admin's keyed removal of the entry
+  // (club-waitlist.ts), never a third account's. Everything else is a student's own keyed request.
   'students act for themselves with a key, admins for students, and only a promotion has none': `
     SELECT e.id, e.event_type, e.actor_id, e.student_id, e.idempotency_key, u.role AS actor_role
     FROM registration_events e
@@ -328,6 +329,8 @@ const INVARIANTS: Readonly<Record<string, string>> = Object.freeze({
       WHEN e.event_type = 'waitlist_promote' THEN e.idempotency_key IS NOT NULL
       WHEN e.event_type IN ('admin_assign', 'admin_remove')
         THEN u.role <> 'admin' OR e.idempotency_key IS NULL
+      WHEN e.event_type = 'waitlist_leave'
+        THEN (e.actor_id <> e.student_id AND u.role <> 'admin') OR e.idempotency_key IS NULL
       ELSE e.actor_id <> e.student_id OR e.idempotency_key IS NULL
     END`,
   'nobody waits for the club they hold': `
@@ -358,8 +361,8 @@ const INVARIANTS: Readonly<Record<string, string>> = Object.freeze({
     JOIN rounds ro ON ro.id = w.round_id
     WHERE sp.grade <> ro.grade AND ro.closes_at > statement_timestamp()`,
   // A join replaces the student's entry: its from_club_id is the club of the entry it gave up
-  // (null when there was none). A leave, a promote and an entry-ending admin assign end the entry
-  // of the club they name.
+  // (null when there was none). A leave (the student's own or an admin's removal, whoever the
+  // actor), a promote and an entry-ending admin assign end the entry of the club they name.
   'each waitlist event follows from the one before it': `
     WITH ${WAITLIST_EVENTS}
     SELECT id, event_type, club_id, from_club_id, previous_type, previous_club_id
@@ -372,7 +375,10 @@ const INVARIANTS: Readonly<Record<string, string>> = Object.freeze({
                 OR previous_club_id IS DISTINCT FROM club_id))`,
   // Replaying the log gives the entries: the latest waitlist event of a student in a round is a
   // join (waiting for its club) or a leave/promote/entry-ending admin assign (not waiting), and
-  // the table agrees.
+  // the table agrees. An admin's removal of an entry is a waitlist_leave like the student's own
+  // (it deletes the entry of the club it names and writes nothing else), so it replays the same
+  // way with no rule of its own; an admin removal that skipped its event, or deleted another
+  // club's entry, would leave the log and the table apart here.
   'the waitlist events replay to the entries that exist': `
     WITH ${WAITLIST_EVENTS},
     expected AS (

@@ -16,6 +16,7 @@ import { AppError } from './errors.js';
 import { LOG_SERIALIZERS } from './log.js';
 import { adminClubMemberRoutes } from './routes/admin-club-members.js';
 import { adminClubRoutes } from './routes/admin-clubs.js';
+import { adminEventRoutes } from './routes/admin-events.js';
 import { adminExportRoutes } from './routes/admin-export.js';
 import { adminImportRoutes } from './routes/admin-import.js';
 import { adminRoundRoutes } from './routes/admin-rounds.js';
@@ -115,6 +116,7 @@ export const buildApp = async ({
   await app.register(adminRoundRoutes({ pool, guard }), { prefix: '/api' });
   await app.register(adminClubRoutes({ pool, guard }), { prefix: '/api' });
   await app.register(adminClubMemberRoutes({ pool, guard }), { prefix: '/api' });
+  await app.register(adminEventRoutes({ pool, guard }), { prefix: '/api' });
   await app.register(adminImportRoutes({ pool, guard }), { prefix: '/api' });
   await app.register(adminStudentRoutes({ pool, guard }), { prefix: '/api' });
   await app.register(adminExportRoutes({ pool, guard }), { prefix: '/api' });

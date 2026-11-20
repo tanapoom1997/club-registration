@@ -43,7 +43,9 @@ export const MEMBER_OUTCOMES = Object.freeze({
 
 export type MemberOutcome = (typeof MEMBER_OUTCOMES)[keyof typeof MEMBER_OUTCOMES];
 
-type AdminEventType = 'admin_assign' | 'admin_remove';
+// An admin's keyed requests for a student: seating, removing, and removing a waitlist entry
+// (club-waitlist.ts), which shares these helpers and the admin's key space.
+export type AdminEventType = 'admin_assign' | 'admin_remove' | 'waitlist_leave';
 
 export type MemberWriteResult = {
   outcome: MemberOutcome;
@@ -87,7 +89,7 @@ const SOURCE_BY_EVENT: Readonly<Record<string, ClubMemberSource>> = Object.freez
 });
 
 // The one place snake_case rows become the API shape.
-const toClubSeats = (row: ClubSeatsRow): ClubSeats => ({
+export const toClubSeats = (row: ClubSeatsRow): ClubSeats => ({
   id: row.id,
   roundId: row.round_id,
   clubCode: row.club_code,
@@ -116,7 +118,10 @@ const compareMembers = (a: MemberRow, b: MemberRow): number =>
   a.seat_no - b.seat_no ||
   a.login_id.localeCompare(b.login_id);
 
-const findClubSeats = async (db: Queryable, clubId: number): Promise<ClubSeatsRow | undefined> => {
+export const findClubSeats = async (
+  db: Queryable,
+  clubId: number,
+): Promise<ClubSeatsRow | undefined> => {
   const { rows } = await db.query<ClubSeatsRow>(
     'SELECT id, round_id, club_code, name, capacity, registered FROM clubs WHERE id = $1',
     [clubId],
@@ -189,7 +194,7 @@ type AdminPriorEvent = {
 // The admin's own keys only (actor = this admin): a student's key, or another admin's, never
 // collides with it, as UNIQUE (actor_id, idempotency_key) has it. The student comes along by login
 // ID, so the replay is decided right after the lock, before the body's login ID is resolved.
-const findAdminPriorEvent = async (
+export const findAdminPriorEvent = async (
   db: pg.PoolClient,
   adminId: number,
   idempotencyKey: string,
@@ -205,18 +210,26 @@ const findAdminPriorEvent = async (
 };
 
 // Same request = same type, same club and same student. Anything else reusing the key is 409
-// idempotency_key_reused. Only committed requests leave an event, so a refused one (club_full)
-// may be retried with its key.
-const replayPriorEvent = async (
-  db: pg.PoolClient,
+// idempotency_key_reused: another student or club, or another kind of admin request (an assign's
+// key sent to remove, or to the waitlist removal, and the other way round). Only committed
+// requests leave an event, so a refused one (club_full) may be retried with its key.
+export const assertSameAdminRequest = (
   prior: AdminPriorEvent,
   request: { eventType: AdminEventType; clubId: number; loginId: string },
-): Promise<MemberWriteResult> => {
+): void => {
   const sameRequest =
     prior.event_type === request.eventType &&
     prior.club_id === request.clubId &&
     prior.login_id === request.loginId;
   if (!sameRequest) throw new AppError(ERROR_CODES.idempotencyKeyReused);
+};
+
+const replayPriorEvent = async (
+  db: pg.PoolClient,
+  prior: AdminPriorEvent,
+  request: { eventType: AdminEventType; clubId: number; loginId: string },
+): Promise<MemberWriteResult> => {
+  assertSameAdminRequest(prior, request);
   return {
     outcome: MEMBER_OUTCOMES.replayed,
     roundId: prior.round_id,
@@ -235,9 +248,9 @@ type StudentRow = { id: number; grade: number };
 //
 // FOR SHARE OF the profile, as register's lockStudentProfile: it holds the grade still until
 // commit against an import moving the student to another grade, which either commits first (and
-// the grade check below sees the new grade) or waits for this transaction. A remove, which
-// decides nothing by grade, takes no row lock.
-const findStudent = async (
+// the grade check below sees the new grade) or waits for this transaction. A remove (of a seat or
+// of a waitlist entry), which decides nothing by grade, takes no row lock.
+export const findStudent = async (
   db: pg.PoolClient,
   loginId: string,
   { lockProfile }: { lockProfile: boolean },
@@ -315,7 +328,7 @@ type AdminEventInput = {
 };
 
 // The admin is the actor (registrations.ts insertEvent is the student's own request).
-const insertAdminEvent = async (
+export const insertAdminEvent = async (
   db: pg.PoolClient,
   {
     roundId,

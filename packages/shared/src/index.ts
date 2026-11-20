@@ -134,7 +134,11 @@ export {
   clubMemberSourceSchema,
   clubMembersResponseSchema,
   clubMemberWriteResponseSchema,
+  clubRefSchema,
   clubSeatsSchema,
+  clubWaitlistEntrySchema,
+  clubWaitlistRemoveRequestSchema,
+  clubWaitlistResponseSchema,
 } from './club-members.js';
 export type {
   ClubMember,
@@ -142,8 +146,33 @@ export type {
   ClubMemberSource,
   ClubMembersResponse,
   ClubMemberWriteResponse,
+  ClubRef,
   ClubSeats,
+  ClubWaitlistEntry,
+  ClubWaitlistRemoveRequest,
+  ClubWaitlistResponse,
 } from './club-members.js';
+export {
+  EVENT_LOG_DEFAULT_LIMIT,
+  EVENT_LOG_MAX_LIMIT,
+  EVENT_TYPES,
+  eventActorSchema,
+  eventLogQuerySchema,
+  eventLogResponseSchema,
+  eventRoundSchema,
+  eventStudentSchema,
+  eventTypeSchema,
+  registrationEventSchema,
+} from './event-log.js';
+export type {
+  EventActor,
+  EventLogQuery,
+  EventLogResponse,
+  EventRound,
+  EventStudent,
+  EventType,
+  RegistrationEvent,
+} from './event-log.js';
 export {
   CLASSROOM_LIST_COLUMNS,
   CLUB_LIST_COLUMNS,

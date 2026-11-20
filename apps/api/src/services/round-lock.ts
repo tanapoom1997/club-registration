@@ -1,8 +1,8 @@
 import type { Queryable } from '../db.js';
 
 // CLAUDE.md rule 3: every write transaction inside a round (register, change, cancel, waitlist join
-// and leave, an admin club edit, an admin round edit, an admin seating or removing a student, the
-// import commit) takes the round's transaction-scoped advisory lock before it reads anything it
+// and leave, an admin club edit, an admin round edit, an admin seating or removing a student, an
+// admin taking a student off a waitlist, the import commit) takes the round's transaction-scoped advisory lock before it reads anything it
 // decides by, so writers in one round run one at a time and see each other's commits. The promote
 // engine (waitlist-promote.ts) takes no lock of its own: it runs at the end of a cancel, a change,
 // a club edit, a round edit or an admin's move or remove of a student, inside the transaction
@@ -19,9 +19,9 @@ import type { Queryable } from '../db.js';
 //    step 2, after taking a round lock the import may be waiting for in step 3.
 // 2. FOR SHARE on every rounds row: the import commit only (lockRoundsForImport).
 // 3. Round locks in ascending id: the import commit takes the rounds it relies on
-//    (lockRoundsForImport); register, change, cancel, waitlist join and leave, the club edit and
-//    an admin's assign or remove of a student (club-members.ts) take exactly one, holding
-//    nothing, and the round edit takes exactly one holding only the import lock (a change, an
+//    (lockRoundsForImport); register, change, cancel, waitlist join and leave, the club edit,
+//    an admin's assign or remove of a student (club-members.ts) and an admin's removal of a
+//    waitlist entry (club-waitlist.ts) take exactly one, holding nothing, and the round edit takes exactly one holding only the import lock (a change, an
 //    admin's move, a waitlist move and a promotion cascade all stay within the clubs of one
 //    round, so one lock covers them).
 // 4. Row locks and writes, the promote engine's included: it runs last, only in rounds whose lock
@@ -55,8 +55,10 @@ import type { Queryable } from '../db.js';
 //   round the import did not lock waits for nothing the import holds, so it simply commits first.
 //   Unlike a student's writes, an admin's assign and remove also run in closed rounds, including
 //   closed rounds of another term, which the import never locks: the same holds there, since the
-//   assign's profile row lock is still the only thing it shares with the import (a remove takes
-//   no row lock on the profile at all).
+//   assign's profile row lock is still the only thing it shares with the import (a remove, of a
+//   seat or of a waitlist entry, takes no row lock on the profile at all: its event INSERT reaches
+//   the profile only through a foreign-key check, FOR KEY SHARE, which the import's grade update
+//   does not conflict with, since grade is no key column).
 // - The promote engine adds no wait of its own. It writes only clubs, registrations and
 //   waitlist_entries rows of a round whose lock its transaction already holds (the club or round
 //   edit's one round; each round the import locked), and reaches rounds, users and
