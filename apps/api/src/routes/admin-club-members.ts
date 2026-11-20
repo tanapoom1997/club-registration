@@ -4,6 +4,8 @@ import {
   clubMemberRequestSchema,
   clubMembersResponseSchema,
   clubMemberWriteResponseSchema,
+  clubWaitlistRemoveRequestSchema,
+  clubWaitlistResponseSchema,
 } from '@club-registration/shared';
 import type { FastifyReply, FastifyRequest } from 'fastify';
 import type { FastifyPluginAsyncZod } from 'fastify-type-provider-zod';
@@ -16,19 +18,22 @@ import { ADMIN_ACTIONS, logAdminChange } from '../http/audit-log.js';
 import type { AdminAction } from '../http/audit-log.js';
 import { assignMember, listClubMembers, removeMember } from '../services/club-members.js';
 import type { MemberWriteInput, MemberWriteResult } from '../services/club-members.js';
+import { listClubWaitlist, removeWaitlistEntry } from '../services/club-waitlist.js';
 
-// Seating and removing a student is one request per student, so a busy admin fixing a list clicks
-// a few times a minute. 120 a minute (two a second, shared by assign and remove) is far above any
-// person and still stops a stuck button or a script from queueing hundreds of writes on the round
-// lock that students register through.
+// Seating, removing and taking a student off a waitlist is one request per student, so a busy
+// admin fixing a list clicks a few times a minute. 120 a minute (two a second, shared by the
+// three: one admin cleaning up a club's lists is one budget, whichever list a click edits) is far
+// above any person and still stops a stuck button or a script from queueing hundreds of writes on
+// the round lock that students register through.
 const SEAT_WRITES_PER_ADMIN = 120;
 const SEAT_WRITE_WINDOW_MS = 60_000;
 
-// An admin's view and edit of who holds a seat in a club (README Phase 2, PR 3a). Writes take an
-// idempotency_key and write registration_events (CLAUDE.md rule 7) with the admin as actor: one
-// admin_assign or admin_remove per request, plus a waitlist_promote per student a freed seat
-// promoted. Responses carry students' names, so the only log line is logAdminChange's, with ids
-// and the outcome: never a name or a login ID (a student code, like the issuance log keeps out).
+// An admin's view and edit of who holds a seat in a club (README Phase 2, PR 3a) and who waits for
+// one (PR 3b). Writes take an idempotency_key and write registration_events (CLAUDE.md rule 7)
+// with the admin as actor: one admin_assign, admin_remove or waitlist_leave per request, plus a
+// waitlist_promote per student a freed seat promoted. Responses carry students' names, so the only
+// log line is logAdminChange's, with ids and the outcome: never a name or a login ID (a student
+// code, like the issuance log keeps out).
 export const adminClubMemberRoutes =
   ({ pool, guard }: { pool: pg.Pool; guard: AuthGuard }): FastifyPluginAsyncZod =>
   // eslint-disable-next-line @typescript-eslint/require-await -- Fastify plugins must be async
@@ -117,5 +122,44 @@ export const adminClubMemberRoutes =
           clubId: request.params.id,
           ...request.body,
         }),
+    );
+
+    app.get(
+      '/admin/clubs/:id/waitlist',
+      { schema: { params: clubIdParamsSchema, response: { 200: clubWaitlistResponseSchema } } },
+      async (request) => await listClubWaitlist(pool, request.params.id),
+    );
+
+    // Answers with the whole queue after the removal (the same shape as the GET): the others'
+    // positions shift, so the page needs the list again anyway, read under the same round lock.
+    app.post(
+      '/admin/clubs/:id/waitlist/remove',
+      {
+        schema: {
+          params: clubIdParamsSchema,
+          body: clubWaitlistRemoveRequestSchema,
+          response: { 200: clubWaitlistResponseSchema },
+        },
+        preHandler: writeGate,
+      },
+      async (request) => {
+        const result = await withTransaction(
+          pool,
+          async (client) =>
+            await removeWaitlistEntry(client, {
+              adminId: requireAuthUser(request).id,
+              clubId: request.params.id,
+              ...request.body,
+            }),
+        );
+        const { clubId, roundId, studentId, outcome } = result;
+        logAdminChange(request, ADMIN_ACTIONS.clubWaitlistRemove, {
+          clubId,
+          roundId,
+          studentId,
+          outcome,
+        });
+        return { club: result.club, entries: result.entries };
+      },
     );
   };

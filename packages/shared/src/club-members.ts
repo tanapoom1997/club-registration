@@ -63,3 +63,40 @@ export const clubMemberWriteResponseSchema = z.object({
   member: clubMemberSchema.nullable(),
 });
 export type ClubMemberWriteResponse = z.infer<typeof clubMemberWriteResponseSchema>;
+
+// A club named in an admin answer beside a student: the club a waiter holds in the round, or the
+// club an event is about.
+export const clubRefSchema = z.object({
+  id: z.number().int().positive(),
+  clubCode: z.string(),
+  name: z.string(),
+});
+export type ClubRef = z.infer<typeof clubRefSchema>;
+
+// An admin's view of a club's waitlist, and an admin removing a student from it (README Phase 2,
+// PR 3b). position 1 = next in line, in queue order (created_at, id) as the promote engine reads
+// it. heldClub: the club the waiter holds in the round, if any (a promotion moves them from it).
+export const clubWaitlistEntrySchema = z.object({
+  position: z.number().int().positive(),
+  studentId: z.number().int().positive(),
+  loginId: z.string(),
+  fullName: z.string(),
+  classroom: z.string(),
+  seatNo: z.number().int().positive(),
+  joinedAt: z.iso.datetime(),
+  heldClub: clubRefSchema.nullable(),
+});
+export type ClubWaitlistEntry = z.infer<typeof clubWaitlistEntrySchema>;
+
+// The list and the removal answer alike: the club's seats and its whole queue at one moment (one
+// snapshot, or right after the removal under the round lock).
+export const clubWaitlistResponseSchema = z.object({
+  club: clubSeatsSchema,
+  entries: z.array(clubWaitlistEntrySchema),
+});
+export type ClubWaitlistResponse = z.infer<typeof clubWaitlistResponseSchema>;
+
+// Same body as seating or removing a member, strict for the same reasons: the student by login
+// ID, the round from the club.
+export const clubWaitlistRemoveRequestSchema = clubMemberRequestSchema;
+export type ClubWaitlistRemoveRequest = z.infer<typeof clubWaitlistRemoveRequestSchema>;

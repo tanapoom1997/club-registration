@@ -1,7 +1,12 @@
 import { describe, expect, it } from 'vitest';
 import { CAPACITY_MAX } from '../src/import.js';
-import { clubMemberRequestSchema } from '../src/club-members.js';
+import { clubMemberRequestSchema, clubWaitlistRemoveRequestSchema } from '../src/club-members.js';
 import { updateClubRequestSchema } from '../src/clubs.js';
+import {
+  EVENT_LOG_DEFAULT_LIMIT,
+  EVENT_LOG_MAX_LIMIT,
+  eventLogQuerySchema,
+} from '../src/event-log.js';
 import { exportQuerySchema } from '../src/export.js';
 import { idempotencyKeySchema } from '../src/idempotency.js';
 import { issueInitialPasswordsRequestSchema } from '../src/initial-passwords.js';
@@ -255,5 +260,58 @@ describe('clubMemberRequestSchema', () => {
     ['with a numeric login ID', { loginId: 1001, idempotencyKey: KEY }],
   ])('refuses a body %s', (_case, body) => {
     expect(clubMemberRequestSchema.safeParse(body).success).toBe(false);
+  });
+});
+
+describe('clubWaitlistRemoveRequestSchema', () => {
+  it('accepts a login ID and a key', () => {
+    expect(
+      clubWaitlistRemoveRequestSchema.safeParse({ loginId: 'Fictional01', idempotencyKey: KEY }),
+    ).toEqual({ success: true, data: { loginId: 'fictional01', idempotencyKey: KEY } });
+  });
+
+  it.each([
+    ['naming a club', { loginId: 'fictional01', idempotencyKey: KEY, clubId: 3 }],
+    ['naming a round', { loginId: 'fictional01', idempotencyKey: KEY, roundId: 1 }],
+    ['without a key', { loginId: 'fictional01' }],
+  ])('refuses a body %s', (_case, body) => {
+    expect(clubWaitlistRemoveRequestSchema.safeParse(body).success).toBe(false);
+  });
+});
+
+// Query strings arrive as text, so the ids and the limit are coerced from it.
+describe('eventLogQuerySchema', () => {
+  it('defaults the limit and needs no filter', () => {
+    expect(eventLogQuerySchema.safeParse({})).toEqual({
+      success: true,
+      data: { limit: EVENT_LOG_DEFAULT_LIMIT },
+    });
+  });
+
+  it('reads every filter, the cursor and the limit from text', () => {
+    expect(
+      eventLogQuerySchema.safeParse({
+        roundId: '1',
+        studentId: '2',
+        clubId: '3',
+        before: '40',
+        limit: String(EVENT_LOG_MAX_LIMIT),
+      }),
+    ).toEqual({
+      success: true,
+      data: { roundId: 1, studentId: 2, clubId: 3, before: 40, limit: EVENT_LOG_MAX_LIMIT },
+    });
+  });
+
+  it.each([
+    ['limit 0', { limit: '0' }],
+    ['a limit above the most', { limit: String(EVENT_LOG_MAX_LIMIT + 1) }],
+    ['a cursor of 0', { before: '0' }],
+    ['an id that is no number', { roundId: 'x' }],
+    ['an id past the integer range', { clubId: '2147483648' }],
+    ['an unknown parameter', { eventType: 'register' }],
+    ['a filter given twice', { studentId: ['1', '2'] }],
+  ])('refuses %s', (_case, query) => {
+    expect(eventLogQuerySchema.safeParse(query).success).toBe(false);
   });
 });
