@@ -117,11 +117,11 @@ export const seatStudent = async (pool: Pool, studentId: number, clubId: number)
 
 // A waitlist entry with its waitlist_join event, written straight to the tables because the API
 // only lets a student join a club that is full: this builds the state no request leaves behind, a
-// free seat with a queue in an open round (every writer that frees a seat or opens a round
-// promotes before it commits; only a round that opens by the clock after a capacity was raised
-// while it was upcoming could bring it back, README open items). That state
-// breaks the open-round invariant on purpose, so a test that uses it ends by having the student
-// leave through the API, or promotes them, which brings the log and the tables back in step.
+// free seat with a queue in a round that has not closed (every writer that frees a seat or
+// reopens a closed round promotes before it commits, in an upcoming round too, so a round that
+// opens by the clock already has none). That state breaks the free-seat invariant on purpose, so
+// a test that uses it ends by having the student leave through the API, or promotes them, which
+// brings the log and the tables back in step.
 export const addWaitingDirectly = async (
   pool: Pool,
   { roundId, clubId, studentId }: { roundId: number; clubId: number; studentId: number },
@@ -294,7 +294,8 @@ const INVARIANTS: Readonly<Record<string, string>> = Object.freeze({
     WHERE latest.club_id IS DISTINCT FROM r.club_id OR latest.club_delta IS DISTINCT FROM 1`,
   // A promotion is no request of its own: it has no key, and its actor is whoever freed the seat:
   // the student who cancelled or changed, or the admin whose club edit or import commit raised a
-  // capacity. Everything else is a student's own keyed request.
+  // capacity or whose round edit reopened the round. Everything else is a student's own keyed
+  // request.
   'students act for themselves with a key, and only a promotion has none': `
     SELECT id, event_type, actor_id, student_id, idempotency_key FROM registration_events
     WHERE (event_type <> 'waitlist_promote'
@@ -306,13 +307,16 @@ const INVARIANTS: Readonly<Record<string, string>> = Object.freeze({
     JOIN registrations r
       ON r.round_id = w.round_id AND r.student_id = w.student_id AND r.club_id = w.club_id`,
   // The promote engine runs whenever a seat is freed (cancel, change, a club edit or an import
-  // commit that raises a capacity), so while the round is open a free seat and a queue for it
-  // never outlive a transaction. After closing, nobody is promoted any more.
-  'no club of an open round has a free seat and a waitlist': `
+  // commit that raises a capacity) and whenever a round edit may reopen a closed round, and it
+  // promotes until the round closes (upcoming included), so in a round that has not closed by the
+  // DB clock a free seat and a queue for it never outlive a transaction. A round that opens by
+  // the clock writes nothing, so this must already hold while it is upcoming. After closing,
+  // nobody is promoted any more.
+  'no club of a round that has not closed has a free seat and a waitlist': `
     SELECT c.id, c.registered, c.capacity
     FROM clubs c
     JOIN rounds ro ON ro.id = c.round_id
-    WHERE statement_timestamp() >= ro.opens_at AND statement_timestamp() < ro.closes_at
+    WHERE statement_timestamp() < ro.closes_at
       AND c.registered < c.capacity
       AND EXISTS (
         SELECT 1 FROM waitlist_entries w WHERE w.club_id = c.id AND w.round_id = c.round_id

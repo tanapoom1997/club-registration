@@ -167,11 +167,12 @@ export const createRoundBatch = async (
 // Only the window and max_active are updatable; term and grade identify the round. A half-given
 // window is checked against the stored half by the CHECK (closes_at > opens_at) constraint.
 //
-// An in-round write (CLAUDE.md rule 3), because a new window can open a round: after a close an
-// admin may raise a capacity (the engine promotes nobody in a closed round) and then reopen the
-// round, which would leave a club with both a free seat and waiters in an open round. So the edit
-// promotes in the same transaction, under the round lock, with the admin as actor. The engine
-// decides by the DB clock, so an edit that leaves the round upcoming or closed promotes nobody.
+// An in-round write (CLAUDE.md rule 3), because a new window can reopen a closed round: after a
+// close an admin may raise a capacity (the engine promotes nobody in a closed round) and then
+// reopen the round, open or upcoming, which would leave a club with both a free seat and waiters
+// in a round that has not closed. So the edit promotes in the same transaction, under the round
+// lock, with the admin as actor. The engine decides by the DB clock, so an edit that leaves the
+// round closed promotes nobody.
 //
 // Locks in the global order of round-lock.ts: the import lock first, then the round lock, then
 // the UPDATE. The import holds FOR SHARE on every rounds row and then waits for round locks, so

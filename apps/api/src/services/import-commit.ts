@@ -150,13 +150,14 @@ export type CommitImportResult = {
 
 // Runs the promote engine (waitlist-promote.ts) in every round the commit locked, in the order it
 // locked them (ascending id), as the last writes of the transaction. A capacity the file raised in
-// an open round frees seats, and the waiters for them move up here, with the admin who committed
-// as the actor. No lock is taken: the engine takes none of its own, and every round it runs in is
-// one whose lock this transaction already holds (round-lock.ts has why that adds no wait). The
-// engine skips a round that is not open by the DB clock (upcoming or closed) by itself, and in a
-// round whose clubs the file did not touch it normally finds no one (every other in-round writer
-// promotes before it commits), so running it in all of them costs one indexed statement each. Outside applyImportPlan's catch on purpose: a constraint failing in the engine is a bug,
-// not data that moved under the plan, and must not be answered as import_conflict.
+// a round that has not closed (open or upcoming) frees seats, and the waiters for them move up
+// here, with the admin who committed as the actor. No lock is taken: the engine takes none of its
+// own, and every round it runs in is one whose lock this transaction already holds (round-lock.ts
+// has why that adds no wait). The engine skips a round that has closed by the DB clock by itself,
+// and in a round whose clubs the file did not touch it normally finds no one (every other
+// in-round writer promotes before it commits), so running it in all of them costs one indexed
+// statement each. Outside applyImportPlan's catch on purpose: a constraint failing in the engine
+// is a bug, not data that moved under the plan, and must not be answered as import_conflict.
 const promoteLockedRounds = async (
   db: pg.PoolClient,
   roundIds: readonly number[],

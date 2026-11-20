@@ -62,7 +62,7 @@ type JoinState = {
 
 // Everything the answer order needs, read in one statement under the round lock. has_free_seat is
 // exactly "a register would get a seat now": free, and nobody waiting (with the promote engine a
-// club with waiters is always full while the round is open, but a free seat with waiters must not
+// club with waiters is always full until the round closes, but a free seat with waiters must not
 // send the student round in circles between club_full and waitlist_not_needed).
 const readJoinState = async (
   db: pg.PoolClient,

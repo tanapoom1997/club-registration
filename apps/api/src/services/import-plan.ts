@@ -108,7 +108,7 @@ const findUsers = async (db: Queryable, loginIds: readonly string[]) => {
 };
 
 // What ties a student to a round: a seat, or a waitlist entry (which the promote engine may turn
-// into a seat while the round is open). Either one stops a grade change the same way.
+// into a seat until the round closes). Either one stops a grade change the same way.
 type HoldKind = 'seat' | 'waitlist';
 
 type HeldSeat = { grade: number; term: string; kind: HoldKind };

@@ -47,9 +47,10 @@ import {
 } from './support/registration.js';
 
 // The promote engine run by an admin's writes (README Phase 2): a club edit that raises capacity,
-// a round edit that opens the round and an import commit that raises capacity. Each promotes under
-// the round locks it already holds, with the admin as the actor of every promotion. Every value
-// is made up.
+// a round edit that reopens a closed round and an import commit that raises capacity. Each
+// promotes under the round locks it already holds, with the admin as the actor of every
+// promotion, in a round that is open or upcoming (a closed one promotes nobody). Every value is
+// made up.
 
 type InjectResponse = Awaited<ReturnType<FastifyInstance['inject']>>;
 
@@ -468,13 +469,10 @@ describe('promotion by admin writes', () => {
       });
     });
 
-    it.each([
-      ['leaves it closed', { maxActive: 5 }],
-      ['moves it to upcoming', { opensAt: isoIn(HOUR), closesAt: isoIn(2 * HOUR) }],
-    ])('promotes nobody when the edit %s', async (_label, payload) => {
+    it('promotes nobody when the edit leaves it closed', async () => {
       const { roundId, clubId, queue } = await closedClubWithSeatsAndWaiters();
 
-      const response = await patchRound(roundId, payload);
+      const response = await patchRound(roundId, { maxActive: 5 });
 
       expect(response.statusCode).toBe(200);
       expect(await queueOf(clubId)).toEqual(queue);
@@ -482,6 +480,27 @@ describe('promotion by admin writes', () => {
       const [line] = auditLines('round.update');
       expect(line).toMatchObject({ promoted: 0 });
       expect(line).not.toHaveProperty('promotedStudentIds');
+    });
+
+    // An upcoming round opens by the clock with no write to run the engine, so the edit that
+    // makes it upcoming has to promote already (README open item 18).
+    it('promotes the waiters in queue order when it reopens a closed round as upcoming', async () => {
+      const { roundId, clubId, queue } = await closedClubWithSeatsAndWaiters();
+
+      const response = await patchRound(roundId, {
+        opensAt: isoIn(HOUR),
+        closesAt: isoIn(2 * HOUR),
+      });
+
+      expect(roundOf(response)).toMatchObject({ status: 'upcoming', totalRegistered: 3 });
+      expect(await promoteEvents()).toEqual([
+        promoted(queue[0]!, clubId),
+        promoted(queue[1]!, clubId),
+      ]);
+      expect(await queueOf(clubId)).toEqual([queue[2]]);
+      expect(auditLines('round.update')).toEqual([
+        expect.objectContaining({ promoted: 2, promotedStudentIds: queue.slice(0, 2) }),
+      ]);
     });
 
     it('logs the promotions as a count and student ids, never a name', async () => {
@@ -679,12 +698,9 @@ describe('promotion by admin writes', () => {
       expect(logLines.join('\n')).not.toContain(CLUB_NAME);
     });
 
-    it.each([
-      ['upcoming', { opensInSeconds: HOUR, closesInSeconds: 2 * HOUR }],
-      ['closed', { opensInSeconds: -2 * HOUR, closesInSeconds: -60 }],
-    ])('promotes nobody in a round that is %s', async (_label, window) => {
+    it('promotes nobody in a round that is closed', async () => {
       const { roundId, clubId, clubCode, queue } = await fullClubWithWaiters({ waiters: 2 });
-      await moveWindow(pool, roundId, window);
+      await moveWindow(pool, roundId, { opensInSeconds: -2 * HOUR, closesInSeconds: -60 });
 
       const response = await importClubs(await termOf(roundId), [
         clubRow({ clubCode, name: CLUB_NAME, capacity: 3 }),
@@ -741,6 +757,56 @@ describe('promotion by admin writes', () => {
       expect(response.statusCode).toBe(422);
       expect(await queueOf(clubId)).toEqual(queue);
       expect(await promoteEvents()).toEqual([]);
+    });
+  });
+
+  // README open item 18: waiters exist in an upcoming round only if an admin moved an opened
+  // round back to upcoming. A capacity raised then must promote at once, because the round opens
+  // by the clock later and no write runs the engine at that moment.
+  describe('in a round moved back to upcoming', () => {
+    const upcomingClubWithWaiters = async () => {
+      const club = await fullClubWithWaiters({ capacity: 1, waiters: 3 });
+      const response = await patchRound(club.roundId, {
+        opensAt: isoIn(HOUR),
+        closesAt: isoIn(2 * HOUR),
+      });
+      expect(roundOf(response)).toMatchObject({ status: 'upcoming' });
+      expect(await promoteEvents()).toEqual([]);
+      return club;
+    };
+
+    it('promotes in queue order when a club edit raises the capacity', async () => {
+      const { clubId, queue } = await upcomingClubWithWaiters();
+
+      const response = await patchClub(clubId, { capacity: 3 });
+
+      expect(clubOf(response)).toMatchObject({ registered: 3, remaining: 0 });
+      expect(await promoteEvents()).toEqual([
+        promoted(queue[0]!, clubId),
+        promoted(queue[1]!, clubId),
+      ]);
+      expect(await queueOf(clubId)).toEqual([queue[2]]);
+      expect(await heldClubs(queue[0]!)).toEqual([clubId]);
+      expect(await storedSeats(pool, clubId)).toEqual({ registered: 3, capacity: 3, rows: 3 });
+    });
+
+    it('promotes in queue order when an import commit raises the capacity', async () => {
+      const { roundId, clubId, clubCode, queue } = await upcomingClubWithWaiters();
+
+      const response = await importClubs(await termOf(roundId), [
+        clubRow({ clubCode, name: CLUB_NAME, capacity: 3 }),
+      ]);
+
+      expect(response.statusCode).toBe(200);
+      expect(await promoteEvents()).toEqual([
+        promoted(queue[0]!, clubId),
+        promoted(queue[1]!, clubId),
+      ]);
+      expect(await queueOf(clubId)).toEqual([queue[2]]);
+      expect(await storedSeats(pool, clubId)).toEqual({ registered: 3, capacity: 3, rows: 3 });
+      expect(importLines()).toEqual([
+        expect.objectContaining({ promoted: 2, promotedByRound: [{ roundId, count: 2 }] }),
+      ]);
     });
   });
 });

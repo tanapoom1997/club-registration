@@ -24,10 +24,11 @@ import {
 // These admin writes are not registration writes, so they take no idempotency_key: a retried
 // create or batch hits the (term, grade) unique constraint and answers 409 round_exists, a
 // retried PATCH sets the same values again, and a retried DELETE answers 404. Who made each
-// change is recorded by logAdminChange (http/audit-log.ts). A PATCH that opens the round also
-// promotes waiters into its free seats in the same transaction (updateRound): those are
-// waitlist_promote events with this admin as actor and no key, and a retry promotes nobody more,
-// since the seats are already taken. Its log line names the promotions by count and student id.
+// change is recorded by logAdminChange (http/audit-log.ts). A PATCH that reopens a closed round
+// (open or upcoming) also promotes waiters into its free seats in the same transaction
+// (updateRound): those are waitlist_promote events with this admin as actor and no key, and a
+// retry promotes nobody more, since the seats are already taken. Its log line names the
+// promotions by count and student id.
 export const adminRoundRoutes =
   ({ pool, guard }: { pool: pg.Pool; guard: AuthGuard }): FastifyPluginAsyncZod =>
   // eslint-disable-next-line @typescript-eslint/require-await -- Fastify plugins must be async

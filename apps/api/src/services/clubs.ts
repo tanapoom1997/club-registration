@@ -110,7 +110,7 @@ export const listRoundClubs = async (
 // admin's screen showed. The CHECK, not the lock, is what decides: a writer that skipped the lock
 // would still meet the same row lock and the same CHECK.
 //
-// Raising capacity is allowed while the round is open, and it frees seats, so an edit that sends
+// Raising capacity is allowed in any round, and it frees seats, so an edit that sends
 // a capacity runs the promote engine (waitlist-promote.ts) in this same transaction, still under
 // the round lock taken first, with the admin as the actor of every promotion. A lower or equal
 // capacity frees nothing and the engine finds no one; an edit without a capacity cannot free a
