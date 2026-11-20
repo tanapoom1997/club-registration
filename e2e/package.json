@@ -1,0 +1,16 @@
+{
+  "name": "@club-registration/e2e",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "e2e": "playwright test"
+  },
+  "devDependencies": {
+    "@playwright/test": "1.63.0",
+    "@testcontainers/postgresql": "12.2.1",
+    "@types/pg": "8.23.1",
+    "pg": "8.23.1"
+  }
+}

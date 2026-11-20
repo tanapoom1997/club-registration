@@ -1,3 +1,4 @@
+import { env } from 'node:process';
 import { fileURLToPath } from 'node:url';
 import tailwindcss from '@tailwindcss/vite';
 import react from '@vitejs/plugin-react';
@@ -25,8 +26,9 @@ export default defineConfig({
     },
   },
   server: {
-    // Mirrors production, where Caddy serves the SPA and proxies /api from one origin.
-    proxy: { '/api': 'http://127.0.0.1:3000' },
+    // Mirrors production, where Caddy serves the SPA and proxies /api from one origin. The E2E
+    // run points it at its own api (e2e/global-setup.ts), so it never talks to a dev server on 3000.
+    proxy: { '/api': env.API_PROXY_TARGET ?? 'http://127.0.0.1:3000' },
   },
   test: {
     environment: 'jsdom',
