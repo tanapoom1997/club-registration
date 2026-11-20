@@ -4,7 +4,7 @@ import type { FastifyInstance } from 'fastify';
 import type { Pool } from 'pg';
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { SESSION_COOKIE } from '../src/auth/session.js';
-import { createPool } from '../src/db.js';
+import { DEFAULT_POOL_SETTINGS, createPool } from '../src/db.js';
 import { buildTestApp } from './support/app.js';
 import { createClub, uniqueCode } from './support/import-db.js';
 import {
@@ -92,7 +92,15 @@ describe('registration under concurrency', () => {
 
   beforeAll(async () => {
     container = await startMigratedPostgres();
-    pool = createPool(appConnectionUri(container));
+    // These tests prove what the round lock and the DB decide, not how long a request may wait
+    // for a connection: 500 requests on 20 connections, serialized by the round lock, take ~2.5 s
+    // on an idle machine but past the 5 s production wait while other test files share the CPU,
+    // and the late ones fail with internal_error. Same pool size, a wait no machine reaches. The
+    // production wait is an O5 load-test question (README "Testing").
+    pool = createPool(appConnectionUri(container), {
+      ...DEFAULT_POOL_SETTINGS,
+      connectionTimeoutMs: 120_000,
+    });
   });
 
   afterAll(async () => {
