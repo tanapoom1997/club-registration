@@ -10,6 +10,8 @@ import { isPgError, PG_ERROR_CODES, withReadOnlySnapshot } from '../db.js';
 import { AppError } from '../errors.js';
 import { lockRoundOfClub } from './round-lock.js';
 import { findRound } from './rounds.js';
+import { promoteWaitlist } from './waitlist-promote.js';
+import type { Promotion } from './waitlist-promote.js';
 
 // The unnamed table CHECK (registered >= 0 AND registered <= capacity) from the initial migration.
 const REGISTERED_WITHIN_CAPACITY_CHECK = 'clubs_check';
@@ -53,8 +55,6 @@ const toClub = (row: ClubRow): AdminClub => ({
   remaining: row.capacity - row.registered,
   advisors: row.advisors.map(toAdvisor),
 });
-
-const CLUB_COLUMNS = 'id, round_id, club_code, name, description, capacity, registered';
 
 // For lists that show advisors by name only (the student club list, the per-club name list):
 // joins the names of club `c`'s advisors, in insertion order as on the admin list, as
@@ -108,30 +108,35 @@ export const listRoundClubs = async (
 // clubs CHECK is evaluated against the row as it is when the UPDATE gets its row lock, so a
 // registration committed a moment earlier is counted and the change is refused, whatever the
 // admin's screen showed. The CHECK, not the lock, is what decides: a writer that skipped the lock
-// would still meet the same row lock and the same CHECK. Raising capacity is allowed while the
-// round is open; Phase 2 must then promote the waitlist in this same transaction.
+// would still meet the same row lock and the same CHECK.
+//
+// Raising capacity is allowed while the round is open, and it frees seats, so an edit that sends
+// a capacity runs the promote engine (waitlist-promote.ts) in this same transaction, still under
+// the round lock taken first, with the admin as the actor of every promotion. A lower or equal
+// capacity frees nothing and the engine finds no one; an edit without a capacity cannot free a
+// seat, so it does not run the engine at all (it would only ever find state another writer left,
+// and must not promote in other clubs under this admin's name). After the round closed the engine
+// promotes nobody by itself (DB clock). Promote failures are not caught below: a CHECK there is
+// a bug, not a capacity the admin chose.
+//
+// The answer is the club as it is after the promotions, read again: a cascade can move holders of
+// this very club out as well as waiters in, so its count cannot be derived from the promotions.
 export const updateClub = async (
   db: pg.PoolClient,
-  id: number,
-  { name, description, capacity }: UpdateClubRequest,
-): Promise<AdminClub> => {
-  if ((await lockRoundOfClub(db, id)) === undefined) {
-    throw new AppError(ERROR_CODES.notFound, 'Club not found');
-  }
-  let rows: ClubRow[];
+  { clubId, changes, actorId }: { clubId: number; changes: UpdateClubRequest; actorId: number },
+): Promise<{ club: AdminClub; promotions: Promotion[] }> => {
+  const roundId = await lockRoundOfClub(db, clubId);
+  if (roundId === undefined) throw new AppError(ERROR_CODES.notFound, 'Club not found');
+  const { name, description, capacity } = changes;
   try {
-    ({ rows } = await db.query<ClubRow>(
-      `WITH updated AS (
-         UPDATE clubs
-         SET name = COALESCE($2::text, name),
-             description = COALESCE($3::text, description),
-             capacity = COALESCE($4::int, capacity)
-         WHERE id = $1
-         RETURNING ${CLUB_COLUMNS}
-       )
-       ${selectWithAdvisors('updated')}`,
-      [id, name ?? null, description ?? null, capacity ?? null],
-    ));
+    await db.query(
+      `UPDATE clubs
+       SET name = COALESCE($2::text, name),
+           description = COALESCE($3::text, description),
+           capacity = COALESCE($4::int, capacity)
+       WHERE id = $1`,
+      [clubId, name ?? null, description ?? null, capacity ?? null],
+    );
   } catch (error) {
     if (isPgError(error, PG_ERROR_CODES.checkViolation, REGISTERED_WITHIN_CAPACITY_CHECK)) {
       throw new AppError(ERROR_CODES.capacityBelowRegistered);
@@ -141,7 +146,12 @@ export const updateClub = async (
     }
     throw error;
   }
+  const promotions = capacity === undefined ? [] : await promoteWaitlist(db, { roundId, actorId });
+  const { rows } = await db.query<ClubRow>(selectWithAdvisors('clubs', 'WHERE c.id = $1'), [
+    clubId,
+  ]);
   const row = rows[0];
-  if (!row) throw new AppError(ERROR_CODES.notFound, 'Club not found');
-  return toClub(row);
+  // The lock found the club and the app cannot delete clubs, so this is a broken invariant.
+  if (!row) throw new Error('Club vanished under its round lock');
+  return { club: toClub(row), promotions };
 };

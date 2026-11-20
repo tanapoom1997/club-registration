@@ -107,32 +107,59 @@ const findUsers = async (db: Queryable, loginIds: readonly string[]) => {
   return new Map(rows.map((row) => [row.login_id, toExistingUser(row)]));
 };
 
-type HeldSeat = { grade: number; term: string };
+// What ties a student to a round: a seat, or a waitlist entry (which the promote engine may turn
+// into a seat while the round is open). Either one stops a grade change the same way.
+type HoldKind = 'seat' | 'waitlist';
 
-// Seats that stop a student from changing grade: every registration in a round of this term, and
-// every registration in a round of another term that has not closed yet by the DB clock (open or
-// upcoming). A seat in a closed round of another term is history (students move up a grade each
-// year), not a reason to refuse. Per student, this term's seats come first, then the rest by
-// closing time, so the error names the most relevant one.
+type HeldSeat = { grade: number; term: string; kind: HoldKind };
+
+// Seats and waitlist entries that stop a student from changing grade: every one in a round of
+// this term, and every one in a round of another term that has not closed yet by the DB clock
+// (open or upcoming). One in a closed round of another term is history (students move up a grade
+// each year; a closed round promotes nobody), not a reason to refuse. Per student, this term's
+// come first, then the rest by closing time, and within a round a seat before an entry, so the
+// error names the most relevant one.
 //
 // The commit holds the round lock of every round this can return (lockRoundsForImport took them
-// by an earlier statement_timestamp(), and FOR SHARE keeps every window still), so no seat that
-// matters can land between this read and the grade update. The preview reads the same from its
-// snapshot without any lock.
+// by an earlier statement_timestamp(), and FOR SHARE keeps every window still), and seats and
+// entries are written only under their round's lock, so none that matters can land between this
+// read and the grade update. The preview reads the same from its snapshot without any lock.
 const findHeldSeats = async (db: Queryable, term: string, studentIds: readonly number[]) => {
-  const { rows } = await db.query<{ student_id: number; grade: number; term: string }>(
-    `SELECT r.student_id, ro.grade, ro.term
-     FROM registrations r
-     JOIN rounds ro ON ro.id = r.round_id
-     WHERE r.student_id = ANY($2::int[])
-       AND (ro.term = $1 OR ro.closes_at > statement_timestamp())
-     ORDER BY ro.term = $1 DESC, ro.closes_at, ro.id`,
+  const { rows } = await db.query<{
+    student_id: number;
+    grade: number;
+    term: string;
+    kind: HoldKind;
+  }>(
+    `SELECT h.student_id, ro.grade, ro.term, h.kind
+     FROM (
+       SELECT r.student_id, r.round_id, 'seat' AS kind FROM registrations r
+       WHERE r.student_id = ANY($2::int[])
+       UNION ALL
+       SELECT w.student_id, w.round_id, 'waitlist' FROM waitlist_entries w
+       WHERE w.student_id = ANY($2::int[])
+     ) h
+     JOIN rounds ro ON ro.id = h.round_id
+     WHERE ro.term = $1 OR ro.closes_at > statement_timestamp()
+     ORDER BY ro.term = $1 DESC, ro.closes_at, ro.id, h.kind = 'seat' DESC`,
     [term, studentIds],
   );
-  return rows.reduce((seats, { student_id: studentId, grade, term: seatTerm }) => {
-    seats.set(studentId, [...(seats.get(studentId) ?? []), { grade, term: seatTerm }]);
+  return rows.reduce((seats, { student_id: studentId, grade, term: seatTerm, kind }) => {
+    seats.set(studentId, [...(seats.get(studentId) ?? []), { grade, term: seatTerm, kind }]);
     return seats;
   }, new Map<number, HeldSeat[]>());
+};
+
+// The row's error for a held seat or entry: this term's or another term's round still to close.
+const gradeChangeMessage = (term: string, { grade, term: heldTerm, kind }: HeldSeat): string => {
+  if (kind === 'seat') {
+    return heldTerm === term
+      ? `นักเรียนลงทะเบียนชุมนุมของ ม.${grade} ในภาคเรียน ${term} แล้ว จึงเปลี่ยนชั้นไม่ได้`
+      : `นักเรียนมีชุมนุมในรอบ ม.${grade} ของภาคเรียน ${heldTerm} ที่ยังไม่ปิด จึงเปลี่ยนชั้นไม่ได้ ให้ปิดรอบนั้นก่อนแล้วนำเข้าใหม่`;
+  }
+  return heldTerm === term
+    ? `นักเรียนอยู่ในรายชื่อรอชุมนุมของ ม.${grade} ในภาคเรียน ${term} จึงเปลี่ยนชั้นไม่ได้`
+    : `นักเรียนอยู่ในรายชื่อรอในรอบ ม.${grade} ของภาคเรียน ${heldTerm} ที่ยังไม่ปิด จึงเปลี่ยนชั้นไม่ได้ ให้ปิดรอบนั้นก่อนแล้วนำเข้าใหม่`;
 };
 
 const findRounds = async (db: Queryable, term: string) => {
@@ -239,8 +266,9 @@ const planStudents = async (db: Queryable, term: string, rows: readonly StudentR
       });
       continue;
     }
-    // Moving a student out of the grade they hold a seat in would leave a registration in a round
-    // they no longer belong to; in a round still to close, one they could no longer see or cancel.
+    // Moving a student out of the grade they hold a seat (or wait) in would leave a registration or
+    // a waitlist entry in a round they no longer belong to; in a round still to close, one they
+    // could no longer see, cancel or leave, and an entry the promote engine would skip.
     const currentGrade = user.profile?.grade;
     const seat =
       currentGrade === undefined || currentGrade === row.grade
@@ -251,10 +279,7 @@ const planStudents = async (db: Queryable, term: string, rows: readonly StudentR
         sheet: 'students',
         row: row.row,
         column: column.grade,
-        message:
-          seat.term === term
-            ? `นักเรียนลงทะเบียนชุมนุมของ ม.${seat.grade} ในภาคเรียน ${term} แล้ว จึงเปลี่ยนชั้นไม่ได้`
-            : `นักเรียนมีชุมนุมในรอบ ม.${seat.grade} ของภาคเรียน ${seat.term} ที่ยังไม่ปิด จึงเปลี่ยนชั้นไม่ได้ ให้ปิดรอบนั้นก่อนแล้วนำเข้าใหม่`,
+        message: gradeChangeMessage(term, seat),
       });
       continue;
     }

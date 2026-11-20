@@ -8,6 +8,8 @@ import type { ParsedImport } from '../import/parse.js';
 import { planImport } from './import-plan.js';
 import type { ImportPlan } from './import-plan.js';
 import { lockImport, lockRoundsForImport } from './round-lock.js';
+import { promoteWaitlist } from './waitlist-promote.js';
+import type { Promotion } from './waitlist-promote.js';
 
 // Every import commit takes the import lock (lockImport) before it reads anything, so commits run
 // one at a time and each plans against what the previous one committed: two racing uploads of the
@@ -135,35 +137,68 @@ export const applyImportPlan = async (db: Queryable, plan: ImportPlan): Promise<
   }
 };
 
-export type CommitImportResult = { status: 'invalid' | 'committed'; plan: ImportPlan };
+// A promotion made by the import commit, with the round it happened in.
+export type ImportPromotion = Promotion & { roundId: number };
+
+export type CommitImportResult = {
+  status: 'invalid' | 'committed';
+  plan: ImportPlan;
+  // Waiters moved up by the commit, round by round in ascending id; empty when invalid.
+  promotions: ImportPromotion[];
+};
+
+// Runs the promote engine (waitlist-promote.ts) in every round the commit locked, in the order it
+// locked them (ascending id), as the last writes of the transaction. A capacity the file raised in
+// an open round frees seats, and the waiters for them move up here, with the admin who committed
+// as the actor. No lock is taken: the engine takes none of its own, and every round it runs in is
+// one whose lock this transaction already holds (round-lock.ts has why that adds no wait). The
+// engine skips a round that is not open by the DB clock (upcoming or closed) by itself, and in a
+// round whose clubs the file did not touch it normally finds no one (every other in-round writer
+// promotes before it commits), so running it in all of them costs one indexed statement each. Outside applyImportPlan's catch on purpose: a constraint failing in the engine is a bug,
+// not data that moved under the plan, and must not be answered as import_conflict.
+const promoteLockedRounds = async (
+  db: pg.PoolClient,
+  roundIds: readonly number[],
+  actorId: number,
+): Promise<ImportPromotion[]> => {
+  const promotions: ImportPromotion[] = [];
+  for (const roundId of roundIds) {
+    const promoted = await promoteWaitlist(db, { roundId, actorId });
+    promotions.push(...promoted.map((promotion) => ({ ...promotion, roundId })));
+  }
+  return promotions;
+};
 
 // Parsing happens before this (it is pure and CPU-bound, so it does not hold the lock); the plan
 // is rebuilt here, under the locks, and nothing from the preview is trusted.
 //
 // Round locks (CLAUDE.md rule 3): the import writes into the term's rounds (club capacity, and a
-// student's grade decides which round they may hold a seat in), so before planning reads anything
-// it also takes the advisory lock of every round of the term and of every round of another term
-// that has not closed yet (lockRoundsForImport; round-lock.ts explains the set, the order and why
-// it cannot deadlock with register, cancel or the club edit). Under READ COMMITTED, without them a
-// student could register and commit between planImport reading their registrations and
-// upsertStudents moving them to another grade, leaving a seat in a round of a grade they are no
-// longer in. With them, a register in one of those rounds either commits before planning (and
-// the grade change is refused) or waits until this commit (and then finds the student in the new
-// grade: 404). Seats in closed rounds of other terms are history and do not stop a grade change.
+// student's grade decides which round they may hold a seat or a waitlist entry in), so before
+// planning reads anything it also takes the advisory lock of every round of the term and of every
+// round of another term that has not closed yet (lockRoundsForImport; round-lock.ts explains the
+// set, the order and why it cannot deadlock with register, cancel, the waitlist or the club
+// edit). Under READ COMMITTED, without them a student could register (or join a waitlist) and
+// commit between planImport reading their registrations and entries and upsertStudents moving
+// them to another grade, leaving a seat or an entry in a round of a grade they are no longer in.
+// With them, a register or join in one of those rounds either commits before planning (and the
+// grade change is refused) or waits until this commit (and then finds the student in the new
+// grade: 404). Seats and entries in closed rounds of other terms are history and do not stop a
+// grade change. The same locks cover the promotions at the end (promoteLockedRounds).
 // The dry run (preview) takes none of these locks: it reads one READ ONLY snapshot and writes
-// nothing, so it never makes registrations wait; it reports the same errors from that snapshot.
+// nothing, so it never makes registrations wait; it reports the same errors from that snapshot
+// and promotes nobody.
 export const commitImport = async (
   pool: pg.Pool,
-  term: string,
-  parsed: ParsedImport,
+  { term, parsed, actorId }: { term: string; parsed: ParsedImport; actorId: number },
 ): Promise<CommitImportResult> =>
   await withTransaction(pool, async (client) => {
     await lockImport(client);
-    await lockRoundsForImport(client, term);
+    const roundIds = await lockRoundsForImport(client, term);
     const plan = await planImport(client, term, parsed);
     // One error is enough to write nothing. Only reads have run, so committing releases the
     // lock exactly as a rollback would.
-    if (plan.errors.length > 0) return { status: 'invalid', plan };
+    if (plan.errors.length > 0) return { status: 'invalid', plan, promotions: [] };
     await applyImportPlan(client, plan);
-    return { status: 'committed', plan };
+    const promotions = await promoteLockedRounds(client, roundIds, actorId);
+    return { status: 'committed', plan, promotions };
   });

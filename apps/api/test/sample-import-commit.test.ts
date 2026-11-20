@@ -40,6 +40,8 @@ describe('fictional sample import against a database with the demo accounts', ()
   let pool: Pool;
   let parsed: ParsedImport;
   let term: string;
+  // The demo admin commits, as after `pnpm dev`.
+  let adminId: number;
 
   const demoRows = async () => {
     const { rows } = await pool.query<DemoRow>(
@@ -72,6 +74,10 @@ describe('fictional sample import against a database with the demo accounts', ()
   beforeEach(async () => {
     await truncateAsOwner(container, ['rounds', 'users']);
     await seedDemoAccounts(pool);
+    const { rows } = await pool.query<{ id: number }>(
+      "SELECT id FROM users WHERE login_id = 'demo-admin'",
+    );
+    adminId = rows[0]!.id;
     term = uniqueTerm();
     await createRound(pool, term, 1);
     await createRound(pool, term, 2);
@@ -90,7 +96,7 @@ describe('fictional sample import against a database with the demo accounts', ()
   });
 
   it('commits', async () => {
-    const result = await commitImport(pool, term, parsed);
+    const result = await commitImport(pool, { term, parsed, actorId: adminId });
 
     expect(result.status).toBe('committed');
     const { rows } = await pool.query<{ students: number; clubs: number; advisors: number }>(
@@ -104,15 +110,15 @@ describe('fictional sample import against a database with the demo accounts', ()
   it('leaves every demo account exactly as it was', async () => {
     const before = await demoRows();
 
-    await commitImport(pool, term, parsed);
+    await commitImport(pool, { term, parsed, actorId: adminId });
 
     expect(await demoRows()).toEqual(before);
   });
 
   it('reports everything unchanged when the same file is imported again', async () => {
-    await commitImport(pool, term, parsed);
+    await commitImport(pool, { term, parsed, actorId: adminId });
 
-    const again = await commitImport(pool, term, parsed);
+    const again = await commitImport(pool, { term, parsed, actorId: adminId });
 
     expect(again.status).toBe('committed');
     expect(summary(again.plan, term)).toMatchObject({

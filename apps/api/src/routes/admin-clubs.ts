@@ -7,17 +7,21 @@ import {
 } from '@club-registration/shared';
 import type { FastifyPluginAsyncZod } from 'fastify-type-provider-zod';
 import type pg from 'pg';
+import { requireAuthUser } from '../auth/session.js';
 import type { AuthGuard } from '../auth/session.js';
 import { withTransaction } from '../db.js';
 import { ADMIN_ACTIONS, logAdminChange, sentFields } from '../http/audit-log.js';
 import { listRoundClubs, updateClub } from '../services/clubs.js';
 
-// Same convention as the round routes: a club edit is not a registration write, so it takes no
-// idempotency_key and writes no registration_events row (which needs a student). A retried PATCH
-// sets the same values again. It is an in-round write, though, so it runs in a transaction that
-// takes the round's advisory lock first (updateClub). Responses carry advisors' contact details, so
-// the only log line is logAdminChange's, with ids, field names and the capacity: never a club's
-// text or an advisor.
+// Same convention as the round routes: a club edit takes no idempotency_key and writes no event of
+// its own (registration_events rows need a student). A retried PATCH sets the same values again.
+// It is an in-round write, though, so it runs in a transaction that takes the round's advisory
+// lock first (updateClub), and an edit that raises capacity promotes waiters in that same
+// transaction: those are waitlist_promote events with this admin as actor and no key, as every
+// promotion has. A retry still has the same effect, since the seats it freed are already taken
+// and nothing is left to promote. Responses carry advisors' contact details, so the only log line
+// is logAdminChange's, with ids, field names, the capacity and the promotions (count and student
+// ids): never a club's text, an advisor or a student's name.
 export const adminClubRoutes =
   ({ pool, guard }: { pool: pg.Pool; guard: AuthGuard }): FastifyPluginAsyncZod =>
   // eslint-disable-next-line @typescript-eslint/require-await -- Fastify plugins must be async
@@ -43,15 +47,21 @@ export const adminClubRoutes =
         },
       },
       async (request) => {
-        const club = await withTransaction(
+        const actorId = requireAuthUser(request).id;
+        const { club, promotions } = await withTransaction(
           pool,
-          async (client) => await updateClub(client, request.params.id, request.body),
+          async (client) =>
+            await updateClub(client, { clubId: request.params.id, changes: request.body, actorId }),
         );
         logAdminChange(request, ADMIN_ACTIONS.clubUpdate, {
           clubId: club.id,
           roundId: club.roundId,
           changed: sentFields(request.body),
           capacity: club.capacity,
+          promoted: promotions.length,
+          ...(promotions.length > 0
+            ? { promotedStudentIds: promotions.map(({ studentId }) => studentId) }
+            : {}),
         });
         return { club };
       },

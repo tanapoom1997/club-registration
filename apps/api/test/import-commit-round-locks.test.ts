@@ -9,6 +9,7 @@ import { createPool, withTransaction } from '../src/db.js';
 import { parseImportWorkbook } from '../src/import/parse.js';
 import { commitImport } from '../src/services/import-commit.js';
 import { registerForClub } from '../src/services/registrations.js';
+import { joinWaitlist } from '../src/services/waitlist.js';
 import { lockRound, lockRoundsForImport } from '../src/services/round-lock.js';
 import { buildTestApp, createTestUser } from './support/app.js';
 import {
@@ -27,6 +28,7 @@ import {
   truncateAsOwner,
 } from './support/postgres.js';
 import {
+  createAdminId,
   createStudents,
   eventsOf,
   moveWindow,
@@ -60,6 +62,8 @@ const HOUR = 3_600;
 describe('import commit and the round locks', () => {
   let container: StartedPostgreSqlContainer;
   let pool: Pool;
+  // The admin who commits, and so the actor of any promotion the commit makes.
+  let adminId: number;
 
   // Window edges in seconds from now by the DB clock, the clock registration decides by.
   const createRoundInTerm = async (
@@ -135,6 +139,7 @@ describe('import commit and the round locks', () => {
   beforeEach(async () => {
     // A student registers in their grade's selected round, so each test starts with no rounds.
     await truncateAsOwner(container, ['rounds']);
+    adminId = await createAdminId(pool);
   });
 
   afterEach(async () => {
@@ -162,7 +167,7 @@ describe('import commit and the round locks', () => {
       // The real service, not committed yet: it holds the round lock and the seat.
       await registerForClub(registrar, { studentId: student.id, clubId, idempotencyKey: newKey() });
 
-      const importing = settle(commitImport(pool, term, parsed));
+      const importing = settle(commitImport(pool, { term, parsed, actorId: adminId }));
       const waiter = await waitForLockWaiter(pool, ({ pid }) => pid !== registrarPid);
       await registrar.query('COMMIT');
       finished = true;
@@ -212,7 +217,7 @@ describe('import commit and the round locks', () => {
       const blockerPid = await backendPid(blocker);
       await blocker.query('SELECT 1 FROM users WHERE id = $1 FOR UPDATE', [other.id]);
 
-      const importing = settle(commitImport(pool, term, parsed));
+      const importing = settle(commitImport(pool, { term, parsed, actorId: adminId }));
       const importWaiter = await waitForLockWaiter(pool, ({ pid }) => pid !== blockerPid);
       expect(importWaiter.query).toContain('INSERT INTO users');
       const registering = settle(
@@ -285,7 +290,7 @@ describe('import commit and the round locks', () => {
       await settle(seatStudent(pool, id, clubId));
     const [firstHalf, imported, secondHalf] = await Promise.all([
       Promise.all(registrations.slice(0, half).map(seat)),
-      settle(commitImport(pool, term, parsed)),
+      settle(commitImport(pool, { term, parsed, actorId: adminId })),
       Promise.all(registrations.slice(half).map(seat)),
     ]);
     const results = [...firstHalf, ...secondHalf];
@@ -384,7 +389,7 @@ describe('import commit and the round locks', () => {
           idempotencyKey: newKey(),
         });
 
-        const importing = settle(commitImport(pool, term, parsed));
+        const importing = settle(commitImport(pool, { term, parsed, actorId: adminId }));
         const waiter = await waitForLockWaiter(pool, ({ pid }) => pid !== registrarPid);
         await registrar.query('COMMIT');
         finished = true;
@@ -420,7 +425,7 @@ describe('import commit and the round locks', () => {
         students: [studentRow({ loginId: student.loginId, grade: 2 })],
       });
 
-      const result = await commitImport(pool, uniqueTerm(), parsed);
+      const result = await commitImport(pool, { term: uniqueTerm(), parsed, actorId: adminId });
 
       expect(result.status).toBe('invalid');
       expect(result.plan.errors).toEqual([
@@ -437,7 +442,7 @@ describe('import commit and the round locks', () => {
         students: [studentRow({ loginId: student.loginId, grade: 2 })],
       });
 
-      const result = await commitImport(pool, uniqueTerm(), parsed);
+      const result = await commitImport(pool, { term: uniqueTerm(), parsed, actorId: adminId });
 
       // A seat in a closed round is history: the student moves up and the seat stays on record.
       expect(result.status).toBe('committed');
@@ -459,7 +464,9 @@ describe('import commit and the round locks', () => {
         await blocker.query('BEGIN');
         const blockerPid = await backendPid(blocker);
         await blocker.query('SELECT 1 FROM users WHERE id = $1 FOR UPDATE', [other.id]);
-        const importing = settle(commitImport(pool, uniqueTerm(), parsed));
+        const importing = settle(
+          commitImport(pool, { term: uniqueTerm(), parsed, actorId: adminId }),
+        );
         const importWaiter = await waitForLockWaiter(pool, ({ pid }) => pid !== blockerPid);
         expect(importWaiter.query).toContain('INSERT INTO users');
 
@@ -496,7 +503,9 @@ describe('import commit and the round locks', () => {
         const registrarPid = await backendPid(registrar);
         // The registration's first step only: it holds the round lock, nothing else yet.
         await lockRound(registrar, roundId);
-        const importing = settle(commitImport(pool, uniqueTerm(), parsed));
+        const importing = settle(
+          commitImport(pool, { term: uniqueTerm(), parsed, actorId: adminId }),
+        );
         const importWaiter = await waitForLockWaiter(pool, ({ pid }) => pid !== registrarPid);
         expect(importWaiter.waitEvent).toBe('advisory');
         // An admin edit of that round queues behind the import's FOR SHARE on the rounds row.
@@ -525,6 +534,151 @@ describe('import commit and the round locks', () => {
       } finally {
         if (!finished) await registrar.query('ROLLBACK');
         registrar.release();
+      }
+    });
+  });
+
+  // A waitlist entry stops a grade change exactly as a seat does (docs/excel.md): in a round of the
+  // term, or in an unclosed round of another term. Entries are joined through the real service,
+  // so the event log stays in step.
+  describe('waitlist entries', () => {
+    const UPCOMING = Object.freeze({ opensInSeconds: HOUR, closesInSeconds: 2 * HOUR });
+    const CLOSED = Object.freeze({ opensInSeconds: -2 * HOUR, closesInSeconds: -HOUR });
+
+    // An open grade-1 round of `term` with a full club; the student (grade 1) is not on it yet.
+    const fullClubIn = async (term: string) => {
+      const roundId = await createOpenRoundInTerm(term, 1);
+      const clubId = await createClub(pool, roundId, uniqueCode(), { capacity: 1 });
+      const [holder] = await createStudents(pool, 1);
+      await seatStudent(pool, holder!, clubId);
+      const student = await createStudent(pool, { grade: 1 });
+      return { roundId, clubId, student };
+    };
+
+    const joinFull = async (studentId: number, clubId: number) =>
+      await withTransaction(
+        pool,
+        async (client) =>
+          await joinWaitlist(client, { studentId, clubId, idempotencyKey: newKey() }),
+      );
+
+    const waitingIn = async (term: string) => {
+      const club = await fullClubIn(term);
+      await joinFull(club.student.id, club.clubId);
+      return club;
+    };
+
+    const entriesOf = async (studentId: number) => {
+      const { rows } = await pool.query<{ club_id: number }>(
+        'SELECT club_id FROM waitlist_entries WHERE student_id = $1',
+        [studentId],
+      );
+      return rows.map(({ club_id: clubId }) => clubId);
+    };
+
+    const toGrade2 = async (loginId: string) =>
+      await parse({ students: [studentRow({ loginId, grade: 2 })] });
+
+    const otherTermMessage = (earlierTerm: string) =>
+      `นักเรียนอยู่ในรายชื่อรอในรอบ ม.1 ของภาคเรียน ${earlierTerm} ที่ยังไม่ปิด จึงเปลี่ยนชั้นไม่ได้ ให้ปิดรอบนั้นก่อนแล้วนำเข้าใหม่`;
+
+    it('refuses the grade change of a student waiting in an open round of the term', async () => {
+      const term = uniqueTerm();
+      const { clubId, student } = await waitingIn(term);
+      await createOpenRoundInTerm(term, 2);
+
+      const result = await commitImport(pool, {
+        term,
+        parsed: await toGrade2(student.loginId),
+        actorId: adminId,
+      });
+
+      expect(result.status).toBe('invalid');
+      expect(result.plan.errors).toEqual([
+        {
+          sheet: 'students',
+          row: 2,
+          column: IMPORT_COLUMNS.students.grade,
+          message: `นักเรียนอยู่ในรายชื่อรอชุมนุมของ ม.1 ในภาคเรียน ${term} จึงเปลี่ยนชั้นไม่ได้`,
+        },
+      ]);
+      expect(await gradeOf(student.id)).toBe(1);
+      expect(await entriesOf(student.id)).toEqual([clubId]);
+    });
+
+    it.each([
+      ['open', undefined],
+      ['upcoming', UPCOMING],
+    ])(
+      "refuses the grade change of a student waiting in another term's %s round",
+      async (_label, window) => {
+        const earlierTerm = uniqueTerm();
+        const { roundId, clubId, student } = await waitingIn(earlierTerm);
+        if (window) await moveWindow(pool, roundId, window);
+
+        const result = await commitImport(pool, {
+          term: uniqueTerm(),
+          parsed: await toGrade2(student.loginId),
+          actorId: adminId,
+        });
+
+        expect(result.status).toBe('invalid');
+        expect(result.plan.errors).toEqual([
+          expect.objectContaining({ row: 2, message: otherTermMessage(earlierTerm) }),
+        ]);
+        expect(await gradeOf(student.id)).toBe(1);
+        expect(await entriesOf(student.id)).toEqual([clubId]);
+      },
+    );
+
+    it("moves a student whose entry is in another term's closed round, keeping the entry", async () => {
+      const { roundId, clubId, student } = await waitingIn(uniqueTerm());
+      await moveWindow(pool, roundId, CLOSED);
+
+      const result = await commitImport(pool, {
+        term: uniqueTerm(),
+        parsed: await toGrade2(student.loginId),
+        actorId: adminId,
+      });
+
+      expect(result.status).toBe('committed');
+      expect(await gradeOf(student.id)).toBe(2);
+      expect(await entriesOf(student.id)).toEqual([clubId]);
+    });
+
+    it("refuses the grade change of a student whose join in another term's round commits while it waits", async () => {
+      const earlierTerm = uniqueTerm();
+      const { clubId, student } = await fullClubIn(earlierTerm);
+      const parsed = await toGrade2(student.loginId);
+      const joiner = await pool.connect();
+      let finished = false;
+      try {
+        await joiner.query('BEGIN');
+        const joinerPid = await backendPid(joiner);
+        // The real service, not committed yet: it holds that round's lock and the new entry.
+        await joinWaitlist(joiner, { studentId: student.id, clubId, idempotencyKey: newKey() });
+
+        const importing = settle(
+          commitImport(pool, { term: uniqueTerm(), parsed, actorId: adminId }),
+        );
+        const waiter = await waitForLockWaiter(pool, ({ pid }) => pid !== joinerPid);
+        await joiner.query('COMMIT');
+        finished = true;
+        const result = await importing;
+
+        expect(waiter).toMatchObject({
+          waitEvent: 'advisory',
+          query: 'SELECT pg_advisory_xact_lock($1::bigint)',
+        });
+        expect(result.ok && result.value.status).toBe('invalid');
+        expect(result.ok && result.value.plan.errors).toEqual([
+          expect.objectContaining({ row: 2, message: otherTermMessage(earlierTerm) }),
+        ]);
+        expect(await gradeOf(student.id)).toBe(1);
+        expect(await entriesOf(student.id)).toEqual([clubId]);
+      } finally {
+        if (!finished) await joiner.query('ROLLBACK');
+        joiner.release();
       }
     });
   });

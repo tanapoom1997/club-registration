@@ -44,6 +44,20 @@ export const createStudentId = async (pool: Pool, grade = 1): Promise<number> =>
   return id;
 };
 
+// An admin who can hold a session (signed directly with sessionCookie, never logged in) and be
+// the actor of what an admin edit or import commit writes.
+export const createAdminId = async (pool: Pool): Promise<number> => {
+  const { rows } = await pool.query<{ id: number }>(
+    `INSERT INTO users (login_id, full_name, role, password_hash, must_change_password)
+     VALUES ($1, 'ผู้ดูแลสมมติ', 'admin', 'not-a-real-hash', false)
+     RETURNING id`,
+    [`admin-${uniqueStudentId()}`],
+  );
+  const id = rows[0]?.id;
+  if (id === undefined) throw new Error('Admin insert returned no row');
+  return id;
+};
+
 // A session cookie value as the login route would issue it (session_version 0 = never revoked).
 // The guard still checks it against the users row on every request.
 export const sessionCookie = (app: FastifyInstance, userId: number, role: Role = 'student') =>
@@ -102,10 +116,11 @@ export const seatStudent = async (pool: Pool, studentId: number, clubId: number)
   );
 
 // A waitlist entry with its waitlist_join event, written straight to the tables because the API
-// only lets a student join a club that is full: this builds the state no request can, a free seat
-// with a queue in an open round (which the admin club edit can still leave until it promotes).
-// That state breaks the open-round invariant on purpose, so a test that uses it ends by having
-// the student leave through the API, which brings the log and the tables back in step.
+// only lets a student join a club that is full: this builds the state no request leaves behind, a
+// free seat with a queue in an open round (every writer that frees a seat promotes before it
+// commits; only reopening a closed round could bring it back, README open items). That state
+// breaks the open-round invariant on purpose, so a test that uses it ends by having the student
+// leave through the API, or promotes them, which brings the log and the tables back in step.
 export const addWaitingDirectly = async (
   pool: Pool,
   { roundId, clubId, studentId }: { roundId: number; clubId: number; studentId: number },
@@ -276,9 +291,9 @@ const INVARIANTS: Readonly<Record<string, string>> = Object.freeze({
       ORDER BY e.id DESC LIMIT 1
     ) latest ON true
     WHERE latest.club_id IS DISTINCT FROM r.club_id OR latest.club_delta IS DISTINCT FROM 1`,
-  // A promotion is no request of its own: it has no key, and its actor is whoever freed the seat
-  // (here always a student; an admin once PATCH and import promote). Everything else is a student's
-  // own keyed request.
+  // A promotion is no request of its own: it has no key, and its actor is whoever freed the seat:
+  // the student who cancelled or changed, or the admin whose club edit or import commit raised a
+  // capacity. Everything else is a student's own keyed request.
   'students act for themselves with a key, and only a promotion has none': `
     SELECT id, event_type, actor_id, student_id, idempotency_key FROM registration_events
     WHERE (event_type <> 'waitlist_promote'
@@ -289,8 +304,9 @@ const INVARIANTS: Readonly<Record<string, string>> = Object.freeze({
     FROM waitlist_entries w
     JOIN registrations r
       ON r.round_id = w.round_id AND r.student_id = w.student_id AND r.club_id = w.club_id`,
-  // The promote engine runs whenever a seat is freed, so while the round is open a free seat and a
-  // queue for it never outlive a transaction. After closing, nobody is promoted any more.
+  // The promote engine runs whenever a seat is freed (cancel, change, a club edit or an import
+  // commit that raises a capacity), so while the round is open a free seat and a queue for it
+  // never outlive a transaction. After closing, nobody is promoted any more.
   'no club of an open round has a free seat and a waitlist': `
     SELECT c.id, c.registered, c.capacity
     FROM clubs c
