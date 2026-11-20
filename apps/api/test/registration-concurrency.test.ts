@@ -14,7 +14,6 @@ import { buildTestApp } from './support/app.js';
 import { createClub, uniqueCode } from './support/import-db.js';
 import {
   appConnectionUri,
-  endPoolFully,
   startMigratedPostgres,
   stopPostgres,
   truncateAsOwner,
@@ -427,20 +426,18 @@ describe('registration under concurrency', () => {
       expect(await changeEventCount(held[0]!)).toBe(1);
     });
   });
-  // The waitlist under load (README Phase 2 "Test ที่ต้องมี"). In this file rather than its own so
-  // its 500-student test never runs at the same time as the one above: each file runs in its own
-  // worker, and two of them on one machine starve each other's pool. The invariant check after
-  // each test includes "no free seat with a queue in an open round" and "the waitlist events
-  // replay to the entries".
-  describe('waitlist', () => {
-    let waitPool: Pool;
-    let waitApp: Awaited<ReturnType<typeof buildTestApp>>;
 
+  // The waitlist under load (README Phase 2 "Test ที่ต้องมี"), on this file's pool with its long
+  // connection wait (beforeAll above). In this file rather than its own so its 500-student test
+  // never runs at the same time as the one above: each file runs in its own worker. The invariant
+  // check after each test includes "no free seat with a queue in an open round" and "the waitlist
+  // events replay to the entries".
+  describe('waitlist', () => {
     const post = async (url: string, studentId: number, payload: Record<string, unknown>) =>
-      await waitApp.inject({
+      await app.inject({
         method: 'POST',
         url,
-        cookies: { [SESSION_COOKIE]: sessionCookie(waitApp, studentId) },
+        cookies: { [SESSION_COOKIE]: sessionCookie(app, studentId) },
         payload,
       });
 
@@ -470,10 +467,10 @@ describe('registration under concurrency', () => {
     };
 
     const positionOf = async (studentId: number) => {
-      const response = await waitApp.inject({
+      const response = await app.inject({
         method: 'GET',
         url: '/api/student/round',
-        cookies: { [SESSION_COOKIE]: sessionCookie(waitApp, studentId) },
+        cookies: { [SESSION_COOKIE]: sessionCookie(app, studentId) },
       });
       return studentRoundResponseSchema.parse(response.json()).waitlist?.position;
     };
@@ -488,30 +485,6 @@ describe('registration under concurrency', () => {
     };
 
     const codesOf = (responses: InjectResponse[]) => countBy(responses);
-
-    beforeAll(() => {
-      // The production pool, except for how long a request may wait for a connection: the first
-      // test sends nearly 1,000 requests (500 registers, then 470 joins) through one round lock,
-      // one at a time, while other test files load the machine, and with the 5-second default the
-      // tail of that queue answers 500 before its turn (the limit README Phase 1 item 9 warns
-      // about, which the load test on the real host must settle). These tests check outcomes.
-      waitPool = createPool(appConnectionUri(container), {
-        ...DEFAULT_POOL_SETTINGS,
-        connectionTimeoutMs: 60_000,
-      });
-    });
-
-    afterAll(async () => {
-      await endPoolFully(waitPool);
-    });
-
-    beforeEach(async () => {
-      waitApp = await buildTestApp(waitPool);
-    });
-
-    afterEach(async () => {
-      await waitApp.close();
-    });
 
     // README Phase 2 required test 1.
     it('seats exactly capacity out of 500 students and queues every other one', async () => {
