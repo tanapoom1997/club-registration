@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { CAPACITY_MAX } from '../src/import.js';
+import { clubMemberRequestSchema } from '../src/club-members.js';
 import { updateClubRequestSchema } from '../src/clubs.js';
 import { exportQuerySchema } from '../src/export.js';
 import { idempotencyKeySchema } from '../src/idempotency.js';
@@ -232,5 +233,27 @@ describe('issueInitialPasswordsRequestSchema', () => {
     const withoutChoice = { grade: request.grade, idempotencyKey: request.idempotencyKey };
 
     expect(issueInitialPasswordsRequestSchema.safeParse(withoutChoice).success).toBe(false);
+  });
+});
+
+// The admin names the student by login ID; the round comes from the club and the club left from
+// the DB, so a body naming either is refused, never ignored.
+describe('clubMemberRequestSchema', () => {
+  it('accepts a login ID and a key, lower-casing the login ID as login does', () => {
+    expect(
+      clubMemberRequestSchema.safeParse({ loginId: ' Fictional01 ', idempotencyKey: KEY }),
+    ).toEqual({ success: true, data: { loginId: 'fictional01', idempotencyKey: KEY } });
+  });
+
+  it.each([
+    ['naming a student id', { loginId: 'fictional01', idempotencyKey: KEY, studentId: 7 }],
+    ['naming a round', { loginId: 'fictional01', idempotencyKey: KEY, roundId: 1 }],
+    ['naming the club left', { loginId: 'fictional01', idempotencyKey: KEY, fromClubId: 2 }],
+    ['without a key', { loginId: 'fictional01' }],
+    ['without a login ID', { idempotencyKey: KEY }],
+    ['with a login ID of other characters', { loginId: 'นักเรียน', idempotencyKey: KEY }],
+    ['with a numeric login ID', { loginId: 1001, idempotencyKey: KEY }],
+  ])('refuses a body %s', (_case, body) => {
+    expect(clubMemberRequestSchema.safeParse(body).success).toBe(false);
   });
 });

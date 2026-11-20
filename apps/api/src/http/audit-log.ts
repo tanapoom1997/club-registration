@@ -5,7 +5,9 @@ import { requireAuthUser } from '../auth/session.js';
 // registration_events, password issuance has password_issuances and the import logs its own line
 // (routes/admin-import.ts); round and club edits take no idempotency_key (README Phase 1) and
 // have no table, so without this line nothing would show which admin changed a window or a
-// capacity. Logged only after the change commits: a refused request changed nothing.
+// capacity. An admin seating or removing a student (routes/admin-club-members.ts) does write
+// registration_events; it logs here too so every admin change, and the promotions it caused, is
+// found with one grep. Logged only after the change commits: a refused request changed nothing.
 //
 // A log line, not a table: it lasts only as long as the container's log rotation keeps it
 // (compose.prod.yml), which covers investigating a registration day, not a long-term record.
@@ -15,6 +17,8 @@ export const ADMIN_ACTIONS = Object.freeze({
   roundUpdate: 'round.update',
   roundDelete: 'round.delete',
   clubUpdate: 'club.update',
+  clubMemberAssign: 'club.member_assign',
+  clubMemberRemove: 'club.member_remove',
 } as const);
 
 export type AdminAction = (typeof ADMIN_ACTIONS)[keyof typeof ADMIN_ACTIONS];

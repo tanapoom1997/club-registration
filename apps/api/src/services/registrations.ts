@@ -147,8 +147,9 @@ type EventInput = {
   idempotencyKey: string;
 };
 
-// The student is the actor: these are their own requests (admin_* events have an admin actor, and
-// a waitlist_promote the actor who freed the seat, with no key: waitlist-promote.ts).
+// The student is the actor: these are their own requests (admin_* events have an admin actor:
+// club-members.ts; a waitlist_promote the actor who freed the seat, with no key:
+// waitlist-promote.ts).
 export const insertEvent = async (
   db: pg.PoolClient,
   { roundId, studentId, clubId, fromClubId = null, eventType, idempotencyKey }: EventInput,
