@@ -107,8 +107,10 @@ describe('auth routes', () => {
   ])('renders the real student page at %s, not a placeholder', async (path, heading) => {
     mockApi({
       'GET /api/auth/me': () => Response.json({ user: STUDENT }),
-      'GET /api/student/clubs': () => Response.json({ round: null, registration: null, clubs: [] }),
-      'GET /api/student/round': () => Response.json({ round: null, registration: null }),
+      'GET /api/student/clubs': () =>
+        Response.json({ round: null, registration: null, waitlist: null, clubs: [] }),
+      'GET /api/student/round': () =>
+        Response.json({ round: null, registration: null, waitlist: null }),
     });
 
     renderAt(path);

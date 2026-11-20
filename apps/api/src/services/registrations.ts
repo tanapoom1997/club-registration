@@ -4,15 +4,20 @@ import type pg from 'pg';
 import { isPgError, PG_ERROR_CODES } from '../db.js';
 import { AppError } from '../errors.js';
 import { lockRound, lockRoundOfClub } from './round-lock.js';
+import { moveRegistration, releaseSeat } from './seats.js';
 import {
   findRegistration,
   findStudentGrade,
   roundSelectionOrder,
   selectStudentRound,
+  toRegistration,
 } from './student-round.js';
+import { promoteWaitlist } from './waitlist-promote.js';
+import type { Promotion } from './waitlist-promote.js';
 
 // A student registering for a club, cancelling it and changing it for another (README "จุดวิกฤต:
-// การจองที่นั่ง" and Phase 2).
+// การจองที่นั่ง" and Phase 2). The waitlist's join and leave (waitlist.ts) follow the same steps
+// and share the helpers exported here.
 //
 // Each function is one step of business logic that runs inside the caller's transaction (it takes
 // the transaction's client and never commits), so a route wraps it in withTransaction and the
@@ -34,6 +39,9 @@ import {
 //    inside [opens_at, closes_at). UNIQUE(round_id, student_id) keeps one club per round, and
 //    `UPDATE ... WHERE registered < capacity` together with the clubs CHECK keeps seats within
 //    capacity (CLAUDE.md rule 1). A failed step throws, which rolls back everything before it.
+// 4. A cancel or change that gave a seat back promotes the waitlist (waitlist-promote.ts) in the
+//    same transaction, after its own event, and answers with the student's registration as it is
+//    after the promotions: a cascade can promote the student who made the request.
 //
 // Clock: writes decide the window with the DB clock, statement_timestamp() of the writing
 // statement, which runs after the lock is held. A request that waited for the lock across
@@ -55,6 +63,11 @@ export const REGISTRATION_OUTCOMES = Object.freeze({
   cancelled: 'cancelled',
   // The seat moved from one club to another and an event was written.
   changed: 'changed',
+  // Waitlist (waitlist.ts): an entry was written, the student already waited for this very club
+  // (a retry with a new key: nothing written), or the entry was left.
+  waitlisted: 'waitlisted',
+  alreadyWaiting: 'already_waiting',
+  leftWaitlist: 'left_waitlist',
 } as const);
 
 export type RegistrationOutcome =
@@ -68,13 +81,17 @@ export type RegistrationResult = {
   fromClubId?: number;
   // The student's registration in the round after the request.
   registration: StudentRegistration | null;
+  // Students the request's freed seat promoted off a waitlist, in order (ids only, for the log).
+  promotions: Promotion[];
 };
 
-type EventType = 'register' | 'cancel' | 'change';
+// The event types a student's own request writes, always with its idempotency key.
+export type StudentEventType =
+  'register' | 'cancel' | 'change' | 'waitlist_join' | 'waitlist_leave';
 
-type PriorEvent = { event_type: string; round_id: number; club_id: number | null };
+export type PriorEvent = { event_type: string; round_id: number; club_id: number | null };
 
-const findPriorEvent = async (
+export const findPriorEvent = async (
   db: pg.PoolClient,
   studentId: number,
   idempotencyKey: string,
@@ -88,24 +105,35 @@ const findPriorEvent = async (
   return rows[0];
 };
 
-// Same request = same type and, for register and change, the same club. The answer is the
-// registration as it stands now in the round the first request acted on, so a client that retries
-// after the state moved on (e.g. a register replayed after a cancel) learns the truth instead of a stale copy.
+// Same request = same type and, for the requests that name a club (register, change, waitlist
+// join), the same club; a cancel or a waitlist leave names none. Anything else that reuses the key
+// is 409 idempotency_key_reused.
+export const assertSameRequest = (
+  prior: PriorEvent,
+  request: { eventType: StudentEventType; clubId: number | null },
+): void => {
+  const sameRequest =
+    prior.event_type === request.eventType &&
+    (request.clubId === null || prior.club_id === request.clubId);
+  if (!sameRequest) throw new AppError(ERROR_CODES.idempotencyKeyReused);
+};
+
+// The answer is the registration as it stands now in the round the first request acted on, so a
+// client that retries after the state moved on (e.g. a register replayed after a cancel) learns
+// the truth instead of a stale copy.
 const replayPriorEvent = async (
   db: pg.PoolClient,
   studentId: number,
   prior: PriorEvent,
-  request: { eventType: EventType; clubId: number | null },
+  request: { eventType: StudentEventType; clubId: number | null },
 ): Promise<RegistrationResult> => {
-  const sameRequest =
-    prior.event_type === request.eventType &&
-    (request.eventType === 'cancel' || prior.club_id === request.clubId);
-  if (!sameRequest) throw new AppError(ERROR_CODES.idempotencyKeyReused);
+  assertSameRequest(prior, request);
   return {
     outcome: REGISTRATION_OUTCOMES.replayed,
     roundId: prior.round_id,
     clubId: prior.club_id,
     registration: await findRegistration(db, prior.round_id, studentId),
+    promotions: [],
   };
 };
 
@@ -113,14 +141,15 @@ type EventInput = {
   roundId: number;
   studentId: number;
   clubId: number;
-  // The club a change left; null for every other event.
+  // The club a change left, or the waitlist a join gave up; null for every other event.
   fromClubId?: number | null;
-  eventType: EventType;
+  eventType: StudentEventType;
   idempotencyKey: string;
 };
 
-// The student is the actor: these are their own requests (admin_* events have an admin actor).
-const insertEvent = async (
+// The student is the actor: these are their own requests (admin_* events have an admin actor, and
+// a waitlist_promote the actor who freed the seat, with no key: waitlist-promote.ts).
+export const insertEvent = async (
   db: pg.PoolClient,
   { roundId, studentId, clubId, fromClubId = null, eventType, idempotencyKey }: EventInput,
 ): Promise<void> => {
@@ -144,13 +173,39 @@ const insertEvent = async (
 // this transaction. For an import of this round's term the round lock already orders the two
 // (the import commit holds every round lock of its term); this row lock also covers an import of
 // another term, which does not. Missing profile = 403, as on the reads.
-const lockStudentProfile = async (db: pg.PoolClient, studentId: number): Promise<void> => {
+export const lockStudentProfile = async (db: pg.PoolClient, studentId: number): Promise<void> => {
   const { rowCount } = await db.query(
     'SELECT 1 FROM student_profiles WHERE user_id = $1 FOR SHARE',
     [studentId],
   );
   if (rowCount === 0) throw new AppError(ERROR_CODES.studentProfileMissing);
 };
+
+// The club $club as the student $student may see it: in their own grade's round, and that round
+// the one picked like the reads pick it, with the DB clock of the statement this is part of. No
+// row = the student may not see the club, which every caller answers 404 exactly like a club that
+// does not exist. is_open is the window by the same clock. The parameters are always placeholder
+// constants of this module, never input.
+export const visibleClubTarget = (club: string, student: string): string => `
+  SELECT c.id AS club_id, c.round_id,
+         statement_timestamp() >= r.opens_at
+           AND statement_timestamp() < r.closes_at AS is_open
+  FROM clubs c
+  JOIN rounds r ON r.id = c.round_id
+  JOIN student_profiles sp ON sp.user_id = ${student} AND sp.grade = r.grade
+  WHERE c.id = ${club}
+    AND r.id = (
+      SELECT s.id FROM rounds s
+      WHERE s.grade = sp.grade
+      ORDER BY ${roundSelectionOrder('statement_timestamp()', 's')}
+      LIMIT 1
+    )`;
+
+// No jumping the queue (README Phase 2, waitlist rule 2): a club with anyone on its waitlist has
+// no seat for a register or a change, even a free one, until the promote engine hands it on.
+const NO_WAITLIST = `NOT EXISTS (
+  SELECT 1 FROM waitlist_entries w WHERE w.club_id = clubs.id AND w.round_id = clubs.round_id
+)`;
 
 type SeatAttempt = { round_id: number; is_open: boolean; created_at: Date | null };
 
@@ -165,21 +220,7 @@ const attemptSeat = async (
   clubId: number,
 ): Promise<SeatAttempt | undefined> => {
   const { rows } = await db.query<SeatAttempt>(
-    `WITH target AS (
-       SELECT c.id AS club_id, c.round_id,
-              statement_timestamp() >= r.opens_at
-                AND statement_timestamp() < r.closes_at AS is_open
-       FROM clubs c
-       JOIN rounds r ON r.id = c.round_id
-       JOIN student_profiles sp ON sp.user_id = $2 AND sp.grade = r.grade
-       WHERE c.id = $1
-         AND r.id = (
-           SELECT s.id FROM rounds s
-           WHERE s.grade = sp.grade
-           ORDER BY ${roundSelectionOrder('statement_timestamp()', 's')}
-           LIMIT 1
-         )
-     ),
+    `WITH target AS (${visibleClubTarget('$1', '$2')}),
      inserted AS (
        INSERT INTO registrations (round_id, student_id, club_id)
        SELECT round_id, $2, club_id FROM target WHERE is_open
@@ -196,7 +237,8 @@ const attemptSeat = async (
 
 type ClubLabel = { club_code: string; name: string };
 
-// The seat itself. 0 rows = full; the caller's throw rolls back the registration inserted above.
+// The seat itself. 0 rows = full, or free but with a waitlist; either way club_full, and the
+// caller's throw rolls back the registration inserted above.
 const takeSeat = async (
   db: pg.PoolClient,
   roundId: number,
@@ -204,7 +246,7 @@ const takeSeat = async (
 ): Promise<ClubLabel | undefined> => {
   const { rows } = await db.query<ClubLabel>(
     `UPDATE clubs SET registered = registered + 1
-     WHERE id = $1 AND round_id = $2 AND registered < capacity
+     WHERE id = $1 AND round_id = $2 AND registered < capacity AND ${NO_WAITLIST}
      RETURNING club_code, name`,
     [clubId, roundId],
   );
@@ -233,7 +275,13 @@ export const registerForClub = async (
     // The same club again (a retry with a new key): the README's idempotent same-club case. It
     // writes nothing, so it is answered even outside the window.
     if (held?.club.id === clubId) {
-      return { outcome: REGISTRATION_OUTCOMES.alreadyHeld, roundId, clubId, registration: held };
+      return {
+        outcome: REGISTRATION_OUTCOMES.alreadyHeld,
+        roundId,
+        clubId,
+        registration: held,
+        promotions: [],
+      };
     }
     if (!attempt.is_open) throw new AppError(ERROR_CODES.roundNotOpen);
     if (held) throw new AppError(ERROR_CODES.alreadyRegistered);
@@ -249,14 +297,20 @@ export const registerForClub = async (
     outcome: REGISTRATION_OUTCOMES.registered,
     roundId,
     clubId,
-    registration: {
-      club: { id: clubId, clubCode: club.club_code, name: club.name },
-      registeredAt: attempt.created_at.toISOString(),
-    },
+    // Built from what the statements returned rather than read again: this is the hot path, and a
+    // seat just taken by the student's own register was not a promotion.
+    registration: toRegistration({
+      club_id: clubId,
+      club_code: club.club_code,
+      club_name: club.name,
+      created_at: attempt.created_at,
+      promoted_from_waitlist: false,
+    }),
+    promotions: [],
   };
 };
 
-const dbNow = async (db: pg.PoolClient): Promise<Date> => {
+export const dbNow = async (db: pg.PoolClient): Promise<Date> => {
   const { rows } = await db.query<{ now: Date }>('SELECT statement_timestamp() AS now');
   const row = rows[0];
   if (!row) throw new Error('statement_timestamp() returned no row');
@@ -292,16 +346,6 @@ const attemptCancel = async (
   return rows[0];
 };
 
-// The clubs CHECK (registered >= 0) is the backstop; a missing row would mean a registration
-// pointing at no club, which the composite foreign key already rules out.
-const releaseSeat = async (db: pg.PoolClient, roundId: number, clubId: number): Promise<void> => {
-  const { rowCount } = await db.query(
-    'UPDATE clubs SET registered = registered - 1 WHERE id = $1 AND round_id = $2',
-    [clubId, roundId],
-  );
-  if (rowCount !== 1) throw new Error('Gave back a seat whose club row is missing');
-};
-
 export type CancelInput = { studentId: number; idempotencyKey: string };
 
 // Cancels in the round the student is shown. The round is picked with the DB clock, like the
@@ -334,11 +378,14 @@ export const cancelRegistration = async (
     eventType: 'cancel',
     idempotencyKey,
   });
+  const promotions = await promoteWaitlist(db, { roundId: round.id, actorId: studentId });
   return {
     outcome: REGISTRATION_OUTCOMES.cancelled,
     roundId: round.id,
     clubId: attempt.club_id,
-    registration: null,
+    // Usually null; a cascade may have handed the student the club they were waiting for.
+    registration: await findRegistration(db, round.id, studentId),
+    promotions,
   };
 };
 
@@ -364,37 +411,21 @@ type ChangeAttempt = {
   round_id: number;
   is_open: boolean;
   from_club_id: number | null;
-  club_code: string | null;
-  name: string | null;
+  seated: boolean;
 };
 
 // One statement, one statement_timestamp(), like attemptSeat: the club must be in the round the
 // student is shown, the round open, the student registered there in another club, and the club
-// with a free seat and nobody on its waitlist (no jumping the queue, README Phase 2 rule 2; the
-// waitlist is empty until the waitlist endpoints exist, but the rule is enforced here from the
-// start). Only then is the seat taken. No row back = 404, as for register. The other columns say
-// which condition failed when no seat was taken.
+// with a free seat and nobody on its waitlist (no jumping the queue, as for register). Only then
+// is the seat taken. No row back = 404, as for register. The other columns say which condition
+// failed when no seat was taken.
 const attemptChange = async (
   db: pg.PoolClient,
   studentId: number,
   clubId: number,
 ): Promise<ChangeAttempt | undefined> => {
   const { rows } = await db.query<ChangeAttempt>(
-    `WITH target AS (
-       SELECT c.id AS club_id, c.round_id,
-              statement_timestamp() >= r.opens_at
-                AND statement_timestamp() < r.closes_at AS is_open
-       FROM clubs c
-       JOIN rounds r ON r.id = c.round_id
-       JOIN student_profiles sp ON sp.user_id = $2 AND sp.grade = r.grade
-       WHERE c.id = $1
-         AND r.id = (
-           SELECT s.id FROM rounds s
-           WHERE s.grade = sp.grade
-           ORDER BY ${roundSelectionOrder('statement_timestamp()', 's')}
-           LIMIT 1
-         )
-     ),
+    `WITH target AS (${visibleClubTarget('$1', '$2')}),
      held AS (
        SELECT reg.club_id
        FROM registrations reg
@@ -409,41 +440,16 @@ const attemptChange = async (
          AND t.is_open
          AND EXISTS (SELECT 1 FROM held h WHERE h.club_id <> t.club_id)
          AND clubs.registered < clubs.capacity
-         AND NOT EXISTS (
-           SELECT 1 FROM waitlist_entries w
-           WHERE w.club_id = clubs.id AND w.round_id = clubs.round_id
-         )
-       RETURNING clubs.club_code, clubs.name
+         AND ${NO_WAITLIST}
+       RETURNING clubs.id
      )
-     SELECT t.round_id, t.is_open, h.club_id AS from_club_id, s.club_code, s.name
+     SELECT t.round_id, t.is_open, h.club_id AS from_club_id, s.id IS NOT NULL AS seated
      FROM target t
      LEFT JOIN held h ON true
      LEFT JOIN seated s ON true`,
     [clubId, studentId],
   );
   return rows[0];
-};
-
-type MoveInput = { roundId: number; studentId: number; fromClubId: number; clubId: number };
-
-// Moves the student's one row instead of DELETE + INSERT: the row never leaves the UNIQUE
-// (round_id, student_id) slot, and the api needs UPDATE on these two columns only (migration
-// 20261120000000). created_at becomes the column default, the clock register's INSERT uses, so
-// registeredAt is when the current club was obtained. Matching the old club too means exactly one
-// row, or something moved under the round lock, which cannot happen.
-const moveRegistration = async (
-  db: pg.PoolClient,
-  { roundId, studentId, fromClubId, clubId }: MoveInput,
-): Promise<Date> => {
-  const { rows } = await db.query<{ created_at: Date }>(
-    `UPDATE registrations SET club_id = $4, created_at = DEFAULT
-     WHERE round_id = $1 AND student_id = $2 AND club_id = $3
-     RETURNING created_at`,
-    [roundId, studentId, fromClubId, clubId],
-  );
-  const [row, ...more] = rows;
-  if (!row || more.length > 0) throw new Error('Change found no single registration to move');
-  return row.created_at;
 };
 
 export type ChangeInput = { studentId: number; clubId: number; idempotencyKey: string };
@@ -468,17 +474,16 @@ export const changeRegistration = async (
       roundId,
       clubId,
       registration: await findRegistration(db, roundId, studentId),
+      promotions: [],
     };
   }
   if (!attempt.is_open) throw new AppError(ERROR_CODES.roundNotOpen);
   if (attempt.from_club_id === null) throw new AppError(ERROR_CODES.notRegistered);
-  if (attempt.club_code === null || attempt.name === null) {
-    throw new AppError(ERROR_CODES.clubFull);
-  }
+  if (!attempt.seated) throw new AppError(ERROR_CODES.clubFull);
 
   const fromClubId = attempt.from_club_id;
   await releaseSeat(db, roundId, fromClubId);
-  const registeredAt = await moveRegistration(db, { roundId, studentId, fromClubId, clubId });
+  await moveRegistration(db, { roundId, studentId, fromClubId, clubId });
   await insertEvent(db, {
     roundId,
     studentId,
@@ -487,14 +492,15 @@ export const changeRegistration = async (
     eventType: 'change',
     idempotencyKey,
   });
+  // The old club has a free seat now; its waiters (and, through a cascade, maybe the student's
+  // own waitlist entry) move up in this same transaction.
+  const promotions = await promoteWaitlist(db, { roundId, actorId: studentId });
   return {
     outcome: REGISTRATION_OUTCOMES.changed,
     roundId,
     clubId,
     fromClubId,
-    registration: {
-      club: { id: clubId, clubCode: attempt.club_code, name: attempt.name },
-      registeredAt: registeredAt.toISOString(),
-    },
+    registration: await findRegistration(db, roundId, studentId),
+    promotions,
   };
 };

@@ -101,6 +101,30 @@ export const seatStudent = async (pool: Pool, studentId: number, clubId: number)
       await registerForClub(client, { studentId, clubId, idempotencyKey: newKey() }),
   );
 
+// A waitlist entry with its waitlist_join event, written straight to the tables because the API
+// only lets a student join a club that is full: this builds the state no request can, a free seat
+// with a queue in an open round (which the admin club edit can still leave until it promotes).
+// That state breaks the open-round invariant on purpose, so a test that uses it ends by having
+// the student leave through the API, which brings the log and the tables back in step.
+export const addWaitingDirectly = async (
+  pool: Pool,
+  { roundId, clubId, studentId }: { roundId: number; clubId: number; studentId: number },
+): Promise<void> => {
+  await withTransaction(pool, async (client) => {
+    await client.query(
+      `INSERT INTO waitlist_entries (round_id, student_id, club_id, created_at)
+       VALUES ($1, $2, $3, clock_timestamp())`,
+      [roundId, studentId, clubId],
+    );
+    await client.query(
+      `INSERT INTO registration_events
+         (round_id, student_id, club_id, event_type, actor_id, idempotency_key)
+       VALUES ($1, $2, $3, 'waitlist_join', $2, $4)`,
+      [roundId, studentId, clubId, newKey()],
+    );
+  });
+};
+
 export const storedSeats = async (pool: Pool, clubId: number) => {
   const { rows } = await pool.query<{ registered: number; capacity: number; rows: number }>(
     `SELECT c.registered, c.capacity,
@@ -142,13 +166,29 @@ export const waitForAdvisoryLockWaiter = async (pool: Pool): Promise<void> => {
 };
 
 // How each event type moves seats, as a VALUES list every event check reads: what it does to the
-// seat of club_id and to the seat of from_club_id. A change takes the new club's seat and gives
-// back the old one. waitlist_promote and admin_* add their rows here when they exist (a promote
-// that moves a student is a change; waitlist_join/leave move no seat: 0, 0). An event type
-// missing from this list fails the check below, so a new writer cannot slip past the accounting.
+// seat of club_id and to the seat of from_club_id (counted only when from_club_id is set). A change
+// takes the new club's seat and gives back the old one; a waitlist_promote takes the new seat and
+// gives back the old one when the student held one; waitlist_join/leave move no seat (a join's
+// from_club_id names a waitlist given up, not a seat). admin_* add their rows here when they
+// exist. An event type missing from this list fails the check below, so a new writer cannot slip
+// past the accounting.
 const SEAT_EFFECTS = `
   seat_effect (event_type, club_delta, from_club_delta) AS (
-    VALUES ('register', 1, 0), ('cancel', -1, 0), ('change', 1, -1)
+    VALUES ('register', 1, 0), ('cancel', -1, 0), ('change', 1, -1),
+           ('waitlist_join', 0, 0), ('waitlist_leave', 0, 0), ('waitlist_promote', 1, -1)
+  )`;
+
+// The waitlist events of each student and round in the order they happened (id: one transaction's
+// events share created_at), each with the one before it.
+const WAITLIST_EVENTS = `
+  waitlist_events AS (
+    SELECT e.id, e.round_id, e.student_id, e.event_type, e.club_id, e.from_club_id,
+           lag(e.event_type) OVER w AS previous_type,
+           lag(e.club_id) OVER w AS previous_club_id,
+           row_number() OVER (PARTITION BY e.round_id, e.student_id ORDER BY e.id DESC) AS recency
+    FROM registration_events e
+    WHERE e.event_type IN ('waitlist_join', 'waitlist_leave', 'waitlist_promote')
+    WINDOW w AS (PARTITION BY e.round_id, e.student_id ORDER BY e.id)
   )`;
 
 // One row per seat an event took (+1) or gave back (-1), keyed by round, student and club.
@@ -194,14 +234,15 @@ const INVARIANTS: Readonly<Record<string, string>> = Object.freeze({
     WITH ${SEAT_EFFECTS}
     SELECT DISTINCT e.event_type FROM registration_events e
     WHERE e.event_type NOT IN (SELECT event_type FROM seat_effect)`,
-  // A promote of a student with no club yet will leave from_club_id null, so only change requires
-  // it; an event type that gives back no from-club seat must not name one.
-  'a change names the other club it left, and no seatless move names one': `
-    WITH ${SEAT_EFFECTS}
+  // A change always leaves a club; a promote leaves one only when the student held one, and a join
+  // names the waitlist it gave up, if any (checked against the log below). No other event names a
+  // from-club, and none names the club it is about.
+  'from_club_id is set only where an event can leave a club, and never equals club_id': `
     SELECT e.id, e.event_type, e.club_id, e.from_club_id
-    FROM registration_events e JOIN seat_effect f USING (event_type)
+    FROM registration_events e
     WHERE (e.event_type = 'change' AND e.from_club_id IS NULL)
-       OR (f.from_club_delta = 0 AND e.from_club_id IS NOT NULL)
+       OR (e.event_type NOT IN ('change', 'waitlist_promote', 'waitlist_join')
+           AND e.from_club_id IS NOT NULL)
        OR e.from_club_id = e.club_id`,
   'seats taken minus seats given back equals the seats each student holds': `
     WITH ${SEAT_MOVES},
@@ -235,9 +276,63 @@ const INVARIANTS: Readonly<Record<string, string>> = Object.freeze({
       ORDER BY e.id DESC LIMIT 1
     ) latest ON true
     WHERE latest.club_id IS DISTINCT FROM r.club_id OR latest.club_delta IS DISTINCT FROM 1`,
-  'students act for themselves and every event has a key': `
-    SELECT id, actor_id, student_id FROM registration_events
-    WHERE actor_id <> student_id OR idempotency_key IS NULL`,
+  // A promotion is no request of its own: it has no key, and its actor is whoever freed the seat
+  // (here always a student; an admin once PATCH and import promote). Everything else is a student's
+  // own keyed request.
+  'students act for themselves with a key, and only a promotion has none': `
+    SELECT id, event_type, actor_id, student_id, idempotency_key FROM registration_events
+    WHERE (event_type <> 'waitlist_promote'
+           AND (actor_id <> student_id OR idempotency_key IS NULL))
+       OR (event_type = 'waitlist_promote' AND idempotency_key IS NOT NULL)`,
+  'nobody waits for the club they hold': `
+    SELECT w.id, w.student_id, w.club_id
+    FROM waitlist_entries w
+    JOIN registrations r
+      ON r.round_id = w.round_id AND r.student_id = w.student_id AND r.club_id = w.club_id`,
+  // The promote engine runs whenever a seat is freed, so while the round is open a free seat and a
+  // queue for it never outlive a transaction. After closing, nobody is promoted any more.
+  'no club of an open round has a free seat and a waitlist': `
+    SELECT c.id, c.registered, c.capacity
+    FROM clubs c
+    JOIN rounds ro ON ro.id = c.round_id
+    WHERE statement_timestamp() >= ro.opens_at AND statement_timestamp() < ro.closes_at
+      AND c.registered < c.capacity
+      AND EXISTS (
+        SELECT 1 FROM waitlist_entries w WHERE w.club_id = c.id AND w.round_id = c.round_id
+      )`,
+  // Until the round closes, like a registration's grade above.
+  "a waitlist entry's student is in the round's grade until the round closes": `
+    SELECT w.id, sp.grade AS student_grade, ro.grade AS round_grade
+    FROM waitlist_entries w
+    JOIN student_profiles sp ON sp.user_id = w.student_id
+    JOIN rounds ro ON ro.id = w.round_id
+    WHERE sp.grade <> ro.grade AND ro.closes_at > statement_timestamp()`,
+  // A join replaces the student's entry: its from_club_id is the club of the entry it gave up
+  // (null when there was none). A leave and a promote end the entry of the club they name.
+  'each waitlist event follows from the one before it': `
+    WITH ${WAITLIST_EVENTS}
+    SELECT id, event_type, club_id, from_club_id, previous_type, previous_club_id
+    FROM waitlist_events
+    WHERE (event_type = 'waitlist_join'
+           AND from_club_id IS DISTINCT FROM
+             CASE WHEN previous_type = 'waitlist_join' THEN previous_club_id END)
+       OR (event_type <> 'waitlist_join'
+           AND (previous_type IS DISTINCT FROM 'waitlist_join'
+                OR previous_club_id IS DISTINCT FROM club_id))`,
+  // Replaying the log gives the entries: the latest waitlist event of a student in a round is a
+  // join (waiting for its club) or a leave/promote (not waiting), and the table agrees.
+  'the waitlist events replay to the entries that exist': `
+    WITH ${WAITLIST_EVENTS},
+    expected AS (
+      SELECT round_id, student_id, club_id FROM waitlist_events
+      WHERE recency = 1 AND event_type = 'waitlist_join'
+    )
+    SELECT COALESCE(x.round_id, w.round_id) AS round_id,
+           COALESCE(x.student_id, w.student_id) AS student_id,
+           x.club_id AS expected_club_id, w.club_id AS entry_club_id
+    FROM expected x
+    FULL JOIN waitlist_entries w ON w.round_id = x.round_id AND w.student_id = x.student_id
+    WHERE x.club_id IS DISTINCT FROM w.club_id`,
 });
 
 // Names each broken invariant with up to five offending rows, so a failure explains itself.

@@ -20,16 +20,33 @@ export const studentRoundSchema = roundSchema.pick({
 });
 export type StudentRound = z.infer<typeof studentRoundSchema>;
 
-// The student's own seat in the round.
+// A club as a student's seat or waitlist entry names it.
+export const studentClubRefSchema = z.object({
+  id: z.number().int().positive(),
+  clubCode: z.string(),
+  name: z.string(),
+});
+export type StudentClubRef = z.infer<typeof studentClubRefSchema>;
+
+// The student's own seat in the round. promotedFromWaitlist: the last thing that moved the
+// student's seat in this round was a promotion off a waitlist (not their own register or change),
+// so the page can say "you got this club from the waitlist" even after a reload; there is no other
+// notification (README Phase 2, decision 2).
 export const studentRegistrationSchema = z.object({
-  club: z.object({
-    id: z.number().int().positive(),
-    clubCode: z.string(),
-    name: z.string(),
-  }),
+  club: studentClubRefSchema,
   registeredAt: z.iso.datetime(),
+  promotedFromWaitlist: z.boolean(),
 });
 export type StudentRegistration = z.infer<typeof studentRegistrationSchema>;
+
+// The student's place on a club's waitlist in the round: at most one entry per round. position 1
+// = next in line for that club. Joining another club's waitlist starts at the back of that queue.
+export const studentWaitlistSchema = z.object({
+  club: studentClubRefSchema,
+  position: z.number().int().positive(),
+  joinedAt: z.iso.datetime(),
+});
+export type StudentWaitlist = z.infer<typeof studentWaitlistSchema>;
 
 // Advisors are names only. Their phone, email and LINE ID are personal data that ~2,500 students
 // would see, so they stay on admin routes (docs/security.md).
@@ -43,14 +60,17 @@ export const studentClubSchema = z.object({
   registered: z.number().int().nonnegative(),
   remaining: z.number().int().nonnegative(),
   advisorNames: z.array(z.string()),
+  // How many students wait for a seat; a count only, never who.
+  waitlistCount: z.number().int().nonnegative(),
 });
 export type StudentClub = z.infer<typeof studentClubSchema>;
 
 // round null = the student's grade has no round at all; that is a normal state, not an error, and
-// registration is then null too.
+// registration and waitlist are then null too.
 export const studentRoundResponseSchema = z.object({
   round: studentRoundSchema.nullable(),
   registration: studentRegistrationSchema.nullable(),
+  waitlist: studentWaitlistSchema.nullable(),
 });
 export type StudentRoundResponse = z.infer<typeof studentRoundResponseSchema>;
 
@@ -85,8 +105,31 @@ export const changeRegistrationRequestSchema = z.strictObject({
 });
 export type ChangeRegistrationRequest = z.infer<typeof changeRegistrationRequestSchema>;
 
-// Every write answers with the student's registration in the round as it stands after the request
-// (null after a cancel). A replayed key answers with the state now, not a copy of the first reply.
+// Joins the waitlist of a full club in the student's selected round. Waiting for another club
+// already = that entry is given up (its place is lost) for one at the back of this club's queue.
+export const joinWaitlistRequestSchema = z.strictObject({
+  clubId: dbIdBodySchema,
+  idempotencyKey: idempotencyKeySchema,
+});
+export type JoinWaitlistRequest = z.infer<typeof joinWaitlistRequestSchema>;
+
+// Leaves the student's one waitlist entry in their selected round, so no club id.
+export const leaveWaitlistRequestSchema = z.strictObject({
+  idempotencyKey: idempotencyKeySchema,
+});
+export type LeaveWaitlistRequest = z.infer<typeof leaveWaitlistRequestSchema>;
+
+// Both waitlist writes answer with the student's entry as it stands after the request (null after
+// leaving), and a replayed key with the entry now, like the registration writes.
+export const studentWaitlistResponseSchema = z.object({
+  waitlist: studentWaitlistSchema.nullable(),
+});
+export type StudentWaitlistResponse = z.infer<typeof studentWaitlistResponseSchema>;
+
+// Every registration write answers with the student's registration in the round as it stands
+// after the request, promotions off a waitlist in the same transaction included (null after a
+// cancel, unless the cancel's cascade promoted the student into the club they waited for). A
+// replayed key answers with the state now, not a copy of the first reply.
 export const studentRegistrationResponseSchema = z.object({
   registration: studentRegistrationSchema.nullable(),
 });

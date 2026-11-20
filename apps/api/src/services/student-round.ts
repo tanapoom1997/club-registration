@@ -5,6 +5,7 @@ import type {
   StudentRegistration,
   StudentRound,
   StudentRoundResponse,
+  StudentWaitlist,
 } from '@club-registration/shared';
 import type pg from 'pg';
 import { withReadOnlySnapshot } from '../db.js';
@@ -30,6 +31,15 @@ export type RegistrationRow = {
   club_code: string;
   club_name: string;
   created_at: Date;
+  promoted_from_waitlist: boolean;
+};
+
+type WaitlistRow = {
+  club_id: number;
+  club_code: string;
+  club_name: string;
+  created_at: Date;
+  position: number;
 };
 
 type StudentClubRow = {
@@ -40,6 +50,7 @@ type StudentClubRow = {
   capacity: number;
   registered: number;
   advisor_names: string[];
+  waitlist_count: number;
 };
 
 // The one place snake_case rows become the API shape. Status uses the same half-open window as
@@ -56,6 +67,13 @@ const toStudentRound = (row: StudentRoundRow, now: Date): StudentRound => ({
 export const toRegistration = (row: RegistrationRow): StudentRegistration => ({
   club: { id: row.club_id, clubCode: row.club_code, name: row.club_name },
   registeredAt: row.created_at.toISOString(),
+  promotedFromWaitlist: row.promoted_from_waitlist,
+});
+
+const toWaitlist = (row: WaitlistRow): StudentWaitlist => ({
+  club: { id: row.club_id, clubCode: row.club_code, name: row.club_name },
+  position: row.position,
+  joinedAt: row.created_at.toISOString(),
 });
 
 const toStudentClub = (row: StudentClubRow): StudentClub => ({
@@ -67,6 +85,7 @@ const toStudentClub = (row: StudentClubRow): StudentClub => ({
   registered: row.registered,
   remaining: row.capacity - row.registered,
   advisorNames: row.advisor_names,
+  waitlistCount: row.waitlist_count,
 });
 
 // Every account the import creates gets a profile in the same transaction, so a student without
@@ -118,13 +137,25 @@ export const selectStudentRound = async (
   return row && toStudentRound(row, now);
 };
 
+// The one source of a registration in every answer, reads and writes alike. promotedFromWaitlist
+// comes from the event log: the student's latest event in the round that moved one of their
+// seats (anything but a waitlist join or leave) is a waitlist_promote. Events are ordered by id,
+// not created_at: a cancel and the promotions it causes share one transaction and so one now().
 export const findRegistration = async (
   db: Queryable,
   roundId: number,
   studentId: number,
 ): Promise<StudentRegistration | null> => {
   const { rows } = await db.query<RegistrationRow>(
-    `SELECT c.id AS club_id, c.club_code, c.name AS club_name, r.created_at
+    `SELECT c.id AS club_id, c.club_code, c.name AS club_name, r.created_at,
+            COALESCE((
+              SELECT e.event_type = 'waitlist_promote'
+              FROM registration_events e
+              WHERE e.round_id = r.round_id AND e.student_id = r.student_id
+                AND e.event_type NOT IN ('waitlist_join', 'waitlist_leave')
+              ORDER BY e.id DESC
+              LIMIT 1
+            ), false) AS promoted_from_waitlist
      FROM registrations r
      JOIN clubs c ON c.id = r.club_id
      WHERE r.round_id = $1 AND r.student_id = $2`,
@@ -134,10 +165,36 @@ export const findRegistration = async (
   return row ? toRegistration(row) : null;
 };
 
+// The student's waitlist entry in the round, if any. Queue order is (created_at, id) everywhere
+// (README Phase 2): position = 1 + the entries of the same club ordered before this one, read with
+// the (club_id, round_id, created_at, id) index.
+export const findWaitlist = async (
+  db: Queryable,
+  roundId: number,
+  studentId: number,
+): Promise<StudentWaitlist | null> => {
+  const { rows } = await db.query<WaitlistRow>(
+    `SELECT c.id AS club_id, c.club_code, c.name AS club_name, w.created_at,
+            1 + (
+              SELECT count(*)::int FROM waitlist_entries a
+              WHERE a.club_id = w.club_id AND a.round_id = w.round_id
+                AND (a.created_at, a.id) < (w.created_at, w.id)
+            ) AS position
+     FROM waitlist_entries w
+     JOIN clubs c ON c.id = w.club_id
+     WHERE w.round_id = $1 AND w.student_id = $2`,
+    [roundId, studentId],
+  );
+  const row = rows[0];
+  return row ? toWaitlist(row) : null;
+};
+
 const listClubs = async (db: Queryable, roundId: number): Promise<StudentClub[]> => {
   const { rows } = await db.query<StudentClubRow>(
     `SELECT c.id, c.club_code, c.name, c.description, c.capacity, c.registered,
-            COALESCE(advisor_names.names, '{}') AS advisor_names
+            COALESCE(advisor_names.names, '{}') AS advisor_names,
+            (SELECT count(*)::int FROM waitlist_entries w
+             WHERE w.club_id = c.id AND w.round_id = c.round_id) AS waitlist_count
      FROM clubs c
      ${ADVISOR_NAMES_JOIN}
      WHERE c.round_id = $1
@@ -154,12 +211,16 @@ const readSelection = async (
 ): Promise<StudentRoundResponse> => {
   const grade = await findStudentGrade(db, studentId);
   const round = await selectStudentRound(db, grade, now);
-  if (!round) return { round: null, registration: null };
-  return { round, registration: await findRegistration(db, round.id, studentId) };
+  if (!round) return { round: null, registration: null, waitlist: null };
+  return {
+    round,
+    registration: await findRegistration(db, round.id, studentId),
+    waitlist: await findWaitlist(db, round.id, studentId),
+  };
 };
 
-// Each read runs in one read-only snapshot, so the round, the student's registration and the
-// club counts all describe the same moment, even while others are registering.
+// Each read runs in one read-only snapshot, so the round, the student's registration, their
+// waitlist place and the club counts all describe the same moment, even while others write.
 export const readStudentRound = async (
   pool: pg.Pool,
   studentId: number,

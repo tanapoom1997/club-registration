@@ -29,6 +29,9 @@ export const ERROR_CODES = Object.freeze({
   alreadyRegistered: 'already_registered',
   roundNotOpen: 'round_not_open',
   notRegistered: 'not_registered',
+  alreadyInClub: 'already_in_club',
+  waitlistNotNeeded: 'waitlist_not_needed',
+  notWaitlisted: 'not_waitlisted',
 } as const);
 
 export type ErrorCode = (typeof ERROR_CODES)[keyof typeof ERROR_CODES];

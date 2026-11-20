@@ -7,8 +7,13 @@ import { issueInitialPasswordsRequestSchema } from '../src/initial-passwords.js'
 import {
   cancelRegistrationRequestSchema,
   changeRegistrationRequestSchema,
+  joinWaitlistRequestSchema,
+  leaveWaitlistRequestSchema,
   registerRequestSchema,
+  studentClubSchema,
   studentQuerySchema,
+  studentRoundResponseSchema,
+  studentWaitlistSchema,
 } from '../src/student.js';
 
 const KEY = '0a1b2c3d-4e5f-4a6b-8c7d-9e0f1a2b3c4d';
@@ -77,6 +82,92 @@ describe('student requests', () => {
     expect(
       cancelRegistrationRequestSchema.safeParse({ idempotencyKey: KEY, studentId: 7 }).success,
     ).toBe(false);
+  });
+});
+
+describe('waitlist requests', () => {
+  it('accepts a join of a club with a key', () => {
+    expect(joinWaitlistRequestSchema.safeParse({ clubId: 3, idempotencyKey: KEY })).toEqual({
+      success: true,
+      data: { clubId: 3, idempotencyKey: KEY },
+    });
+  });
+
+  // The student comes from the session; the entry given up is the one held in the DB.
+  it.each([
+    ['naming a student', { clubId: 3, idempotencyKey: KEY, studentId: 7 }],
+    ['naming a round', { clubId: 3, idempotencyKey: KEY, roundId: 1 }],
+    ['naming the waitlist left', { clubId: 3, idempotencyKey: KEY, fromClubId: 2 }],
+    ['choosing a place', { clubId: 3, idempotencyKey: KEY, position: 1 }],
+    ['without a key', { clubId: 3 }],
+    ['without a club', { idempotencyKey: KEY }],
+    ['with the club id as text', { clubId: '3', idempotencyKey: KEY }],
+  ])('refuses a join %s', (_case, body) => {
+    expect(joinWaitlistRequestSchema.safeParse(body).success).toBe(false);
+  });
+
+  it('accepts a leave with a key alone and refuses one that names a club or a student', () => {
+    expect(leaveWaitlistRequestSchema.safeParse({ idempotencyKey: KEY }).success).toBe(true);
+    expect(leaveWaitlistRequestSchema.safeParse({ idempotencyKey: KEY, clubId: 3 }).success).toBe(
+      false,
+    );
+    expect(
+      leaveWaitlistRequestSchema.safeParse({ idempotencyKey: KEY, studentId: 7 }).success,
+    ).toBe(false);
+    expect(leaveWaitlistRequestSchema.safeParse({}).success).toBe(false);
+  });
+});
+
+// What the web app parses every poll with: an answer from an api without the waitlist fields must
+// fail loudly rather than show "not waiting" or "not promoted" by default.
+describe('student read responses', () => {
+  const CLUB = { id: 3, clubCode: 'SMK03', name: 'ชุมนุมสมมติ' };
+  const WAITLIST = { club: CLUB, position: 1, joinedAt: '2026-12-01T01:05:00.000Z' };
+
+  it.each([0, -1, 1.5])('refuses a waitlist position of %j', (position) => {
+    expect(studentWaitlistSchema.safeParse({ ...WAITLIST, position }).success).toBe(false);
+  });
+
+  it('accepts the first place in a queue', () => {
+    expect(studentWaitlistSchema.safeParse(WAITLIST).success).toBe(true);
+  });
+
+  it('requires the waitlist, even as null', () => {
+    expect(studentRoundResponseSchema.safeParse({ round: null, registration: null }).success).toBe(
+      false,
+    );
+    expect(
+      studentRoundResponseSchema.safeParse({ round: null, registration: null, waitlist: null })
+        .success,
+    ).toBe(true);
+  });
+
+  it('requires a registration to say whether it came from the waitlist', () => {
+    const registration = { club: CLUB, registeredAt: '2026-12-01T01:05:00.000Z' };
+    const response = { round: null, waitlist: WAITLIST };
+
+    expect(studentRoundResponseSchema.safeParse({ ...response, registration }).success).toBe(false);
+    expect(
+      studentRoundResponseSchema.safeParse({
+        ...response,
+        registration: { ...registration, promotedFromWaitlist: true },
+      }).success,
+    ).toBe(true);
+  });
+
+  it.each([undefined, -1])('refuses a club with a waitlist count of %j', (waitlistCount) => {
+    const club = {
+      ...CLUB,
+      description: '',
+      capacity: 30,
+      registered: 30,
+      remaining: 0,
+      advisorNames: [],
+      waitlistCount,
+    };
+
+    expect(studentClubSchema.safeParse(club).success).toBe(false);
+    expect(studentClubSchema.safeParse({ ...club, waitlistCount: 4 }).success).toBe(true);
   });
 });
 

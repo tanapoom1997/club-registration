@@ -41,7 +41,7 @@ const EXPECTED_PRIVILEGES: Readonly<Record<string, readonly string[]>> = {
   rounds: ['SELECT', 'INSERT', 'UPDATE', 'DELETE'],
   student_profiles: ['SELECT', 'INSERT', 'UPDATE'],
   users: ['SELECT', 'INSERT', 'UPDATE'],
-  waitlist_entries: ['SELECT'],
+  waitlist_entries: ['SELECT', 'INSERT', 'DELETE'],
 };
 
 const COLUMN_PRIVILEGES = ['SELECT', 'INSERT', 'UPDATE', 'REFERENCES'];
@@ -163,11 +163,9 @@ describe('club_app database role', () => {
     ['empty a table', 'TRUNCATE registrations'],
     ['move a registration to another student', 'UPDATE registrations SET student_id = student_id'],
     ['move a registration to another round', 'UPDATE registrations SET round_id = round_id'],
-    [
-      'join a waitlist',
-      'INSERT INTO waitlist_entries (round_id, student_id, club_id) VALUES (1, 1, 1)',
-    ],
-    ['clear a waitlist', 'DELETE FROM waitlist_entries'],
+    // Moving to another waitlist is a delete and an insert, never a rewrite of a place in a queue.
+    ['reorder a waitlist', 'UPDATE waitlist_entries SET created_at = created_at'],
+    ['move a waitlist entry to another club', 'UPDATE waitlist_entries SET club_id = club_id'],
     ['delete a user', 'DELETE FROM users'],
     ['read the migration table', 'SELECT name FROM pgmigrations'],
     ['run a program on the database server', `COPY (SELECT 1) TO PROGRAM 'true'`],

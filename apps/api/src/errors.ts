@@ -27,6 +27,9 @@ const HTTP_STATUS: Readonly<Record<ErrorCode, number>> = Object.freeze({
   [ERROR_CODES.alreadyRegistered]: 409,
   [ERROR_CODES.roundNotOpen]: 409,
   [ERROR_CODES.notRegistered]: 409,
+  [ERROR_CODES.alreadyInClub]: 409,
+  [ERROR_CODES.waitlistNotNeeded]: 409,
+  [ERROR_CODES.notWaitlisted]: 409,
   [ERROR_CODES.rateLimited]: 429,
   [ERROR_CODES.internalError]: 500,
 });
@@ -62,6 +65,9 @@ const DEFAULT_MESSAGES: Readonly<Record<ErrorCode, string>> = Object.freeze({
     'You are already registered in another club this round; cancel it first',
   [ERROR_CODES.roundNotOpen]: 'Registration for this round is not open',
   [ERROR_CODES.notRegistered]: 'You are not registered in a club this round',
+  [ERROR_CODES.alreadyInClub]: 'You already have a seat in this club',
+  [ERROR_CODES.waitlistNotNeeded]: 'This club has a free seat; take it directly instead of waiting',
+  [ERROR_CODES.notWaitlisted]: 'You are not on a waitlist this round',
   [ERROR_CODES.rateLimited]: 'Too many requests, try again later',
   [ERROR_CODES.internalError]: 'Internal server error',
 });

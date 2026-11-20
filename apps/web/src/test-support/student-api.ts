@@ -3,6 +3,7 @@ import type {
   StudentClub,
   StudentRegistration,
   StudentRound,
+  StudentWaitlist,
 } from '@club-registration/shared';
 import { mockApi } from './render-app';
 import type { Handler } from './render-app';
@@ -43,6 +44,7 @@ export const CLUBS: StudentClub[] = [
     registered: 12,
     remaining: 18,
     advisorNames: ['ครูสมมติ ใจดี', 'ครูสมมติ ใจเย็น'],
+    waitlistCount: 0,
   },
   {
     id: 12,
@@ -53,6 +55,7 @@ export const CLUBS: StudentClub[] = [
     registered: 20,
     remaining: 0,
     advisorNames: [],
+    waitlistCount: 0,
   },
   {
     id: 13,
@@ -63,6 +66,7 @@ export const CLUBS: StudentClub[] = [
     registered: 3,
     remaining: 22,
     advisorNames: ['ครูสมมติ ศิลป์ดี'],
+    waitlistCount: 0,
   },
 ];
 
@@ -72,6 +76,7 @@ export const registrationFor = (
 ): StudentRegistration => ({
   club: { id: club.id, clubCode: club.clubCode, name: club.name },
   registeredAt,
+  promotedFromWaitlist: false,
 });
 
 export const apiError = (status: number, code: string) => () =>
@@ -90,6 +95,7 @@ export const callsTo = (fetchMock: ReturnType<typeof mockApi>, method: string, p
 export type StudentState = {
   round: StudentRound | null;
   registration: StudentRegistration | null;
+  waitlist: StudentWaitlist | null;
   clubs: StudentClub[];
 };
 
@@ -113,6 +119,7 @@ export const mockStudentApi = (
   const state: StudentState = {
     round: roundFixture(),
     registration: null,
+    waitlist: null,
     clubs: CLUBS,
     ...initial,
   };
@@ -122,10 +129,15 @@ export const mockStudentApi = (
       Response.json({
         round: state.round,
         registration: state.registration,
+        waitlist: state.waitlist,
         clubs: state.round ? state.clubs : [],
       }),
     [`GET ${ROUND_PATH}`]: () =>
-      Response.json({ round: state.round, registration: state.registration }),
+      Response.json({
+        round: state.round,
+        registration: state.registration,
+        waitlist: state.waitlist,
+      }),
     [`POST ${REGISTER_PATH}`]: (init) => {
       const { clubId } = bodyOf(init) as { clubId: number };
       const club = state.clubs.find(({ id }) => id === clubId);

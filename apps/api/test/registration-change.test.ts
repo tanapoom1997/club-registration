@@ -1,7 +1,6 @@
 import type { StartedPostgreSqlContainer } from '@testcontainers/postgresql';
 import { errorResponseSchema, studentRegistrationResponseSchema } from '@club-registration/shared';
 import type { FastifyInstance, InjectOptions } from 'fastify';
-import pg from 'pg';
 import type { Pool } from 'pg';
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { buildApp } from '../src/app.js';
@@ -18,6 +17,7 @@ import {
 } from './support/postgres.js';
 import {
   STUDENT_NAME,
+  addWaitingDirectly,
   createClosedRound,
   createOpenRound,
   createStudentId,
@@ -125,20 +125,8 @@ describe('student change of club', () => {
     return { roundId, fromClub, toClub, studentId };
   };
 
-  // club_app cannot write the waitlist yet (the waitlist endpoints will grant it), so the fixture
-  // goes in as the owner. The truncate before each test clears it with the rounds.
-  const addToWaitlist = async (roundId: number, clubId: number, studentId: number) => {
-    const owner = new pg.Client({ connectionString: container.getConnectionUri() });
-    await owner.connect();
-    try {
-      await owner.query(
-        'INSERT INTO waitlist_entries (round_id, student_id, club_id) VALUES ($1, $2, $3)',
-        [roundId, studentId, clubId],
-      );
-    } finally {
-      await owner.end();
-    }
-  };
+  const leaveWaitlist = async (studentId: number) =>
+    await send('POST', '/api/student/waitlist/leave', studentId, { idempotencyKey: newKey() });
 
   beforeAll(async () => {
     container = await startMigratedPostgres();
@@ -181,6 +169,7 @@ describe('student change of club', () => {
         registration: {
           club: { id: toClub, clubCode: rows[0]!.club_code, name: TO_NAME },
           registeredAt: (await registeredAtOf(studentId)).toISOString(),
+          promotedFromWaitlist: false,
         },
       });
       expect(await heldClubs(studentId)).toEqual([toClub]);
@@ -239,13 +228,14 @@ describe('student change of club', () => {
     it('answers 409 club_full for a club with free seats and a waitlist, so no one jumps it', async () => {
       const { roundId, fromClub, toClub, studentId } = await changeSetup();
       const waiting = await createStudentId(pool);
-      await addToWaitlist(roundId, toClub, waiting);
+      await addWaitingDirectly(pool, { roundId, clubId: toClub, studentId: waiting });
 
       const response = await change(studentId, toClub);
 
       expect(errorOf(response).code).toBe('club_full');
       expect(await heldClubs(studentId)).toEqual([fromClub]);
       expect(await storedSeats(pool, toClub)).toMatchObject({ registered: 0 });
+      expect((await leaveWaitlist(waiting)).statusCode).toBe(200);
     });
 
     it('gives the old seat back to whoever asks next', async () => {
