@@ -39,9 +39,9 @@ export default defineConfig({
       include: ['src/**/*.{ts,tsx}'],
       exclude: ['src/**/*.test.tsx', 'src/test-support/**'],
       reporter: ['text-summary', 'html'],
-      // Floors at the level of the PR that added them (rounded down): CI fails if a change lowers
-      // coverage. Raise them when tests are added; never lower them to pass.
-      thresholds: { statements: 91, branches: 81, functions: 90, lines: 92 },
+      // Floors at the last measured level (rounded down): CI fails if a change lowers coverage.
+      // Raise them when tests are added; never lower them to pass.
+      thresholds: { statements: 94, branches: 85, functions: 95, lines: 95 },
     },
   },
 });
