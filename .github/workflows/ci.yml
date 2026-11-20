@@ -64,6 +64,32 @@ jobs:
 
       - run: pnpm build
 
+  # Browser tests (e2e/): Chromium drives the web app against the api and a real Postgres together
+  # (login, first-login password change, register and cancel, a full club, role redirects). The
+  # suite starts its own Postgres (Testcontainers), api and web dev server; see e2e/global-setup.ts.
+  e2e:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    env:
+      COREPACK_ENABLE_DOWNLOAD_PROMPT: '0'
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version-file: .nvmrc
+
+      - run: corepack enable
+
+      - run: pnpm install --frozen-lockfile
+
+      # The Chromium build that the pinned @playwright/test expects, with its system libraries.
+      - run: pnpm --filter @club-registration/e2e exec playwright install --with-deps chromium
+
+      - run: pnpm e2e
+
   # Builds the production images (Dockerfile targets api and web) and runs them together with
   # Postgres, checking health, Caddy's headers and SPA fallback, non-root users, image contents and
   # graceful shutdown. Then runs the production compose stack (compose.prod.yml) over HTTPS with

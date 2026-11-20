@@ -85,6 +85,7 @@ club-registration/
 │   └── web/        # Vite + React
 ├── packages/
 │   └── shared/     # Zod schema + type ที่ใช้ร่วมกัน
+├── e2e/            # เทสต์บนเบราว์เซอร์ (Playwright) ของ web + api + Postgres ด้วยกัน (`pnpm e2e`)
 ├── deploy/         # production.env.example (template ของ env file production ไม่มีค่าจริง), ตัวอย่าง IAM policy และ lifecycle ของ S3
 ├── scripts/        # backup.sh, restore.sh (รันบน host), smoke-*.sh ทดสอบ image/compose/backup จริง (CI job images), lib/ ที่ใช้ร่วมกัน
 ├── templates/      # Excel template เปล่า (ไม่มีข้อมูลจริง)
@@ -668,6 +669,7 @@ aws iam put-role-policy --role-name <ชื่อ role ของ EC2> --policy-n
 - **`packages/shared`:** เทสต์ schema ตรงๆ (Vitest ไม่ต้องใช้ DB, `packages/shared/test/`) เพราะเป็นด่านแรกที่ตรวจข้อมูลจากภายนอกทุก request และทุกแถวของไฟล์ import: การ normalize (login ID ตัวเล็ก, รหัสชุมนุมตัวใหญ่), strict object ที่ต้องปฏิเสธ field เกิน (`studentId`, `grade` ใน request ที่ไม่ควรมี), ช่วงเวลารอบเทียบเป็นเวลาจริงไม่ใช่ข้อความ, และ cell ของ Excel (ชั้น "ม.1", เลขที่ที่ไม่ใช่จำนวนเต็ม, เบอร์ที่ขาด 0 นำหน้า, อักขระควบคุม) ตรวจแล้วว่าเทสต์จับได้จริงด้วยการแก้ schema ให้ผิด 7 แบบ (ไม่ lower-case, เทียบเวลาเป็นข้อความ, ยอมเวลาเท่ากัน, ไม่บังคับ 0 นำหน้าเบอร์, request ไม่ strict, ปฏิเสธการขึ้นบรรทัดในรายละเอียด, ยอมจุดทศนิยม) ทุกแบบมีเทสต์ล้ม
 - **Concurrency test** (ตัวหลัก): 500 request แย่ง 1 ชุมนุม ต้องไม่เกิน capacity และไม่มีลงซ้ำ
 - **Invariant check:** `clubs.registered` = จำนวน `registrations` จริง, ไม่มีนักเรียนมี 2 registration
+- **E2E (`e2e/`, `pnpm e2e`):** Playwright เปิด Chromium จริงกับ web (vite dev server) + api (จาก source แบบ `NODE_ENV=production` ต่อ DB ด้วย `club_app`) + Postgres ใน container (Testcontainers) ที่ `e2e/global-setup.ts` สร้าง migrate ด้วย CLI จริง (`src/migrate.ts`) ใส่ข้อมูลสมมติ แล้วลบทิ้งหลังรัน เป็นที่เดียวที่ web กับ api รันด้วยกันจริงก่อน deploy ครอบคลุม: ไม่มี session ถูกส่งไป login, นักเรียนเปิดหน้า admin ถูกส่งกลับหน้าของตัวเอง, admin เห็นรอบและชุมนุม, นักเรียนลงชุมนุมแล้วยกเลิก (ตรวจใน DB ด้วยว่า `registered` กลับเป็น 0 และมี event `register` กับ `cancel`), ชุมนุมเต็มกดไม่ได้, login ครั้งแรกต้องเปลี่ยนรหัสก่อนเข้าหน้าอื่นและรหัสเดิมใช้ไม่ได้อีก ตรวจแล้วว่าจับบั๊กได้ (ปุ่มลงชุมนุมกดได้แม้เต็ม หรือเอาการเช็ก role ออก ทำให้เทสต์ล้ม) port 3910 (api) และ 5910 (web) ไม่ชนกับ `pnpm dev` (เปลี่ยนได้ด้วย `E2E_API_PORT`/`E2E_WEB_PORT`) ไม่อยู่ใน `pnpm test` เพราะต้องมีเบราว์เซอร์ ในเครื่องต้องมี Chromium ของ Playwright 1.63 (`pnpm --filter @club-registration/e2e exec playwright install chromium`) CI รันเป็น job `e2e` ทุก PR และทุก push เข้า `main` ถ้าล้มดู log ของ server ใน `e2e/test-results/servers/` และภาพหน้าจอใน `e2e/test-results/artifacts/` (gitignored)
 - **Load test** บนสเปคเครื่องจริงก่อนวันใช้งาน (500 virtual users แย่งชุมนุมเดียว)
 - **Dry run** กับข้อมูลจำลองก่อนใช้จริง และมีแผน rollback/fallback (เช่น ลงด้วยกระดาษถ้าระบบล่ม)
 

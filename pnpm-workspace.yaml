@@ -1,6 +1,8 @@
 packages:
   - apps/*
   - packages/*
+  # Browser tests of web + api + Postgres together (not part of pnpm test: they need a browser).
+  - e2e
 
 # Refuse to install on a Node outside package.json engines (>= 24.7 for crypto.argon2). Without
 # it pnpm only warns, and on Node 22 the install succeeds but web tests fail later with a

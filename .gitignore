@@ -19,3 +19,7 @@ samples/
 *.dump.partial
 # Caddy certificate archives from scripts/backup.sh --include-certs (private keys)
 caddy-data-*.tar.gz
+
+# Playwright (e2e/): screenshots of failed tests, server logs and reports, all from fictional data.
+e2e/test-results/
+e2e/playwright-report/
