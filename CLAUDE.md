@@ -48,7 +48,7 @@
 
 ## Commands
 
-ตั้งค่าครั้งแรก (ต้องมี Docker และ Node 24 ส่วน pnpm มาจาก Corepack)
+ตั้งค่าครั้งแรก (ต้องมี Docker และ Node 24 ≥ 24.7 ส่วน pnpm มาจาก Corepack) ถ้าใช้ Node เวอร์ชันอื่น `pnpm install` จะไม่ยอมติดตั้ง เพราะเปิด `engineStrict` ใน `pnpm-workspace.yaml`
 
 ```bash
 corepack enable
