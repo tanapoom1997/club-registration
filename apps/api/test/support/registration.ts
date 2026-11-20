@@ -183,27 +183,49 @@ export const waitForAdvisoryLockWaiter = async (pool: Pool): Promise<void> => {
 
 // How each event type moves seats, as a VALUES list every event check reads: what it does to the
 // seat of club_id and to the seat of from_club_id (counted only when from_club_id is set). A change
-// takes the new club's seat and gives back the old one; a waitlist_promote takes the new seat and
-// gives back the old one when the student held one; waitlist_join/leave move no seat (a join's
-// from_club_id names a waitlist given up, not a seat). admin_* add their rows here when they
-// exist. An event type missing from this list fails the check below, so a new writer cannot slip
-// past the accounting.
+// takes the new club's seat and gives back the old one; a waitlist_promote and an admin_assign
+// take the new seat and give back the old one when the student held one; an admin_remove gives
+// back the seat of its club; waitlist_join/leave move no seat (a join's from_club_id names a
+// waitlist given up, not a seat). An event type missing from this list fails the check below, so
+// a new writer cannot slip past the accounting.
 const SEAT_EFFECTS = `
   seat_effect (event_type, club_delta, from_club_delta) AS (
     VALUES ('register', 1, 0), ('cancel', -1, 0), ('change', 1, -1),
-           ('waitlist_join', 0, 0), ('waitlist_leave', 0, 0), ('waitlist_promote', 1, -1)
+           ('waitlist_join', 0, 0), ('waitlist_leave', 0, 0), ('waitlist_promote', 1, -1),
+           ('admin_assign', 1, -1), ('admin_remove', -1, 0)
   )`;
 
 // The waitlist events of each student and round in the order they happened (id: one transaction's
 // events share created_at), each with the one before it.
+//
+// An admin_assign into the club the student waits for ends that entry in its own transaction
+// (club-members.ts), with no waitlist event of its own: the request's one keyed event is the
+// admin_assign. Such an assign counts here as the end of the entry, like a leave or a promote.
+// It is one exactly when the student had an entry for its club at that moment: the latest earlier
+// event among the waitlist events and the admin_assigns into that same club is a join of that
+// club. (An assign into another club leaves the entry alone; an earlier assign into this club
+// already ended the entry it found.)
 const WAITLIST_EVENTS = `
+  entry_events AS (
+    SELECT e.id, e.round_id, e.student_id, e.event_type, e.club_id, e.from_club_id
+    FROM registration_events e
+    WHERE e.event_type IN ('waitlist_join', 'waitlist_leave', 'waitlist_promote')
+       OR (e.event_type = 'admin_assign' AND COALESCE((
+             SELECT p.event_type = 'waitlist_join' AND p.club_id = e.club_id
+             FROM registration_events p
+             WHERE p.round_id = e.round_id AND p.student_id = e.student_id AND p.id < e.id
+               AND (p.event_type IN ('waitlist_join', 'waitlist_leave', 'waitlist_promote')
+                    OR (p.event_type = 'admin_assign' AND p.club_id = e.club_id))
+             ORDER BY p.id DESC
+             LIMIT 1
+           ), false))
+  ),
   waitlist_events AS (
     SELECT e.id, e.round_id, e.student_id, e.event_type, e.club_id, e.from_club_id,
            lag(e.event_type) OVER w AS previous_type,
            lag(e.club_id) OVER w AS previous_club_id,
            row_number() OVER (PARTITION BY e.round_id, e.student_id ORDER BY e.id DESC) AS recency
-    FROM registration_events e
-    WHERE e.event_type IN ('waitlist_join', 'waitlist_leave', 'waitlist_promote')
+    FROM entry_events e
     WINDOW w AS (PARTITION BY e.round_id, e.student_id ORDER BY e.id)
   )`;
 
@@ -250,14 +272,14 @@ const INVARIANTS: Readonly<Record<string, string>> = Object.freeze({
     WITH ${SEAT_EFFECTS}
     SELECT DISTINCT e.event_type FROM registration_events e
     WHERE e.event_type NOT IN (SELECT event_type FROM seat_effect)`,
-  // A change always leaves a club; a promote leaves one only when the student held one, and a join
-  // names the waitlist it gave up, if any (checked against the log below). No other event names a
-  // from-club, and none names the club it is about.
+  // A change always leaves a club; a promote and an admin assign leave one only when the student
+  // held one, and a join names the waitlist it gave up, if any (checked against the log below). No
+  // other event names a from-club, and none names the club it is about.
   'from_club_id is set only where an event can leave a club, and never equals club_id': `
     SELECT e.id, e.event_type, e.club_id, e.from_club_id
     FROM registration_events e
     WHERE (e.event_type = 'change' AND e.from_club_id IS NULL)
-       OR (e.event_type NOT IN ('change', 'waitlist_promote', 'waitlist_join')
+       OR (e.event_type NOT IN ('change', 'waitlist_promote', 'waitlist_join', 'admin_assign')
            AND e.from_club_id IS NOT NULL)
        OR e.from_club_id = e.club_id`,
   'seats taken minus seats given back equals the seats each student holds': `
@@ -279,7 +301,8 @@ const INVARIANTS: Readonly<Record<string, string>> = Object.freeze({
     FROM clubs c LEFT JOIN net n ON n.club_id = c.id
     WHERE c.registered <> COALESCE(n.net, 0)`,
   // The latest event that moved one of the student's seats in the round must be one that gave
-  // them the club they hold (a register or a change into it), not a cancel or another club.
+  // them the club they hold (a register, change, promote or admin assign into it), not a cancel,
+  // an admin remove or another club.
   "the student's latest seat event gave them the club they hold": `
     WITH ${SEAT_EFFECTS}
     SELECT r.id, r.club_id, latest.event_type, latest.club_id AS event_club_id
@@ -294,13 +317,19 @@ const INVARIANTS: Readonly<Record<string, string>> = Object.freeze({
     WHERE latest.club_id IS DISTINCT FROM r.club_id OR latest.club_delta IS DISTINCT FROM 1`,
   // A promotion is no request of its own: it has no key, and its actor is whoever freed the seat:
   // the student who cancelled or changed, or the admin whose club edit or import commit raised a
-  // capacity or whose round edit reopened the round. Everything else is a student's own keyed
-  // request.
-  'students act for themselves with a key, and only a promotion has none': `
-    SELECT id, event_type, actor_id, student_id, idempotency_key FROM registration_events
-    WHERE (event_type <> 'waitlist_promote'
-           AND (actor_id <> student_id OR idempotency_key IS NULL))
-       OR (event_type = 'waitlist_promote' AND idempotency_key IS NOT NULL)`,
+  // capacity, whose round edit reopened the round or who moved or removed a student. admin_* are
+  // an admin's keyed request for a student, so their actor is an admin account. Everything else is
+  // a student's own keyed request.
+  'students act for themselves with a key, admins for students, and only a promotion has none': `
+    SELECT e.id, e.event_type, e.actor_id, e.student_id, e.idempotency_key, u.role AS actor_role
+    FROM registration_events e
+    JOIN users u ON u.id = e.actor_id
+    WHERE CASE
+      WHEN e.event_type = 'waitlist_promote' THEN e.idempotency_key IS NOT NULL
+      WHEN e.event_type IN ('admin_assign', 'admin_remove')
+        THEN u.role <> 'admin' OR e.idempotency_key IS NULL
+      ELSE e.actor_id <> e.student_id OR e.idempotency_key IS NULL
+    END`,
   'nobody waits for the club they hold': `
     SELECT w.id, w.student_id, w.club_id
     FROM waitlist_entries w
@@ -329,7 +358,8 @@ const INVARIANTS: Readonly<Record<string, string>> = Object.freeze({
     JOIN rounds ro ON ro.id = w.round_id
     WHERE sp.grade <> ro.grade AND ro.closes_at > statement_timestamp()`,
   // A join replaces the student's entry: its from_club_id is the club of the entry it gave up
-  // (null when there was none). A leave and a promote end the entry of the club they name.
+  // (null when there was none). A leave, a promote and an entry-ending admin assign end the entry
+  // of the club they name.
   'each waitlist event follows from the one before it': `
     WITH ${WAITLIST_EVENTS}
     SELECT id, event_type, club_id, from_club_id, previous_type, previous_club_id
@@ -341,7 +371,8 @@ const INVARIANTS: Readonly<Record<string, string>> = Object.freeze({
            AND (previous_type IS DISTINCT FROM 'waitlist_join'
                 OR previous_club_id IS DISTINCT FROM club_id))`,
   // Replaying the log gives the entries: the latest waitlist event of a student in a round is a
-  // join (waiting for its club) or a leave/promote (not waiting), and the table agrees.
+  // join (waiting for its club) or a leave/promote/entry-ending admin assign (not waiting), and
+  // the table agrees.
   'the waitlist events replay to the entries that exist': `
     WITH ${WAITLIST_EVENTS},
     expected AS (

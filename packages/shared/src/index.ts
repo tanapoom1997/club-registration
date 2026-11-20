@@ -128,6 +128,23 @@ export type {
   UpdateClubRequest,
 } from './clubs.js';
 export {
+  CLUB_MEMBER_SOURCES,
+  clubMemberRequestSchema,
+  clubMemberSchema,
+  clubMemberSourceSchema,
+  clubMembersResponseSchema,
+  clubMemberWriteResponseSchema,
+  clubSeatsSchema,
+} from './club-members.js';
+export type {
+  ClubMember,
+  ClubMemberRequest,
+  ClubMemberSource,
+  ClubMembersResponse,
+  ClubMemberWriteResponse,
+  ClubSeats,
+} from './club-members.js';
+export {
   CLASSROOM_LIST_COLUMNS,
   CLUB_LIST_COLUMNS,
   EXPORT_FORMATS,
