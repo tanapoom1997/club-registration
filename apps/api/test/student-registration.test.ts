@@ -134,6 +134,7 @@ describe('student register and cancel', () => {
         registration: {
           club: { id: clubId, clubCode: rows[0]!.club_code, name: CLUB_NAME },
           registeredAt: rows[0]!.created_at.toISOString(),
+          promotedFromWaitlist: false,
         },
       });
       expect(await storedSeats(pool, clubId)).toMatchObject({ registered: 1, rows: 1 });

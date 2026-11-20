@@ -1,5 +1,10 @@
 import type { StartedPostgreSqlContainer } from '@testcontainers/postgresql';
-import { errorResponseSchema, studentRegistrationResponseSchema } from '@club-registration/shared';
+import {
+  errorResponseSchema,
+  studentRegistrationResponseSchema,
+  studentRoundResponseSchema,
+  studentWaitlistResponseSchema,
+} from '@club-registration/shared';
 import type { FastifyInstance } from 'fastify';
 import type { Pool } from 'pg';
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from 'vitest';
@@ -420,5 +425,182 @@ describe('registration under concurrency', () => {
       expect(targets).toContain(held[0]);
       expect(await changeEventCount(held[0]!)).toBe(1);
     });
+  });
+
+  // The waitlist under load (README Phase 2 "Test ที่ต้องมี"), on this file's pool with its long
+  // connection wait (beforeAll above). In this file rather than its own so its 500-student test
+  // never runs at the same time as the one above: each file runs in its own worker. The invariant
+  // check after each test includes "no free seat with a queue in an open round" and "the waitlist
+  // events replay to the entries".
+  describe('waitlist', () => {
+    const post = async (url: string, studentId: number, payload: Record<string, unknown>) =>
+      await app.inject({
+        method: 'POST',
+        url,
+        cookies: { [SESSION_COOKIE]: sessionCookie(app, studentId) },
+        payload,
+      });
+
+    const registerOnce = async (studentId: number, clubId: number) =>
+      await post(REGISTER_URL, studentId, { clubId, idempotencyKey: newKey() });
+    const join = async (studentId: number, clubId: number, idempotencyKey = newKey()) =>
+      await post('/api/student/waitlist', studentId, { clubId, idempotencyKey });
+    const leave = async (studentId: number, idempotencyKey = newKey()) =>
+      await post('/api/student/waitlist/leave', studentId, { idempotencyKey });
+    const cancelOnce = async (studentId: number) =>
+      await post(CANCEL_URL, studentId, { idempotencyKey: newKey() });
+
+    // What a student's page does: register, and on club_full offer the waitlist.
+    const registerOrWait = async (studentId: number, clubId: number): Promise<string> => {
+      const registered = await registerOnce(studentId, clubId);
+      if (codeOf(registered) !== 'club_full') return codeOf(registered);
+      const joined = await join(studentId, clubId);
+      return codeOf(joined) === 'ok' ? 'waitlisted' : codeOf(joined);
+    };
+
+    const queueOf = async (clubId: number) => {
+      const { rows } = await pool.query<{ student_id: number }>(
+        'SELECT student_id FROM waitlist_entries WHERE club_id = $1 ORDER BY created_at, id',
+        [clubId],
+      );
+      return rows.map(({ student_id: studentId }) => studentId);
+    };
+
+    const positionOf = async (studentId: number) => {
+      const response = await app.inject({
+        method: 'GET',
+        url: '/api/student/round',
+        cookies: { [SESSION_COOKIE]: sessionCookie(app, studentId) },
+      });
+      return studentRoundResponseSchema.parse(response.json()).waitlist?.position;
+    };
+
+    const promotedInto = async (clubId: number) => {
+      const { rows } = await pool.query<{ student_id: number }>(
+        `SELECT student_id FROM registration_events
+         WHERE event_type = 'waitlist_promote' AND club_id = $1 ORDER BY id`,
+        [clubId],
+      );
+      return rows.map(({ student_id: studentId }) => studentId);
+    };
+
+    const codesOf = (responses: InjectResponse[]) => countBy(responses);
+
+    // README Phase 2 required test 1.
+    it('seats exactly capacity out of 500 students and queues every other one', async () => {
+      const roundId = await createOpenRound(pool);
+      const clubId = await createClub(pool, roundId, uniqueCode(), { capacity: 30 });
+      const students = await createStudents(pool, 500);
+
+      const startedAt = performance.now();
+      const outcomes = await Promise.all(
+        students.map(async (studentId) => await registerOrWait(studentId, clubId)),
+      );
+      const elapsedMs = performance.now() - startedAt;
+
+      expect(
+        outcomes.reduce<Record<string, number>>(
+          (counts, outcome) => ({ ...counts, [outcome]: (counts[outcome] ?? 0) + 1 }),
+          {},
+        ),
+      ).toEqual({ ok: 30, waitlisted: 470 });
+      expect(await storedSeats(pool, clubId)).toEqual({ registered: 30, capacity: 30, rows: 30 });
+      const queue = await queueOf(clubId);
+      expect(queue).toHaveLength(470);
+      expect(new Set(queue).size).toBe(470);
+      const waitlisted = students.filter((_, i) => outcomes[i] === 'waitlisted');
+      expect([...queue].sort((a, b) => a - b)).toEqual([...waitlisted].sort((a, b) => a - b));
+      // Printed so a number quoted anywhere comes from a real run, not an estimate.
+      console.info(
+        `500 students registering or joining the waitlist of 30 seats (970 requests): ` +
+          `${Math.round(elapsedMs)} ms for all, pool of ${DEFAULT_POOL_SETTINGS.max}`,
+      );
+    }, 120_000);
+
+    // README Phase 2 required test 2.
+    it('promotes exactly the first 10 of 50 waiters when 10 holders cancel at once', async () => {
+      const roundId = await createOpenRound(pool);
+      const clubId = await createClub(pool, roundId, uniqueCode(), { capacity: 30 });
+      const holders = await createStudents(pool, 30);
+      for (const studentId of holders) await seatStudent(pool, studentId, clubId);
+      const waiters = await createStudents(pool, 50);
+      for (const studentId of waiters) expect(codeOf(await join(studentId, clubId))).toBe('ok');
+
+      const cancels = await Promise.all(
+        holders.slice(0, 10).map(async (studentId) => await cancelOnce(studentId)),
+      );
+
+      expect(codesOf(cancels)).toEqual({ ok: 10 });
+      expect(await promotedInto(clubId)).toEqual(waiters.slice(0, 10));
+      expect(await queueOf(clubId)).toEqual(waiters.slice(10));
+      const positions = await Promise.all(waiters.slice(10).map(positionOf));
+      expect(positions).toEqual(Array.from({ length: 40 }, (_, i) => i + 1));
+      expect(await storedSeats(pool, clubId)).toEqual({ registered: 30, capacity: 30, rows: 30 });
+    }, 60_000);
+
+    it('carries out a join once when it is sent many times at once with one key', async () => {
+      const roundId = await createOpenRound(pool);
+      const clubId = await createClub(pool, roundId, uniqueCode(), { capacity: 1 });
+      await seatStudent(pool, await createStudentId(pool), clubId);
+      const studentId = await createStudentId(pool);
+      const key = newKey();
+
+      const responses = await Promise.all(
+        Array.from({ length: 20 }, async () => await join(studentId, clubId, key)),
+      );
+
+      expect(codesOf(responses)).toEqual({ ok: 20 });
+      const bodies = responses.map((r) => studentWaitlistResponseSchema.parse(r.json()));
+      expect(new Set(bodies.map((body) => JSON.stringify(body))).size).toBe(1);
+      expect((await eventsOf(pool, studentId)).map(({ event_type: type }) => type)).toEqual([
+        'waitlist_join',
+      ]);
+    });
+
+    it('leaves once when one leave is sent many times at once', async () => {
+      const roundId = await createOpenRound(pool);
+      const clubId = await createClub(pool, roundId, uniqueCode(), { capacity: 1 });
+      await seatStudent(pool, await createStudentId(pool), clubId);
+      const studentId = await createStudentId(pool);
+      await join(studentId, clubId);
+      const key = newKey();
+
+      const responses = await Promise.all(
+        Array.from({ length: 20 }, async () => await leave(studentId, key)),
+      );
+
+      expect(codesOf(responses)).toEqual({ ok: 20 });
+      expect((await eventsOf(pool, studentId)).map(({ event_type: type }) => type)).toEqual([
+        'waitlist_join',
+        'waitlist_leave',
+      ]);
+      expect(await queueOf(clubId)).toEqual([]);
+    });
+
+    it('hands every seat freed while joins and registers race cancels to someone', async () => {
+      const roundId = await createOpenRound(pool);
+      const clubId = await createClub(pool, roundId, uniqueCode(), { capacity: 10 });
+      const holders = await createStudents(pool, 10);
+      for (const studentId of holders) await seatStudent(pool, studentId, clubId);
+      const newcomers = await createStudents(pool, 40);
+
+      const [cancels, outcomes] = await Promise.all([
+        Promise.all(holders.slice(0, 5).map(async (studentId) => await cancelOnce(studentId))),
+        Promise.all(newcomers.map(async (studentId) => await registerOrWait(studentId, clubId))),
+      ]);
+
+      expect(codesOf(cancels)).toEqual({ ok: 5 });
+      // waitlist_not_needed: register found the club full, then a cancel freed a seat nobody
+      // was queued for before the join ran.
+      outcomes.forEach((outcome) =>
+        expect(['ok', 'waitlisted', 'waitlist_not_needed']).toContain(outcome),
+      );
+      const queue = await queueOf(clubId);
+      const { registered } = await storedSeats(pool, clubId);
+      // Five seats were freed, 35 newcomers got no seat directly: unless every freed seat went to
+      // a register, the queue's head took it, and anyone still queued waits for a full club.
+      expect(queue.length === 0 || registered === 10).toBe(true);
+      expect(registered).toBeGreaterThanOrEqual(5);
+    }, 60_000);
   });
 });

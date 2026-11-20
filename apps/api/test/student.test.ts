@@ -172,6 +172,7 @@ describe('student read API', () => {
           status: 'open',
         },
         registration: null,
+        waitlist: null,
       });
     });
 
@@ -236,7 +237,7 @@ describe('student read API', () => {
       const response = await get(ROUND_URL, token);
 
       expect(response.statusCode).toBe(200);
-      expect(response.json()).toEqual({ round: null, registration: null });
+      expect(response.json()).toEqual({ round: null, registration: null, waitlist: null });
     });
 
     it("includes the student's registration in the selected round", async () => {
@@ -254,6 +255,7 @@ describe('student read API', () => {
       expect(registration).toEqual({
         club: { id: clubId, clubCode: 'A100', name: 'ชุมนุมหมากรุกสมมติ' },
         registeredAt: rows[0]!.created_at.toISOString(),
+        promotedFromWaitlist: false,
       });
     });
 
@@ -308,6 +310,7 @@ describe('student read API', () => {
           registered: 0,
           remaining: 30,
           advisorNames: [],
+          waitlistCount: 0,
         },
         {
           id: second,
@@ -318,6 +321,7 @@ describe('student read API', () => {
           registered: 3,
           remaining: 2,
           advisorNames: [ADVISOR.fullName, 'ครูสมมติ คนที่สอง'],
+          waitlistCount: 0,
         },
       ]);
     });
@@ -345,8 +349,8 @@ describe('student read API', () => {
         get(ROUND_URL, token),
       ]);
 
-      const { round, registration, clubs } = clubsOf(clubsResponse);
-      expect({ round, registration }).toEqual(roundOf(roundResponse));
+      const { round, registration, waitlist, clubs } = clubsOf(clubsResponse);
+      expect({ round, registration, waitlist }).toEqual(roundOf(roundResponse));
       expect(registration?.club.id).toBe(clubId);
       expect(clubs).toMatchObject([{ id: clubId, registered: 1, remaining: 29 }]);
     });
@@ -357,7 +361,12 @@ describe('student read API', () => {
       const response = await get(CLUBS_URL, token);
 
       expect(response.statusCode).toBe(200);
-      expect(response.json()).toEqual({ round: null, registration: null, clubs: [] });
+      expect(response.json()).toEqual({
+        round: null,
+        registration: null,
+        waitlist: null,
+        clubs: [],
+      });
     });
 
     it("never sends advisors' phone, email or LINE ID", async () => {

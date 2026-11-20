@@ -2,7 +2,7 @@
 
 ระบบลงทะเบียนชุมนุมของโรงเรียน สำหรับนักเรียน ~2,500 คน แบ่งรอบตามชั้น ม.1–ม.6 รอบละ ~400–450 คน
 
-> **สถานะ:** Phase 1 ฟีเจอร์ครบแล้ว (admin: รอบ, import Excel, รหัสผ่านเริ่มต้น, ชุมนุม, export Excel/PDF; นักเรียน: ดูชุมนุม, ลง/ยกเลิก พร้อม concurrency test 500 request) งาน Ops ทำ image, compose production + HTTPS และ backup/restore เสร็จแล้ว เหลือ runbook EC2 + DNS แล้ว load test บนเครื่องจริง **Phase 2 เริ่มแล้ว:** API เปลี่ยนชุมนุมแบบ atomic (`PUT /api/student/registration`) เสร็จ ต่อไป waitlist ดู [Roadmap](#roadmap) และ [รายการที่ยังเปิดอยู่](#รายการที่ยังเปิดอยู่)
+> **สถานะ:** Phase 1 ฟีเจอร์ครบแล้ว (admin: รอบ, import Excel, รหัสผ่านเริ่มต้น, ชุมนุม, export Excel/PDF; นักเรียน: ดูชุมนุม, ลง/ยกเลิก พร้อม concurrency test 500 request) งาน Ops ทำ image, compose production + HTTPS และ backup/restore เสร็จแล้ว เหลือ runbook EC2 + DNS แล้ว load test บนเครื่องจริง **Phase 2 เริ่มแล้ว:** API เปลี่ยนชุมนุมแบบ atomic (`PUT /api/student/registration`) และ API waitlist ของนักเรียน (เข้า/ออก + promote อัตโนมัติหลังยกเลิกและเปลี่ยนชุมนุม) เสร็จ ต่อไป promote หลัง admin แก้ชุมนุม/import แล้วหน้าเว็บ ดู [Roadmap](#roadmap) และ [รายการที่ยังเปิดอยู่](#รายการที่ยังเปิดอยู่)
 >
 > **หมายเหตุ:** ตัวเลข performance ทั้งหมดเป็นการประเมินจากหลักการ ยังไม่ได้วัดจริง ต้อง load test ก่อนใช้งาน
 
@@ -18,7 +18,7 @@
 - **Event log แบบ append-only** ตรวจย้อนหลังได้ว่าใครทำอะไรเมื่อไร
 - **ดูแลง่าย ต้นทุนต่ำ** Docker image 2 ตัว (api และ Caddy ที่มีหน้าเว็บอยู่ข้างใน) บน EC2 เครื่องเดียว คาดว่าไม่เกิน ~$40 ต่อปี (ประเมิน ยังไม่ได้ตรวจราคาจริง)
 
-> การกันลงเกินที่ระดับ DB, idempotency, concurrency test และ event log ทำแล้วสำหรับการลง/ยกเลิก (Phase 1) และเปลี่ยนชุมนุมแบบ atomic (Phase 2) ส่วน waitlist ยังเป็นดีไซน์ตามแผน ดูความคืบหน้าที่หัวข้อ [Roadmap](#roadmap)
+> การกันลงเกินที่ระดับ DB, idempotency, concurrency test และ event log ทำแล้วสำหรับการลง/ยกเลิก (Phase 1) เปลี่ยนชุมนุมแบบ atomic และ API waitlist ของนักเรียนพร้อม promote เป็นทอด (Phase 2) ส่วน promote หลัง admin แก้ชุมนุม/import และหน้าเว็บของ waitlist ยังไม่ทำ ดูความคืบหน้าที่หัวข้อ [Roadmap](#roadmap)
 
 > **เกี่ยวกับ repo นี้:** เป็น Public เพื่อแสดงงาน จะไม่มีข้อมูลนักเรียน ครู หรือ secret จริงอยู่ใน repo เด็ดขาด ตัวอย่างและข้อมูลทดสอบทั้งหมดเป็นข้อมูลสมมติ
 
@@ -118,7 +118,7 @@ clubs               -- club_code, name, description, capacity, registered, round
 club_advisors       -- ครูของชุมนุม: full_name, phone, email, line_id (optional ทั้งหมด)
 registrations       -- สถานะปัจจุบัน UNIQUE(round_id, student_id)
 registration_events -- log append-only: register/cancel/change/admin_*/waitlist_*, actor_id, idempotency_key
-waitlist_entries    -- UNIQUE(round_id, student_id), เรียงตาม created_at
+waitlist_entries    -- UNIQUE(round_id, student_id), เรียงตาม (created_at, id) โดย created_at = clock_timestamp() หลังได้ round lock
 queue_tickets       -- status: waiting | admitted | expired | done
 password_issuances  -- บันทึกการออกรหัสผ่านเริ่มต้น: admin_id, ขอบเขต (ชั้น/ห้อง), จำนวน, idempotency_key (ไม่เก็บรหัสผ่าน)
 ```
@@ -164,7 +164,7 @@ COMMIT;
 2. ~~**Admin import Excel:** students, clubs, advisors → dry run → ยืนยัน → upsert ใน transaction เดียว~~ เสร็จแล้ว รวมขั้นออกรหัสผ่านเริ่มต้นให้นักเรียนที่นำเข้า (ดูหัวข้อ [Security](docs/security.md#security)) ขั้นยืนยันถือ round lock ทุกรอบของภาคเรียนและทุกรอบของภาคเรียนอื่นที่ยังไม่ปิด จึงไม่แข่งกับการลง/ยกเลิก (ดู [Excel Import/Export](docs/excel.md#excel-importexport) ข้อ 3 และเทสต์ `apps/api/test/import-commit-round-locks.test.ts`)
 3. ~~**Admin จัดการรอบ:** สร้างรอบต่อชั้น กำหนด `opens_at`/`closes_at`~~ เสร็จแล้ว (สร้างทีละชั้นหรือครบ ม.1–ม.6, แก้เวลา/`max_active`, ลบรอบที่ยังไม่มีชุมนุม, สถานะคำนวณตอนอ่าน) และ**หน้าชุมนุมรายรอบ**เสร็จแล้ว:
    - `GET /api/admin/rounds/:roundId/clubs` คืนรอบ (สถานะ + ยอดรวม) และชุมนุมเรียงตามรหัส: ชื่อ, รายละเอียด, จำนวนรับ, ลงแล้ว, เหลือ, ครู (รวมเบอร์/อีเมล/LINE เฉพาะ admin และไม่ log)
-   - `PATCH /api/admin/clubs/:id` แก้ได้เฉพาะชื่อ รายละเอียด จำนวนรับ (รหัสชุมนุมและ `registered` แก้ไม่ได้) ลดจำนวนรับต่ำกว่าที่ลงแล้ว → `409 capacity_below_registered` ซึ่งมาจาก `CHECK` ของ DB ไม่ใช่การเช็คใน app (ใน transaction ที่เริ่มด้วย `pg_advisory_xact_lock(round_id)` ของรอบชุมนุมนั้นเหมือนการลง/ยกเลิก จึงรอการลงที่กำลังทำอยู่ให้ commit ก่อน แล้ว UPDATE เดียวที่ `CHECK` ตัดสินด้วยค่าล่าสุดเสมอ) เพิ่มจำนวนรับระหว่างรอบเปิดได้ (Phase 2 ต้อง promote waitlist ใน transaction เดียวกัน) ไม่รับ `idempotency_key` เหมือน endpoint ของรอบ เพราะส่งซ้ำได้ผลเดิม
+   - `PATCH /api/admin/clubs/:id` แก้ได้เฉพาะชื่อ รายละเอียด จำนวนรับ (รหัสชุมนุมและ `registered` แก้ไม่ได้) ลดจำนวนรับต่ำกว่าที่ลงแล้ว → `409 capacity_below_registered` ซึ่งมาจาก `CHECK` ของ DB ไม่ใช่การเช็คใน app (ใน transaction ที่เริ่มด้วย `pg_advisory_xact_lock(round_id)` ของรอบชุมนุมนั้นเหมือนการลง/ยกเลิก จึงรอการลงที่กำลังทำอยู่ให้ commit ก่อน แล้ว UPDATE เดียวที่ `CHECK` ตัดสินด้วยค่าล่าสุดเสมอ) เพิ่มจำนวนรับระหว่างรอบเปิดได้ (ยังไม่ promote waitlist: มาใน Phase 2 PR 2b ระหว่างนี้ชุมนุมที่เพิ่มจำนวนรับอาจมีที่ว่างพร้อมคนรอ การลง/เปลี่ยนเข้าชุมนุมนั้นตอบ `club_full` จนกว่าจะมีคนยกเลิกหรือเปลี่ยนออกในรอบนั้น) ไม่รับ `idempotency_key` เหมือน endpoint ของรอบ เพราะส่งซ้ำได้ผลเดิม
    - หน้า `/admin/clubs` เลือกรอบให้เองตอนเปิดหน้า (รอบที่เปิดอยู่ ถ้ามีหลายรอบเอารอบที่ปิดเร็วสุด ถ้าไม่มีเอารอบที่จะเปิดเร็วสุด ถ้าไม่มีอีกเอารอบที่ปิดล่าสุด เลือกครั้งเดียว ไม่สลับเองทีหลัง) → ตาราง → แก้ในฟอร์มโดยส่งเฉพาะช่องที่เปลี่ยน poll ทุก 5 วินาทีระหว่างรอบเปิด และรอบที่ยังไม่เปิดถามใหม่ตอนถึง `opens_at` ด้วยตัวตั้งเวลาเดียวกับหน้านักเรียน (`apps/web/src/lib/round-refetch.ts`) จึงเริ่ม poll เองโดยไม่ต้องโหลดหน้าใหม่ รายละเอียดแสดงเป็นข้อความล้วน
 4. ~~**นักเรียน:** ดูรายการชุมนุมในชั้นตัวเอง (ชื่อครู, ที่เหลือ), ลง, ยกเลิก, ดูผลของฉัน~~ เสร็จแล้ว ทั้ง API ส่วนอ่าน (S1), ลง/ยกเลิก (S2) และหน้าเว็บนักเรียน (S3):
    - `GET /api/student/round` คืน `{ round, registration }` โดย `round` มี id, ภาคเรียน, ชั้น, เวลาเปิด/ปิด และสถานะ (`upcoming`/`open`/`closed` คำนวณตอนอ่านแบบเดียวกับฝั่ง admin) ไม่มี `maxActive` และยอดรวมที่เป็นของ admin ส่วน `registration` คือชุมนุมที่ตัวเองลงในรอบนั้น (id, รหัส, ชื่อ, เวลาที่ลง) หรือ `null` ชั้นที่ไม่มีรอบเลย = `round: null` ไม่ใช่ error
@@ -202,7 +202,7 @@ COMMIT;
 
 ### Phase 2: เปลี่ยนชุมนุม + Waitlist + Admin แก้แทน
 
-**Locking:** ทุก write transaction ในรอบเริ่มด้วย `SELECT pg_advisory_xact_lock($round_id)` → serialize ต่อรอบ ไม่มี deadlock และ logic ง่าย (แลกกับการไม่ขนานข้ามชุมนุม ซึ่งที่ ~450 คนต่อรอบน่าจะรับได้ ต้อง load test) **ใช้ตั้งแต่ Phase 1 แล้ว** กับการลง/ยกเลิก admin แก้ชุมนุม และขั้นยืนยัน import และกับการเปลี่ยนชุมนุมของ Phase 2 (ล็อกรอบเดียว เพราะชุมนุมเดิมและใหม่อยู่ในรอบเดียวกัน) (ถือทุกรอบของภาคเรียนและรอบที่ยังไม่ปิดของภาคเรียนอื่น เรียง id ต่อจาก import lock) (`apps/api/src/services/round-lock.ts`) endpoint ของ Phase 2 ต้องใช้ helper เดียวกัน ถ้าต้องถือหลายรอบต้องล็อกเรียง id และให้ได้ครบก่อนแตะแถวใด ไม่อย่างนั้นอาจเกิด deadlock กับ import
+**Locking:** ทุก write transaction ในรอบเริ่มด้วย `SELECT pg_advisory_xact_lock($round_id)` → serialize ต่อรอบ ไม่มี deadlock และ logic ง่าย (แลกกับการไม่ขนานข้ามชุมนุม ซึ่งที่ ~450 คนต่อรอบน่าจะรับได้ ต้อง load test) **ใช้ตั้งแต่ Phase 1 แล้ว** กับการลง/ยกเลิก admin แก้ชุมนุม และขั้นยืนยัน import และกับการเปลี่ยนชุมนุมและเข้า/ออก waitlist ของ Phase 2 (ล็อกรอบเดียว เพราะชุมนุมเดิมและใหม่อยู่ในรอบเดียวกัน ส่วน promote ไม่ล็อกเอง รันท้าย transaction ที่ถือ lock ของรอบอยู่แล้ว) (ถือทุกรอบของภาคเรียนและรอบที่ยังไม่ปิดของภาคเรียนอื่น เรียง id ต่อจาก import lock) (`apps/api/src/services/round-lock.ts`) endpoint ของ Phase 2 ต้องใช้ helper เดียวกัน ถ้าต้องถือหลายรอบต้องล็อกเรียง id และให้ได้ครบก่อนแตะแถวใด ไม่อย่างนั้นอาจเกิด deadlock กับ import
 
 **การตัดสินใจของ Phase 2** (ยืนยันแล้ว)
 
@@ -240,18 +240,18 @@ COMMIT;
 ```
 
 - **ลำดับคำตอบ** (ตัดสินใต้ round lock ทั้งหมด): `404` ไม่มีชุมนุม → key เดิม: ตอบซ้ำ `200` หรือ `409 idempotency_key_reused` → `403 student_profile_missing` → `404 not_found` ชุมนุมที่นักเรียนไม่เห็น (ชั้นอื่น รอบอื่น เลือกรอบแบบ S1 ด้วยนาฬิกา DB ไม่บอกว่ามีอยู่จริง) → ขอเปลี่ยนไปชุมนุมที่ถืออยู่แล้ว = `200` registration เดิม ไม่เขียน event (ตอบได้แม้รอบปิด เหมือนการลงซ้ำ) → `409 round_not_open` → `409 not_registered` (ยังไม่มีชุมนุมในรอบนี้ ต้องใช้การลง) → `409 club_full` (เต็ม หรือมีคนรอใน waitlist) `round_not_open` มาก่อน `not_registered` และ `club_full` ตรงกับการลง (`round_not_open` ก่อน `already_registered`/`club_full`) และการยกเลิก (`round_not_open` ก่อน `not_registered`): นอกช่วงเปิดตอบ "ยังไม่เปิด" เสมอไม่ว่าถืออะไรอยู่
-- **ห้ามแซงคิวตั้งแต่วันแรก:** เงื่อนไข `NOT EXISTS (… waitlist_entries …)` อยู่ใน UPDATE ที่จองที่นั่งเลย แม้ตอนนี้ waitlist ยังว่างเสมอ (endpoint ของ waitlist มาใน PR ถัดไป) ชุมนุมที่มีคนรอจึงตอบ `club_full` แม้มีที่ว่าง PR ถัดไปเพิ่มเงื่อนไขเดียวกันให้การลง
+- **ห้ามแซงคิว:** เงื่อนไข `NOT EXISTS (… waitlist_entries …)` อยู่ใน UPDATE ที่จองที่นั่งเลย ชุมนุมที่มีคนรอจึงตอบ `club_full` แม้มีที่ว่าง การลง (`POST`) มีเงื่อนไขเดียวกันแล้ว (ดูหัวข้อ waitlist ด้านล่าง)
 - **Idempotency:** แบบเดียวกับการลง key เดิม + ชุมนุมเดิม → `200` ด้วยสถานะปัจจุบัน ไม่เขียนซ้ำ (ตอบได้แม้รอบปิด) key เดิมกับชุมนุมอื่น หรือ key ของการลง/ยกเลิก (และกลับกัน) → `409 idempotency_key_reused` คำขอที่ถูกปฏิเสธไม่ทิ้ง event จึงลองใหม่ด้วย key เดิมได้
 - **ทำไม UPDATE แทน DELETE + INSERT:** แถว registration ไม่หลุดจาก `UNIQUE(round_id, student_id)` ระหว่าง transaction เลย และ api ต้องการสิทธิ์เพิ่มแค่ `UPDATE` **รายคอลัมน์** `club_id`, `created_at` (migration `20261120000000_change-registration-grants.sql` พร้อม `SELECT` บน `waitlist_entries` สำหรับเงื่อนไขกันแซงคิว) `round_id`/`student_id` ยังแก้ไม่ได้ด้วยสิทธิ์ของ DB เอง ถ้า api มีช่องโหว่ก็ย้ายที่นั่งไปให้นักเรียนอื่นหรือรอบอื่นไม่ได้ (`apps/api/test/db-role.test.ts` ตรวจสิทธิ์รายคอลัมน์ทั้งหมดแบบตรงทุกตัว)
 - **`registeredAt`** หลังเปลี่ยน = เวลาที่ได้ชุมนุมใหม่ (`created_at = DEFAULT` คือ `now()` นาฬิกาเดียวกับที่การลงใช้ตอน INSERT) แถวเดิม (id เดิม)
 - **สลับที่กันไม่ได้:** ที่ใหม่ถูกจองก่อนคืนที่เดิมเสมอ นักเรียนจึงไม่มีช่วงที่ไม่มีที่นั่ง ผลคือ 2 คนในชุมนุมที่เต็มทั้งคู่ที่ขอสลับกันพร้อมกันได้ `club_full` ทั้งคู่ ไม่ว่าใครรันก่อน (ตามกติกา "ที่ใหม่เต็ม = อยู่ที่เดิม") ต้องยกเลิกแล้วลงใหม่ หรือรอผ่าน waitlist
 - **Log:** id และผลเท่านั้น (`student change` มี `clubId`, `fromClubId`, `outcome: changed`/`already_held`/`replayed` หรือรหัส error) ไม่ log ชื่อ
-- **Test:** `apps/api/test/registration-change.test.ts` (ย้ายสำเร็จ, เต็ม/มีคนรอ → อยู่ที่เดิม, ลำดับ error, 404 ทุกแบบ, idempotency, guard/validation/415/rate limit ร่วม, log) และกลุ่ม `changing club` ใน `registration-concurrency.test.ts` (40 คนย้ายเข้าชุมนุมที่ว่าง 5 ที่ → ได้ 5 พอดี ที่เหลืออยู่ที่เดิม, เปลี่ยนแข่งกับการลงและยกเลิกที่นั่งเดียวกัน → ไม่เกิน capacity และยอดตรง, สลับที่ → `club_full` ทั้งคู่, key เดียวกันพร้อมกัน → เกิดผลครั้งเดียว, คนเดียวกดหลายชุมนุมพร้อมกัน → ถือที่เดียว) ตัวตรวจ invariant นับที่นั่งจากตาราง seat effect ต่อชนิด event (`register` +1, `cancel` −1, `change` +1 ที่ใหม่ −1 ที่เดิม) ทั้งรายคนและรายชุมนุม event ล่าสุดต้องเป็นตัวที่ให้ชุมนุมที่ถืออยู่ และชนิด event ที่ไม่มีในตารางถือว่าผิด `waitlist_promote`/`admin_*` เพิ่มแถวในตารางเดียวกันได้
+- **Test:** `apps/api/test/registration-change.test.ts` (ย้ายสำเร็จ, เต็ม/มีคนรอ → อยู่ที่เดิม, ลำดับ error, 404 ทุกแบบ, idempotency, guard/validation/415/rate limit ร่วม, log) และกลุ่ม `changing club` ใน `registration-concurrency.test.ts` (40 คนย้ายเข้าชุมนุมที่ว่าง 5 ที่ → ได้ 5 พอดี ที่เหลืออยู่ที่เดิม, เปลี่ยนแข่งกับการลงและยกเลิกที่นั่งเดียวกัน → ไม่เกิน capacity และยอดตรง, สลับที่ → `club_full` ทั้งคู่, key เดียวกันพร้อมกัน → เกิดผลครั้งเดียว, คนเดียวกดหลายชุมนุมพร้อมกัน → ถือที่เดียว) ตัวตรวจ invariant นับที่นั่งจากตาราง seat effect ต่อชนิด event (`register` +1, `cancel` −1, `change` +1 ที่ใหม่ −1 ที่เดิม, `waitlist_promote` +1 ที่ใหม่ −1 ที่เดิมถ้ามี, `waitlist_join`/`waitlist_leave` 0) ทั้งรายคนและรายชุมนุม event ล่าสุดต้องเป็นตัวที่ให้ชุมนุมที่ถืออยู่ และชนิด event ที่ไม่มีในตารางถือว่าผิด `admin_*` เพิ่มแถวในตารางเดียวกันได้
 
 **กติกา waitlist**
 
 1. ลงชุมนุมที่เต็ม → `409 club_full` + ให้เลือกเข้ารายชื่อรอ
-2. ห้ามลงตรงถ้าชุมนุมมีคนรอ (กันแซงคิว) การเปลี่ยนชุมนุมบังคับแล้ว การลงจะเพิ่มใน PR ถัดไป
+2. ห้ามลงตรงถ้าชุมนุมมีคนรอ (กันแซงคิว) บังคับทั้งการลงและการเปลี่ยนชุมนุมแล้ว
 3. เข้า waitlist ได้ 1 ชุมนุมต่อรอบ (เข้าใหม่ต้องออกจากอันเดิม = เสียลำดับ) คนที่มีชุมนุมอยู่แล้วก็เข้าได้ (การตัดสินใจข้อ 1)
 4. มีที่ว่าง (ยกเลิก/admin ลบ/เพิ่ม capacity/คนย้ายออก) → promote คนรอที่ `created_at` เก่าสุดอัตโนมัติ
 5. คนที่ถูก promote ถ้ามีชุมนุมอยู่แล้ว = เปลี่ยนแบบ atomic (ที่เดิมว่างและ promote ต่อเป็นทอด) ถ้ายังไม่มี = ลงใหม่
@@ -261,25 +261,49 @@ COMMIT;
 
 **Promote loop:** ท้ายทุก endpoint ที่ทำให้เกิดที่ว่างใช้ฟังก์ชันเดียวกัน วนหาคนรอที่เก่าสุดในชุมนุมที่มีที่ว่างจนไม่มีใครถูก promote entry ถูกลบทันทีที่ promote จึงไม่วนไม่รู้จบ
 
+**Waitlist ของนักเรียน (PR 2a)** (เสร็จแล้ว: `apps/api/src/services/waitlist.ts` เข้า/ออก, `waitlist-promote.ts` promote engine, migration `20261121000000_waitlist-grants.sql`)
+
+- **เข้า:** `POST /api/student/waitlist` body `{ "clubId": 12, "idempotencyKey": "..." }` (strict: ใส่ `studentId`, `roundId`, `fromClubId` หรือ field อื่น = `400`) ตอบ `200 { "waitlist": { "club": { "id", "clubCode", "name" }, "position": 1, "joinedAt" } }` `position` 1 = คนถัดไปที่จะได้ชุมนุมนั้น
+- **ออก:** `POST /api/student/waitlist/leave` body `{ "idempotencyKey": "..." }` ตอบ `200 { "waitlist": null }` ออกจาก entry ของตัวเองในรอบที่นักเรียนเห็น (เลือกรอบแบบการยกเลิกด้วยนาฬิกา DB) → event `waitlist_leave` พร้อม `club_id` ที่ออก การออกไม่ทำให้เกิดที่ว่าง จึงไม่ promote ใคร
+- ทั้งสอง endpoint ใช้ guard, JSON อย่างเดียว และ rate limit 30 ครั้ง/นาทีร่วมกับการลง/เปลี่ยน/ยกเลิก นักเรียนมาจาก JWT เท่านั้น
+- **ลำดับคำตอบของการเข้า** (ตัดสินใต้ round lock ทั้งหมด เหมือนการลง/เปลี่ยน): `404` ไม่มีชุมนุม → key เดิม: ตอบซ้ำ `200` หรือ `409 idempotency_key_reused` → `403 student_profile_missing` → `404 not_found` ชุมนุมที่นักเรียนไม่เห็น (ชั้นอื่น รอบอื่น เลือกรอบแบบ S1 ด้วยนาฬิกา DB) → รออยู่ในคิวชุมนุมนี้แล้ว = `200` entry เดิมพร้อมลำดับปัจจุบัน ไม่เขียน event (ตอบได้แม้รอบปิด เหมือนการลงซ้ำ) → `409 round_not_open` → `409 already_in_club` (ถือชุมนุมนี้อยู่แล้ว) → `409 waitlist_not_needed` (ชุมนุมมีที่ว่างที่การลงจะได้ทันที คือว่างและไม่มีคนรอ ให้ลงหรือเปลี่ยนตรง) → เขียน
+- **ลำดับคำตอบของการออก:** `403 student_profile_missing` (ต้องรู้ชั้นก่อนเลือกรอบ เหมือนการยกเลิก) → key เดิม: ตอบซ้ำหรือ `409 idempotency_key_reused` → `409 round_not_open` (นอกช่วงเปิด หรือชั้นนี้ไม่มีรอบเลย) → `409 not_waitlisted` → ลบ
+- **ใครเข้าได้:** คนที่ยังไม่มีชุมนุม และคนที่ถือชุมนุมอื่นอยู่ (การตัดสินใจข้อ 1) ชุมนุมที่มีที่ว่างแต่มีคนรอแล้ว (เกิดได้ช่วงที่ admin เพิ่มจำนวนรับก่อน PR 2b) เข้าคิวได้ เพราะการลงตรงจะได้ `club_full` นักเรียนจึงไม่ติดวนระหว่าง `club_full` กับ `waitlist_not_needed`
+- **ย้ายคิว = เสียลำดับ:** ถ้ารอชุมนุมอื่นอยู่แล้ว การเข้าคิวใหม่ลบ entry เดิมแล้วเพิ่ม entry ใหม่ท้ายคิวใน transaction เดียว (`DELETE` แล้ว `INSERT` คนละ statement เพราะ data-modifying CTE สอง statement ที่แตะ slot `UNIQUE(round_id, student_id)` เดียวกันไม่มีลำดับที่แน่นอน) เขียน event `waitlist_join` **ตัวเดียว** `club_id` = ชุมนุมใหม่ `from_club_id` = ชุมนุมที่สละคิว (`UNIQUE(actor_id, idempotency_key)` ให้มี event ที่มี key ได้ตัวเดียวต่อคำขอ) กลับไปคิวเดิมทีหลังก็ต่อท้ายใหม่ api ไม่มีสิทธิ์ `UPDATE` บน `waitlist_entries` เลย (ย้ายได้ทางลบ + เพิ่มเท่านั้น)
+- **ลำดับคิว:** `(created_at, id)` ทุกที่ (อ่าน ลำดับที่ และ promote) `created_at` ของการเข้าคิวคือ `clock_timestamp()` ที่ INSERT ซึ่งรันหลังได้ round lock แล้ว ลำดับคิวจึงเท่ากับลำดับที่ได้ lock แม้ transaction ที่เริ่มก่อน (และ `now()` เก่ากว่า) จะได้ lock ทีหลัง (เทสต์ตรวจตรงนี้) `id` ตัดสินกรณีเวลาเท่ากัน `position` = 1 + จำนวน entry ของชุมนุมเดียวกันที่อยู่ก่อน ใช้ index `(club_id, round_id, created_at, id)`
+- **นาฬิกา:** การตัดสินลำดับคำตอบอ่านใน statement เดียวกับการเช็คชุมนุมที่เห็น (`statement_timestamp()`) และ INSERT ของ entry ตรวจช่วงเปิดอีกครั้งด้วยนาฬิกาของตัวเอง ถ้าได้ 0 แถว (รอบปิดระหว่างสอง statement) ตอบ `round_not_open` และ ROLLBACK รวมการลบ entry เดิม
+- **Idempotency:** แบบเดียวกับการลง key เดิม + ชนิดเดียวกัน (+ ชุมนุมเดียวกันสำหรับการเข้า) → `200` ด้วย entry **ปัจจุบัน** ในรอบที่คำขอแรกทำ (เช่น เข้าด้วย key A → ออก → ส่ง key A ซ้ำ ได้ `{ "waitlist": null }`) ตอบได้แม้รอบปิด key เดิมกับชุมนุมอื่น หรือข้ามชนิดคำขอ (ลง/เปลี่ยน/ยกเลิก/เข้า/ออก) → `409 idempotency_key_reused` คำขอที่ถูกปฏิเสธไม่ทิ้ง event
+- **Promote engine** (`promoteWaitlist(client, { roundId, actorId })`): ตอนนี้เรียกท้าย**การยกเลิกและการเปลี่ยนชุมนุม**ของนักเรียน (หลัง event ของคำขอเอง ใน transaction และ round lock เดียวกัน ไม่เรียกตอนตอบซ้ำหรือถูกปฏิเสธ) **promote หลัง admin แก้ชุมนุม (`PATCH`) และหลังยืนยัน import ยังไม่ทำ อยู่ใน PR 2b** พร้อมกติกาย้ายชั้นของนักเรียนที่อยู่ในคิว แต่ละรอบของ loop:
+  1. statement เดียว: หา entry ที่เก่าสุด `(created_at, id)` ในบรรดาชุมนุมของรอบที่ `registered < capacity` (หัวคิวของแต่ละชุมนุมที่ว่างผ่าน index แล้วเอาอันที่เก่าสุด) เฉพาะเมื่อรอบเปิดอยู่ตามนาฬิกา DB (`statement_timestamp()`) และชั้นของนักเรียนตรงกับรอบ แล้ว `DELETE ... RETURNING` entry นั้นพร้อมชุมนุมที่นักเรียนถืออยู่ ทุกรอบลบ entry หนึ่งตัว loop จึงจบแน่นอน
+  2. `UPDATE clubs SET registered = registered + 1 ... AND registered < capacity` (ไม่มีเงื่อนไขคนรอ เพราะคนที่ได้คือหัวคิวเอง)
+  3. ถ้าถือชุมนุม Y อยู่: −1 ที่ Y แล้วย้ายแถว registration (`club_id`, `created_at = DEFAULT`) แบบเดียวกับการเปลี่ยน Y จึงว่างและรอบถัดไปอาจ promote หัวคิวของ Y ต่อ (promote เป็นทอด) ถ้ายังไม่มีชุมนุม: INSERT registration
+  4. event `waitlist_promote` `club_id` = ชุมนุมใหม่, `from_club_id` = Y หรือ NULL, `actor_id` = คนที่ทำให้เกิดที่ว่าง (นักเรียนที่ยกเลิก/เปลี่ยน ต่อไปจะเป็น admin), `idempotency_key` = NULL (key อยู่ที่ event ของคำขอเอง และ NULL ไม่ชนกันใน UNIQUE)
+  - ไม่ล็อกแถว `student_profiles`: import ที่จะย้ายชั้นนักเรียนได้ถือ lock ของทุกรอบที่ยังไม่ปิด (รวมรอบนี้ระหว่างเปิด) จึงแทรกกลางไม่ได้ วนซ้ำได้ (A ใน X รอ Y, B ใน Y รอ X) ก็จบเพราะ entry ถูกลบทุกรอบ
+- **คำตอบหลัง promote:** การยกเลิกและการเปลี่ยนตอบด้วย registration **หลัง promote ทั้งหมดใน transaction** ถ้าทอดวนกลับมาถึงคนที่ส่งคำขอ (เช่น A ถือ Y รอ W, P ถือ W รอ Y, A ยกเลิก Y → P ย้ายมา Y → W ว่าง → A ได้ W) คำตอบของการยกเลิกคือ W พร้อม `promotedFromWaitlist: true` ไม่ใช่ `null`
+- **ส่วนอ่าน (S1 เพิ่ม field ไม่เปลี่ยนของเดิม):** `GET /api/student/round` และ `/clubs` มี `waitlist: { club, position, joinedAt } | null` (entry ของตัวเองในรอบที่เลือก) `registration` มี `promotedFromWaitlist` (event ล่าสุดของนักเรียนในรอบที่ย้ายที่นั่งเป็น `waitlist_promote` เรียงตาม `id` เพราะ event ใน transaction เดียวกันมี `created_at` เท่ากัน หน้าเว็บจึงบอก "ได้จากคิว" ได้แม้โหลดหน้าใหม่ และกลับเป็น `false` เมื่อนักเรียนลง/เปลี่ยนเอง) ซึ่งคำตอบของการลง/เปลี่ยน/ยกเลิกก็มีด้วย ชุมนุมแต่ละตัวใน `/clubs` มี `waitlistCount` (จำนวนเท่านั้น ไม่มีชื่อ) ทั้งหมดอ่านใน read-only snapshot เดียวเหมือนเดิม
+- **Error ใหม่ (409 ทั้งหมด):** `already_in_club`, `waitlist_not_needed`, `not_waitlisted`
+- **Log:** id และผลเท่านั้น (`waitlisted`/`already_waiting`/`left_waitlist`/`replayed` หรือรหัส error) การยกเลิก/เปลี่ยนที่ promote ใครเพิ่ม `promoted` (จำนวน) และ `promotions` (student id, club id, from club id) ไม่ log ชื่อ
+- **Test:** `apps/api/test/waitlist.test.ts` (เข้า/ออกทุกคำตอบตามลำดับ, ย้ายคิวเสียลำดับด้วย event เดียว, ลำดับคิว = ลำดับ lock, idempotency ข้ามชนิดคำขอ, promote หลังยกเลิก/เปลี่ยน, ย้ายคนที่ถือชุมนุมอื่น, promote เป็นทอด B → C, ทอดวนกลับถึงคนยกเลิก/คนเปลี่ยน, วงวน 2 คน, ลำดับข้ามชุมนุม, ไม่ promote หลังปิดรอบ, ลำดับที่เลื่อนขึ้น, ลง/เปลี่ยนเข้าชุมนุมที่มีคนรอ → `club_full`, ส่วนอ่าน, guard/validation/415/rate limit ร่วม, log) และกลุ่ม `waitlist` ใน `registration-concurrency.test.ts` (500 คนลงหรือเข้าคิว, 10 คนยกเลิกพร้อมกันกับ 50 คนรอ, key เดียวกันพร้อมกัน, เข้าคิวแข่งกับยกเลิก) ตัวตรวจ invariant เพิ่ม: ไม่มีใครรอชุมนุมที่ตัวเองถือ, รอบที่เปิดอยู่ไม่มีชุมนุมที่มีทั้งที่ว่างและคนรอ, ชั้นของคนรอตรงกับรอบ (จนกว่ารอบจะปิด), event ของ waitlist ต่อกันถูก (join ที่ย้ายคิวต้องบอกคิวเดิม, leave/promote ต้องตามหลัง join ของชุมนุมเดียวกัน) และ replay event แล้วได้ entry ตรงกับตาราง, `waitlist_promote` เท่านั้นที่ไม่มี key และ actor เป็นคนอื่นได้ ตรวจแล้วว่าเทสต์จับได้จริงด้วยการแก้โค้ดให้ผิดทีละแบบ (เอา `NOT EXISTS` ออกจากการลง, ไม่ promote หลังยกเลิกหรือหลังเปลี่ยน, ใช้ `now()` แทน `clock_timestamp()`, promote ไม่ดูช่วงเปิดรอบ, เรียงคิวกลับด้าน, เลือกหัวคิวข้ามชุมนุมผิดลำดับ, `promotedFromWaitlist` จาก event เก่าสุด, ไม่เช็คที่ว่างตอนเข้า, ไม่ลบคิวเดิมตอนย้าย) ทุกแบบมีเทสต์ล้ม
+
 **API เพิ่ม** (ใช้ prefix `/api/student/...` แบบเดียวกับ Phase 1)
 
 | Method | Path | ทำอะไร |
 |---|---|---|
 | PUT | `/api/student/registration` | เปลี่ยนชุมนุมแบบ atomic (**เสร็จแล้ว**) |
-| POST | `/api/student/waitlist` | เข้ารายชื่อรอ |
-| POST | `/api/student/waitlist/leave` | ออกจากรายชื่อรอ (POST เพราะรับ idempotency key แบบเดียวกับ `/cancel`) |
-| GET | `/api/student/round`, `/api/student/clubs` | เพิ่มสถานะ waitlist + ลำดับที่ในคำตอบเดิม หน้าเว็บจึง poll endpoint เดียว |
+| POST | `/api/student/waitlist` | เข้ารายชื่อรอ (**เสร็จแล้ว**) |
+| POST | `/api/student/waitlist/leave` | ออกจากรายชื่อรอ (POST เพราะรับ idempotency key แบบเดียวกับ `/cancel`) (**เสร็จแล้ว**) |
+| GET | `/api/student/round`, `/api/student/clubs` | เพิ่มสถานะ waitlist + ลำดับที่ในคำตอบเดิม หน้าเว็บจึง poll endpoint เดียว (**เสร็จแล้ว** ฝั่ง API) |
 | GET | `/api/admin/clubs/:id/waitlist` | admin ดูรายชื่อรอ |
 
 Admin เพิ่ม/ลบ/ย้ายนักเรียนแทน บันทึกเป็น `admin_assign`/`admin_remove` พร้อม `actor_id` และหน้า admin ดู event log (การตัดสินใจข้อ 3)
 
-**Test ที่ต้องมี**
+**Test ที่ต้องมี** (ข้อ 1–5 มีแล้วสำหรับ API ของนักเรียน: กลุ่ม `waitlist` ใน `registration-concurrency.test.ts` และ `waitlist.test.ts` ส่วน promote หลัง admin แก้ชุมนุม/import มากับ PR 2b)
 
-1. 500 request แย่ง 1 ชุมนุม capacity 30 → `registered = 30` พอดี
-2. ที่เต็ม + 50 คนรอ ยกเลิกพร้อมกัน 10 คน → 10 คนแรกตามลำดับถูก promote ไม่ซ้ำ
+1. 500 request แย่ง 1 ชุมนุม capacity 30 → `registered = 30` พอดี (ลง ถ้า `club_full` เข้าคิว: ได้ 30 รอ 470 ไม่ซ้ำ)
+2. ที่เต็ม + 50 คนรอ ยกเลิกพร้อมกัน 10 คน → 10 คนแรกตามลำดับถูก promote ไม่ซ้ำ (อีก 40 คนลำดับ 1..40 ตามเดิม)
 3. promote เป็นทอด (B ว่าง → คนรอ B ย้ายมาจาก C → คนรอ C เข้า C)
-4. ยิงคำสั่งซ้ำด้วย `idempotency_key` เดียวกัน → เกิดผลครั้งเดียว
-5. Invariant: `clubs.registered` = จำนวน registration จริง, ไม่มีนักเรียนมี 2 registration
+4. ยิงคำสั่งซ้ำด้วย `idempotency_key` เดียวกัน → เกิดผลครั้งเดียว (เข้า/ออก ทั้งส่งซ้ำทีหลังและส่งพร้อมกัน)
+5. Invariant: `clubs.registered` = จำนวน registration จริง, ไม่มีนักเรียนมี 2 registration (และ invariant ของ waitlist ข้างบน) รันหลังทุกเทสต์
 
 ### Phase 3: Queue คุมจำนวนคนเข้า
 
@@ -354,7 +378,7 @@ Admin เพิ่ม/ลบ/ย้ายนักเรียนแทน บ�
 
 1. ~~แก้ข้อ 13–14 ใน [รายการที่ยังเปิดอยู่](#รายการที่ยังเปิดอยู่) (หน้าเว็บ)~~ เสร็จแล้ว
 2. ทดสอบทั้งระบบด้วยมือตาม checklist บนเครื่อง arm64 (ปิดข้อ 15)
-3. เริ่ม **Phase 2** แล้ว (เปลี่ยนชุมนุมแบบ atomic เสร็จ ต่อไป waitlist + admin แก้แทน) ทั้งที่ Phase 1 ยังเหลือ O4/O5 เพราะสองข้อนั้นต้องใช้เครื่องจริง Phase 2 ไม่ได้พึ่ง O4/O5 แต่ต้องรัน O5 ซ้ำหลัง Phase 2 เพราะการเลื่อนคิวทำให้ transaction ในรอบยาวขึ้น
+3. เริ่ม **Phase 2** แล้ว (เปลี่ยนชุมนุมแบบ atomic และ API waitlist ของนักเรียนเสร็จ ต่อไป promote หลัง admin แก้ชุมนุม/import (PR 2b) หน้าเว็บ waitlist และ admin แก้แทน) ทั้งที่ Phase 1 ยังเหลือ O4/O5 เพราะสองข้อนั้นต้องใช้เครื่องจริง Phase 2 ไม่ได้พึ่ง O4/O5 แต่ต้องรัน O5 ซ้ำหลัง Phase 2 เพราะการเลื่อนคิวทำให้ transaction ในรอบยาวขึ้น
 
 ## License
 

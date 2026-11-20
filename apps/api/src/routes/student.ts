@@ -2,13 +2,15 @@ import {
   ERROR_CODES,
   cancelRegistrationRequestSchema,
   changeRegistrationRequestSchema,
+  joinWaitlistRequestSchema,
+  leaveWaitlistRequestSchema,
   registerRequestSchema,
   studentClubsResponseSchema,
   studentQuerySchema,
   studentRegistrationResponseSchema,
   studentRoundResponseSchema,
+  studentWaitlistResponseSchema,
 } from '@club-registration/shared';
-import type { StudentRegistrationResponse } from '@club-registration/shared';
 import type { FastifyReply, FastifyRequest } from 'fastify';
 import type { FastifyPluginAsyncZod } from 'fastify-type-provider-zod';
 import type pg from 'pg';
@@ -23,8 +25,10 @@ import {
 } from '../services/registrations.js';
 import type { RegistrationResult } from '../services/registrations.js';
 import { listStudentClubs, readStudentRound } from '../services/student-round.js';
+import { joinWaitlist, leaveWaitlist } from '../services/waitlist.js';
+import type { WaitlistResult } from '../services/waitlist.js';
 
-// Register, change and cancel share one budget per student. A real visit is a handful of clicks
+// Register, change, cancel and the waitlist's join and leave share one budget per student. A real visit is a handful of clicks
 // plus automatic retries; 30 a minute leaves room for that and still stops a script hammering the
 // round lock. The store is in memory, which is right for the single instance we run.
 const WRITES_PER_STUDENT = 30;
@@ -55,15 +59,16 @@ export const studentRoutes =
       }
     };
 
-    // Ids and the outcome only: never a student, club or advisor name.
-    const runLogged = async (
+    // Ids and the outcome only: never a student, club or advisor name. Promotions a freed seat
+    // caused are logged as ids too (student, club, club left), and their count.
+    const runLogged = async <T extends RegistrationResult | WaitlistResult>(
       request: FastifyRequest,
-      action: 'register' | 'change' | 'cancel',
+      action: 'register' | 'change' | 'cancel' | 'waitlist join' | 'waitlist leave',
       requestedClubId: number | null,
-      work: (client: pg.PoolClient) => Promise<RegistrationResult>,
-    ): Promise<StudentRegistrationResponse> => {
+      work: (client: pg.PoolClient) => Promise<T>,
+    ): Promise<T> => {
       const studentId = requireAuthUser(request).id;
-      let result: RegistrationResult;
+      let result: T;
       try {
         result = await withTransaction(pool, work);
       } catch (error) {
@@ -75,9 +80,20 @@ export const studentRoutes =
         }
         throw error;
       }
-      const { roundId, clubId, fromClubId, outcome, registration } = result;
-      request.log.info({ studentId, roundId, clubId, fromClubId, outcome }, `student ${action}`);
-      return { registration };
+      const { roundId, clubId, fromClubId, outcome } = result;
+      const promotions = 'promotions' in result ? result.promotions : [];
+      request.log.info(
+        {
+          studentId,
+          roundId,
+          clubId,
+          fromClubId,
+          outcome,
+          ...(promotions.length > 0 ? { promoted: promotions.length, promotions } : {}),
+        },
+        `student ${action}`,
+      );
+      return result;
     };
 
     app.get(
@@ -110,12 +126,13 @@ export const studentRoutes =
       async (request) => {
         const { clubId, idempotencyKey } = request.body;
         const studentId = requireAuthUser(request).id;
-        return await runLogged(
+        const { registration } = await runLogged(
           request,
           'register',
           clubId,
           async (client) => await registerForClub(client, { studentId, clubId, idempotencyKey }),
         );
+        return { registration };
       },
     );
 
@@ -133,12 +150,13 @@ export const studentRoutes =
       async (request) => {
         const { clubId, idempotencyKey } = request.body;
         const studentId = requireAuthUser(request).id;
-        return await runLogged(
+        const { registration } = await runLogged(
           request,
           'change',
           clubId,
           async (client) => await changeRegistration(client, { studentId, clubId, idempotencyKey }),
         );
+        return { registration };
       },
     );
 
@@ -154,12 +172,59 @@ export const studentRoutes =
       async (request) => {
         const { idempotencyKey } = request.body;
         const studentId = requireAuthUser(request).id;
-        return await runLogged(
+        const { registration } = await runLogged(
           request,
           'cancel',
           null,
           async (client) => await cancelRegistration(client, { studentId, idempotencyKey }),
         );
+        return { registration };
+      },
+    );
+
+    // POST, not PUT: joining another club's waitlist gives up the current entry and its place, and
+    // the body carries an idempotency key like every other write.
+    app.post(
+      '/student/waitlist',
+      {
+        schema: {
+          body: joinWaitlistRequestSchema,
+          response: { 200: studentWaitlistResponseSchema },
+        },
+        preHandler: writeGate,
+      },
+      async (request) => {
+        const { clubId, idempotencyKey } = request.body;
+        const studentId = requireAuthUser(request).id;
+        const { waitlist } = await runLogged(
+          request,
+          'waitlist join',
+          clubId,
+          async (client) => await joinWaitlist(client, { studentId, clubId, idempotencyKey }),
+        );
+        return { waitlist };
+      },
+    );
+
+    app.post(
+      '/student/waitlist/leave',
+      {
+        schema: {
+          body: leaveWaitlistRequestSchema,
+          response: { 200: studentWaitlistResponseSchema },
+        },
+        preHandler: writeGate,
+      },
+      async (request) => {
+        const { idempotencyKey } = request.body;
+        const studentId = requireAuthUser(request).id;
+        const { waitlist } = await runLogged(
+          request,
+          'waitlist leave',
+          null,
+          async (client) => await leaveWaitlist(client, { studentId, idempotencyKey }),
+        );
+        return { waitlist };
       },
     );
   };
