@@ -2,6 +2,11 @@ packages:
   - apps/*
   - packages/*
 
+# Refuse to install on a Node outside package.json engines (>= 24.7 for crypto.argon2). Without
+# it pnpm only warns, and on Node 22 the install succeeds but web tests fail later with a
+# confusing jsdom Blob error instead of a clear version message.
+engineStrict: true
+
 allowBuilds:
   esbuild: true
   cpu-features: false
