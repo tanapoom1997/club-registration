@@ -280,6 +280,29 @@ describe('admin rounds page', () => {
     expect(screen.queryByRole('form', { name: 'แก้ไขรอบ 2569/1 ม.1' })).toBeNull();
   });
 
+  it('closes the editor of a deleted round even when the list then fails to reload', async () => {
+    const round = roundFixture();
+    let deleted = false;
+    mockRoundsApi([round], {
+      'GET /api/admin/rounds': () =>
+        deleted
+          ? Response.json({ code: 'internal_error', message: 'boom' }, { status: 500 })
+          : Response.json({ rounds: [round] }),
+      'DELETE /api/admin/rounds/1': () => {
+        deleted = true;
+        return new Response(null, { status: 204 });
+      },
+    });
+    renderAt('/admin/rounds');
+    await openEditor(round);
+
+    fireEvent.click(screen.getByRole('button', { name: 'ลบรอบ 2569/1 ม.1' }));
+    fireEvent.click(screen.getByRole('button', { name: 'ยืนยันลบ' }));
+
+    expect((await screen.findByRole('alert')).textContent).toContain('โหลดรายการรอบไม่สำเร็จ');
+    expect(screen.queryByRole('form', { name: 'แก้ไขรอบ 2569/1 ม.1' })).toBeNull();
+  });
+
   it('asks the API for one term and says when that term has no rounds', async () => {
     const fetchMock = mockRoundsApi([roundFixture()], {
       'GET /api/admin/rounds?term=2570%2F1': () => Response.json({ rounds: [] }),

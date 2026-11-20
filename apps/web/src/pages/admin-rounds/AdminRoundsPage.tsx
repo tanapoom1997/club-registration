@@ -112,6 +112,8 @@ export const AdminRoundsPage = () => {
     deleteMutation.mutate(round, {
       onSettled: () => setDeleting(undefined),
       onSuccess: () => {
+        // The refetch usually drops the round and closes its editor, but if the reload fails the
+        // stale list still holds it, and the editor would stay open on a round that is gone.
         if (editingId === round.id) setEditingId(undefined);
       },
     });
