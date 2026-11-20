@@ -59,8 +59,9 @@ jobs:
 
       - run: pnpm lint
 
-      # Testcontainers starts real Postgres containers through the runner's Docker.
-      - run: pnpm test
+      # Testcontainers starts real Postgres containers through the runner's Docker. With coverage,
+      # so a change that lowers it below a package's thresholds (its vitest config) fails here.
+      - run: pnpm test:coverage
 
       - run: pnpm build
 

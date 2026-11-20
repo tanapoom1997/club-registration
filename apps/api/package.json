@@ -12,6 +12,7 @@
     "generate-sample-import": "tsx --conditions=@club-registration/source src/dev/generate-sample-import.ts",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
+    "test:coverage": "vitest run --coverage",
     "build": "tsc -p tsconfig.build.json"
   },
   "dependencies": {
@@ -33,6 +34,7 @@
     "@testcontainers/postgresql": "12.2.1",
     "@types/pdfkit": "0.17.7",
     "@types/pg": "8.23.1",
+    "@vitest/coverage-v8": "5.0.5",
     "testcontainers": "12.2.1",
     "tsx": "4.23.15",
     "vitest": "5.0.5"
