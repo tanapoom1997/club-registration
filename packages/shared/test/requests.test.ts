@@ -6,6 +6,7 @@ import { idempotencyKeySchema } from '../src/idempotency.js';
 import { issueInitialPasswordsRequestSchema } from '../src/initial-passwords.js';
 import {
   cancelRegistrationRequestSchema,
+  changeRegistrationRequestSchema,
   registerRequestSchema,
   studentQuerySchema,
 } from '../src/student.js';
@@ -45,6 +46,27 @@ describe('student requests', () => {
     ['with the club id as text', { clubId: '3', idempotencyKey: KEY }],
   ])('refuses a registration %s', (_case, body) => {
     expect(registerRequestSchema.safeParse(body).success).toBe(false);
+  });
+
+  it('accepts a change to a club with a key', () => {
+    expect(changeRegistrationRequestSchema.safeParse({ clubId: 3, idempotencyKey: KEY })).toEqual({
+      success: true,
+      data: { clubId: 3, idempotencyKey: KEY },
+    });
+  });
+
+  // The club the student leaves is the one they hold, read from the DB, never named by the client.
+  it.each([
+    ['naming a student', { clubId: 3, idempotencyKey: KEY, studentId: 7 }],
+    ['naming the club left', { clubId: 3, idempotencyKey: KEY, fromClubId: 2 }],
+    ['naming a round', { clubId: 3, idempotencyKey: KEY, roundId: 1 }],
+    ['without a key', { clubId: 3 }],
+    ['without a club', { idempotencyKey: KEY }],
+    ['with the club id as text', { clubId: '3', idempotencyKey: KEY }],
+    ['with a zero club id', { clubId: 0, idempotencyKey: KEY }],
+    ['with a short key', { clubId: 3, idempotencyKey: 'short' }],
+  ])('refuses a change %s', (_case, body) => {
+    expect(changeRegistrationRequestSchema.safeParse(body).success).toBe(false);
   });
 
   it('refuses a cancellation that names a club or a student', () => {

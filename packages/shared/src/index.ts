@@ -150,6 +150,7 @@ export type {
 } from './export.js';
 export {
   cancelRegistrationRequestSchema,
+  changeRegistrationRequestSchema,
   registerRequestSchema,
   studentClubSchema,
   studentClubsResponseSchema,
@@ -161,6 +162,7 @@ export {
 } from './student.js';
 export type {
   CancelRegistrationRequest,
+  ChangeRegistrationRequest,
   RegisterRequest,
   StudentClub,
   StudentClubsResponse,

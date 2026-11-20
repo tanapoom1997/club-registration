@@ -29,6 +29,7 @@ const TABLE_PRIVILEGES = [
 
 // Every table in public and what club_app may do with it: the whole list, so a new table without
 // grants, or a grant nobody meant, fails here. Change it together with the migration's GRANTs.
+// has_table_privilege sees table-level grants only; column-level ones are in the next list.
 const EXPECTED_PRIVILEGES: Readonly<Record<string, readonly string[]>> = {
   club_advisors: ['SELECT', 'INSERT', 'DELETE'],
   clubs: ['SELECT', 'INSERT', 'UPDATE'],
@@ -40,7 +41,16 @@ const EXPECTED_PRIVILEGES: Readonly<Record<string, readonly string[]>> = {
   rounds: ['SELECT', 'INSERT', 'UPDATE', 'DELETE'],
   student_profiles: ['SELECT', 'INSERT', 'UPDATE'],
   users: ['SELECT', 'INSERT', 'UPDATE'],
-  waitlist_entries: [],
+  waitlist_entries: ['SELECT'],
+};
+
+const COLUMN_PRIVILEGES = ['SELECT', 'INSERT', 'UPDATE', 'REFERENCES'];
+
+// Privileges club_app holds on single columns of a table it lacks them on as a whole: the change
+// of club moves a registration to another club and re-dates it, and nothing else of the row
+// (round_id, student_id) may ever be rewritten by the api.
+const EXPECTED_COLUMN_PRIVILEGES: Readonly<Record<string, Record<string, readonly string[]>>> = {
+  registrations: { UPDATE: ['club_id', 'created_at'] },
 };
 
 const PERMISSION_DENIED = '42501';
@@ -98,6 +108,32 @@ describe('club_app database role', () => {
     );
   });
 
+  it('has exactly the column privileges the api needs beyond its table privileges', async () => {
+    const { rows } = await ownerPool.query<{ table: string; privilege: string; columns: string[] }>(
+      `SELECT c.relname AS table, p.privilege,
+              array_agg(a.attname::text ORDER BY a.attnum) AS columns
+       FROM pg_class c
+       JOIN pg_namespace n ON n.oid = c.relnamespace AND n.nspname = 'public'
+       JOIN pg_attribute a ON a.attrelid = c.oid AND a.attnum > 0 AND NOT a.attisdropped
+       CROSS JOIN unnest($2::text[]) AS p(privilege)
+       WHERE c.relkind = 'r'
+         AND has_column_privilege($1, c.oid, a.attnum, p.privilege)
+         AND NOT has_table_privilege($1, c.oid, p.privilege)
+       GROUP BY c.relname, p.privilege
+       ORDER BY c.relname, p.privilege`,
+      [APP_DB_ROLE, COLUMN_PRIVILEGES],
+    );
+
+    const actual = rows.reduce<Record<string, Record<string, string[]>>>(
+      (byTable, { table, privilege, columns }) => ({
+        ...byTable,
+        [table]: { ...byTable[table], [privilege]: columns },
+      }),
+      {},
+    );
+    expect(actual).toEqual(EXPECTED_COLUMN_PRIVILEGES);
+  });
+
   it('is no superuser and cannot create roles, databases or objects in public', async () => {
     const { rows } = await ownerPool.query(
       `SELECT rolsuper, rolcreaterole, rolcreatedb, rolreplication, rolbypassrls, rolcanlogin,
@@ -125,6 +161,13 @@ describe('club_app database role', () => {
     ['rewrite the event log', 'UPDATE registration_events SET club_id = NULL'],
     ['delete from the event log', 'DELETE FROM registration_events'],
     ['empty a table', 'TRUNCATE registrations'],
+    ['move a registration to another student', 'UPDATE registrations SET student_id = student_id'],
+    ['move a registration to another round', 'UPDATE registrations SET round_id = round_id'],
+    [
+      'join a waitlist',
+      'INSERT INTO waitlist_entries (round_id, student_id, club_id) VALUES (1, 1, 1)',
+    ],
+    ['clear a waitlist', 'DELETE FROM waitlist_entries'],
     ['delete a user', 'DELETE FROM users'],
     ['read the migration table', 'SELECT name FROM pgmigrations'],
     ['run a program on the database server', `COPY (SELECT 1) TO PROGRAM 'true'`],
