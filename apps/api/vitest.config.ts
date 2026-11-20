@@ -21,9 +21,9 @@ export default defineConfig({
       // Every source file, so one that no test imports counts as uncovered rather than vanishing.
       include: ['src/**/*.ts'],
       reporter: ['text-summary', 'html'],
-      // Floors at the level of the PR that added them (rounded down): CI fails if a change lowers
-      // coverage. Raise them when tests are added; never lower them to pass.
-      thresholds: { statements: 89, branches: 80, functions: 94, lines: 90 },
+      // Floors at the last measured level (rounded down): CI fails if a change lowers coverage.
+      // Raise them when tests are added; never lower them to pass.
+      thresholds: { statements: 90, branches: 81, functions: 95, lines: 91 },
     },
   },
 });

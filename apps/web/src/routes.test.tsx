@@ -34,6 +34,17 @@ describe('auth routes', () => {
     expect(router.state.location.pathname).toBe('/login');
   });
 
+  it('sends a signed-in user who opens the login page to their own landing page', async () => {
+    mockApi({
+      'GET /api/auth/me': () => Response.json({ user: { ...STUDENT, mustChangePassword: true } }),
+    });
+
+    const router = renderAt('/login');
+
+    await screen.findByRole('heading', { name: 'เปลี่ยนรหัสผ่าน' });
+    expect(router.state.location.pathname).toBe('/change-password');
+  });
+
   it('shows an error when the credentials are wrong', async () => {
     mockApi({
       'GET /api/auth/me': unauthorized,

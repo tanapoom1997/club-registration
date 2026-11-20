@@ -54,6 +54,15 @@ const mockRoundsApi = (initial: Round[], extra: Parameters<typeof mockApi>[0] = 
         },
       ]),
     ),
+    ...Object.fromEntries(
+      initial.map((round) => [
+        `DELETE /api/admin/rounds/${round.id}`,
+        () => {
+          rounds = rounds.filter(({ id }) => id !== round.id);
+          return new Response(null, { status: 204 });
+        },
+      ]),
+    ),
     ...extra,
   });
 };
@@ -200,5 +209,106 @@ describe('admin rounds page', () => {
 
     expect(within(form).queryByRole('alertdialog')).toBeNull();
     expect(fetchCalls(fetchMock, 'PATCH', '/api/admin/rounds/1')).toHaveLength(0);
+  });
+
+  it('deletes an empty round only after the admin confirms', async () => {
+    const round = roundFixture();
+    const fetchMock = mockRoundsApi([round]);
+    renderAt('/admin/rounds');
+    fireEvent.click(await screen.findByRole('button', { name: 'ลบรอบ 2569/1 ม.1' }));
+
+    expect(screen.getByRole('alertdialog', { name: 'ลบรอบ 2569/1 ม.1 ใช่หรือไม่' })).toBeTruthy();
+    expect(fetchCalls(fetchMock, 'DELETE', '/api/admin/rounds/1')).toHaveLength(0);
+
+    fireEvent.click(screen.getByRole('button', { name: 'ยืนยันลบ' }));
+
+    expect(await screen.findByText('ยังไม่มีรอบลงทะเบียน')).toBeTruthy();
+    expect(fetchCalls(fetchMock, 'DELETE', '/api/admin/rounds/1')).toHaveLength(1);
+    expect(screen.queryByRole('alertdialog')).toBeNull();
+  });
+
+  it('keeps the round when the admin cancels the delete', async () => {
+    const round = roundFixture();
+    const fetchMock = mockRoundsApi([round]);
+    renderAt('/admin/rounds');
+    fireEvent.click(await screen.findByRole('button', { name: 'ลบรอบ 2569/1 ม.1' }));
+
+    fireEvent.click(screen.getByRole('button', { name: 'ยกเลิก' }));
+
+    expect(screen.queryByRole('alertdialog')).toBeNull();
+    expect(screen.getByRole('button', { name: 'แก้ไขรอบ 2569/1 ม.1' })).toBeTruthy();
+    expect(fetchCalls(fetchMock, 'DELETE', '/api/admin/rounds/1')).toHaveLength(0);
+  });
+
+  it('offers no delete for a round that already has clubs', async () => {
+    mockRoundsApi([roundFixture({ clubCount: 2, totalCapacity: 60 })]);
+    renderAt('/admin/rounds');
+
+    await screen.findByRole('button', { name: 'แก้ไขรอบ 2569/1 ม.1' });
+
+    expect(screen.queryByRole('button', { name: 'ลบรอบ 2569/1 ม.1' })).toBeNull();
+  });
+
+  it('says why a delete was refused and keeps the round listed', async () => {
+    const round = roundFixture();
+    mockRoundsApi([round], {
+      'DELETE /api/admin/rounds/1': () =>
+        Response.json({ code: 'round_not_empty', message: 'not empty' }, { status: 409 }),
+    });
+    renderAt('/admin/rounds');
+    fireEvent.click(await screen.findByRole('button', { name: 'ลบรอบ 2569/1 ม.1' }));
+
+    fireEvent.click(screen.getByRole('button', { name: 'ยืนยันลบ' }));
+
+    expect((await screen.findByRole('alert')).textContent).toBe(
+      'ลบไม่ได้ เพราะรอบนี้มีชุมนุมหรือข้อมูลการลงทะเบียนแล้ว',
+    );
+    expect(screen.queryByRole('alertdialog')).toBeNull();
+    expect(screen.getByRole('button', { name: 'แก้ไขรอบ 2569/1 ม.1' })).toBeTruthy();
+  });
+
+  it('closes the editor of a round once that round is deleted', async () => {
+    const round = roundFixture();
+    mockRoundsApi([round]);
+    renderAt('/admin/rounds');
+    await openEditor(round);
+
+    fireEvent.click(screen.getByRole('button', { name: 'ลบรอบ 2569/1 ม.1' }));
+    fireEvent.click(screen.getByRole('button', { name: 'ยืนยันลบ' }));
+
+    await screen.findByText('ยังไม่มีรอบลงทะเบียน');
+    expect(screen.queryByRole('form', { name: 'แก้ไขรอบ 2569/1 ม.1' })).toBeNull();
+  });
+
+  it('asks the API for one term and says when that term has no rounds', async () => {
+    const fetchMock = mockRoundsApi([roundFixture()], {
+      'GET /api/admin/rounds?term=2570%2F1': () => Response.json({ rounds: [] }),
+    });
+    renderAt('/admin/rounds');
+    await screen.findByRole('button', { name: 'แก้ไขรอบ 2569/1 ม.1' });
+
+    fireEvent.change(screen.getByLabelText('กรองตามภาคเรียน'), { target: { value: ' 2570/1 ' } });
+    fireEvent.click(screen.getByRole('button', { name: 'แสดง' }));
+
+    expect(await screen.findByText('ไม่มีรอบของภาคเรียน 2570/1')).toBeTruthy();
+    expect(fetchCalls(fetchMock, 'GET', '/api/admin/rounds?term=2570%2F1')).toHaveLength(1);
+  });
+
+  it('offers a retry when the list fails to load', async () => {
+    let failures = 1;
+    mockRoundsApi([roundFixture()], {
+      'GET /api/admin/rounds': () => {
+        if (failures-- > 0) {
+          return Response.json({ code: 'internal_error', message: 'boom' }, { status: 500 });
+        }
+        return Response.json({ rounds: [roundFixture()] });
+      },
+    });
+    renderAt('/admin/rounds');
+
+    expect((await screen.findByRole('alert')).textContent).toContain('โหลดรายการรอบไม่สำเร็จ');
+    fireEvent.click(screen.getByRole('button', { name: 'ลองใหม่' }));
+
+    expect(await screen.findByRole('button', { name: 'แก้ไขรอบ 2569/1 ม.1' })).toBeTruthy();
   });
 });
