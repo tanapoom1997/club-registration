@@ -11,6 +11,8 @@ import { appConnectionUri, startMigratedPostgres, stopPostgres } from './support
 const SOCKET_IP = '203.0.113.7';
 const FORWARDED_IP = '198.51.100.23';
 
+const PINO_OWN_NUMBERS = new Set(['time', 'pid', 'responseTime']);
+
 type LogEntry = { msg?: string; req?: Record<string, unknown>; err?: Record<string, unknown> };
 
 describe('logging', () => {
@@ -95,7 +97,15 @@ describe('logging', () => {
       queryKeys: ['loginId', 'password', 'studentNo'],
       queryKeysOmitted: 2,
     });
-    const output = logLines.join('\n');
+    // Without the numbers pino adds by itself: a responseTime such as 4.463165999999546 contains
+    // the digits of a student number by chance, which made this test fail on a slow run.
+    const output = logLines
+      .map((line) =>
+        JSON.stringify(JSON.parse(line), (key, value: unknown) =>
+          PINO_OWN_NUMBERS.has(key) ? undefined : value,
+        ),
+      )
+      .join('\n');
     for (const leaked of [...values, '6512345', 'ชื่อสมมติ', encodeURIComponent('ชื่อสมมติ')]) {
       expect(output).not.toContain(leaked);
     }
