@@ -26,9 +26,15 @@ export const loginRequestSchema = z.object({
 });
 export type LoginRequest = z.infer<typeof loginRequestSchema>;
 
+// No account can have a longer password, so one that long cannot be the current one.
+const currentPasswordSchema = z
+  .string()
+  .min(1, 'กรุณากรอกรหัสผ่านเดิม')
+  .max(PASSWORD_MAX_LENGTH, 'รหัสผ่านเดิมไม่ถูกต้อง');
+
 export const changePasswordRequestSchema = z
   .object({
-    currentPassword: z.string().min(1).max(PASSWORD_MAX_LENGTH),
+    currentPassword: currentPasswordSchema,
     newPassword: newPasswordSchema,
   })
   .refine(({ currentPassword, newPassword }) => currentPassword !== newPassword, {

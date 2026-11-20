@@ -104,13 +104,18 @@ describe('change password page', () => {
   });
 
   it.each([
-    ['is too short', { next: 'short', confirm: 'short' }, 'รหัสผ่านต้องยาวอย่างน้อย 8 ตัว'],
+    ['leaves the current password empty', { current: '' }, 'กรุณากรอกรหัสผ่านเดิม'],
     [
-      'repeats the current one',
+      'has a new password that is too short',
+      { next: 'short', confirm: 'short' },
+      'รหัสผ่านต้องยาวอย่างน้อย 8 ตัว',
+    ],
+    [
+      'repeats the current password',
       { current: 'same-password', next: 'same-password' },
       'รหัสผ่านใหม่ต้องไม่ซ้ำกับรหัสผ่านเดิม',
     ],
-  ])('does not send a new password that %s', async (_case, values, message) => {
+  ])('does not send a change that %s', async (_case, values, message) => {
     const { fetchMock } = await openPage(STUDENT, () => Response.json({ user: STUDENT }));
 
     submit(values);

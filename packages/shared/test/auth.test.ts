@@ -79,6 +79,47 @@ describe('changePasswordRequestSchema', () => {
     expect(result.error?.issues.map(({ path }) => path)).toEqual([['newPassword']]);
   });
 
+  // The change-password page shows the first message as is, so each must be one a student reads.
+  it.each([
+    [
+      'an empty current password',
+      '',
+      'fictional-pass-2',
+      'กรุณากรอกรหัสผ่านเดิม',
+      'currentPassword',
+    ],
+    [
+      'a current password longer than any account can have',
+      'a'.repeat(PASSWORD_MAX_LENGTH + 1),
+      'fictional-pass-2',
+      'รหัสผ่านเดิมไม่ถูกต้อง',
+      'currentPassword',
+    ],
+    [
+      'a new password one character too short',
+      'fictional-pass-1',
+      'a'.repeat(PASSWORD_MIN_LENGTH - 1),
+      `รหัสผ่านต้องยาวอย่างน้อย ${PASSWORD_MIN_LENGTH} ตัว`,
+      'newPassword',
+    ],
+    [
+      'a new password one character too long',
+      'fictional-pass-1',
+      'a'.repeat(PASSWORD_MAX_LENGTH + 1),
+      `รหัสผ่านต้องยาวไม่เกิน ${PASSWORD_MAX_LENGTH} ตัว`,
+      'newPassword',
+    ],
+  ])(
+    'refuses %s with a Thai message on that field',
+    (_case, currentPassword, newPassword, message, field) => {
+      const result = changePasswordRequestSchema.safeParse({ currentPassword, newPassword });
+
+      expect(result.error?.issues.map((issue) => [issue.path, issue.message])).toEqual([
+        [[field], message],
+      ]);
+    },
+  );
+
   it('accepts a different new password', () => {
     const result = changePasswordRequestSchema.safeParse({
       currentPassword: 'fictional-pass-1',
