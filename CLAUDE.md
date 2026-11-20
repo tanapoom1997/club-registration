@@ -72,6 +72,7 @@ pnpm typecheck
 pnpm lint
 pnpm format
 pnpm test               # Vitest + Testcontainers (ต้องเปิด Docker)
+pnpm test:coverage      # เหมือน pnpm test + coverage (v8) ล้มถ้าต่ำกว่า thresholds ใน vitest config ของแต่ละ package (CI ใช้ตัวนี้) รายงาน HTML ที่ <package>/coverage/ (gitignored)
 pnpm audit:deps         # ล้มถ้า lockfile มี advisory ระดับ high/critical ที่ไม่ได้ ignore (ไม่ต้อง install)
 pnpm e2e                # Playwright (e2e/): Chromium กับ web + api + Postgres (Testcontainers) ด้วยข้อมูลสมมติ ต้องเปิด Docker และมี Chromium ของ Playwright
 pnpm build
@@ -165,7 +166,7 @@ backup/restore (README หัวข้อ Backup และ Restore (O3)): dump �
 - `tsconfig`: `strict`, `noUncheckedIndexedAccess`, `exactOptionalPropertyTypes`, `noImplicitOverride`, `verbatimModuleSyntax`, `isolatedModules`
 - ESLint เปิดอย่างน้อย: `@typescript-eslint/no-floating-promises`, `no-misused-promises`, `no-explicit-any`, `consistent-type-imports`, `eqeqeq`, `no-restricted-imports` (กัน web↔api import กัน)
 - `apps/web`: `react-hooks` recommended (`exhaustive-deps` เป็น error เพราะ warning ไม่ทำให้ `pnpm lint`/CI ล้ม) และ `jsx-a11y` recommended (`<Label>` ถูกตรวจเหมือน `<label>`) ข้าม rule ได้เฉพาะ `eslint-disable-next-line <rule>` บรรทัดเดียวพร้อมเหตุผลในคอมเมนต์ ห้ามปิดทั้งไฟล์
-- CI/ก่อน commit ต้องผ่าน `typecheck` + `lint` + `test` ห้าม merge ถ้าแดง CI อยู่ที่ `.github/workflows/ci.yml` (job `check`: `scripts/check-no-data-files.sh`, `scripts/lint-shell.sh`, format:check, typecheck, lint, test, build และ job `images`: `scripts/smoke-images.sh`, `scripts/smoke-compose.sh` แล้ว `scripts/smoke-backup.sh` และ job `e2e`: `pnpm e2e` ทุกตัวรันในเครื่องด้วยคำสั่งเดียวกันได้) รันทุก PR และทุก push เข้า `main` ส่วน `.github/workflows/audit.yml` รัน `pnpm audit:deps` ทุก PR, push เข้า `main` และทุกวัน action pin ด้วย commit SHA ถ้าเพิ่มขั้นตอนให้รันซ้ำในเครื่องได้ด้วยคำสั่ง `pnpm` เดียวกัน
+- CI/ก่อน commit ต้องผ่าน `typecheck` + `lint` + `test` ห้าม merge ถ้าแดง CI อยู่ที่ `.github/workflows/ci.yml` (job `check`: `scripts/check-no-data-files.sh`, `scripts/lint-shell.sh`, format:check, typecheck, lint, test:coverage, build และ job `images`: `scripts/smoke-images.sh`, `scripts/smoke-compose.sh` แล้ว `scripts/smoke-backup.sh` และ job `e2e`: `pnpm e2e` ทุกตัวรันในเครื่องด้วยคำสั่งเดียวกันได้) รันทุก PR และทุก push เข้า `main` ส่วน `.github/workflows/audit.yml` รัน `pnpm audit:deps` ทุก PR, push เข้า `main` และทุกวัน action pin ด้วย commit SHA ถ้าเพิ่มขั้นตอนให้รันซ้ำในเครื่องได้ด้วยคำสั่ง `pnpm` เดียวกัน
 
 ### Security
 - Password hash ด้วย **argon2id** (`crypto.argon2` ของ Node, เก็บเป็น PHC string) ห้าม MD5/SHA ธรรมดา เทียบด้วย `timingSafeEqual`

@@ -23,3 +23,6 @@ caddy-data-*.tar.gz
 # Playwright (e2e/): screenshots of failed tests, server logs and reports, all from fictional data.
 e2e/test-results/
 e2e/playwright-report/
+
+# Vitest coverage reports (pnpm test:coverage).
+coverage/

@@ -18,12 +18,14 @@
   "scripts": {
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
+    "test:coverage": "vitest run --coverage",
     "build": "tsc -p tsconfig.build.json"
   },
   "dependencies": {
     "zod": "4.6.7"
   },
   "devDependencies": {
+    "@vitest/coverage-v8": "5.0.5",
     "vitest": "5.0.5"
   }
 }

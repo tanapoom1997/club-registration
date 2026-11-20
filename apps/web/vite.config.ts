@@ -34,5 +34,14 @@ export default defineConfig({
     environment: 'jsdom',
     include: ['src/**/*.test.tsx'],
     restoreMocks: true,
+    coverage: {
+      provider: 'v8',
+      include: ['src/**/*.{ts,tsx}'],
+      exclude: ['src/**/*.test.tsx', 'src/test-support/**'],
+      reporter: ['text-summary', 'html'],
+      // Floors at the level of the PR that added them (rounded down): CI fails if a change lowers
+      // coverage. Raise them when tests are added; never lower them to pass.
+      thresholds: { statements: 91, branches: 81, functions: 90, lines: 92 },
+    },
   },
 });

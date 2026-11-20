@@ -16,5 +16,14 @@ export default defineConfig({
     // Each file starts its own Postgres container.
     hookTimeout: 120_000,
     testTimeout: 30_000,
+    coverage: {
+      provider: 'v8',
+      // Every source file, so one that no test imports counts as uncovered rather than vanishing.
+      include: ['src/**/*.ts'],
+      reporter: ['text-summary', 'html'],
+      // Floors at the level of the PR that added them (rounded down): CI fails if a change lowers
+      // coverage. Raise them when tests are added; never lower them to pass.
+      thresholds: { statements: 89, branches: 80, functions: 94, lines: 90 },
+    },
   },
 });
