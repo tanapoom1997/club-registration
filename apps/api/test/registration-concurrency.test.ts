@@ -57,6 +57,14 @@ describe('registration under concurrency', () => {
       payload: { clubId, idempotencyKey },
     });
 
+  const change = async (studentId: number, clubId: number, idempotencyKey = newKey()) =>
+    await app.inject({
+      method: 'PUT',
+      url: REGISTER_URL,
+      cookies: { [SESSION_COOKIE]: sessionCookie(app, studentId) },
+      payload: { clubId, idempotencyKey },
+    });
+
   const cancel = async (studentId: number, idempotencyKey = newKey()) =>
     await app.inject({
       method: 'POST',
@@ -64,6 +72,15 @@ describe('registration under concurrency', () => {
       cookies: { [SESSION_COOKIE]: sessionCookie(app, studentId) },
       payload: { idempotencyKey },
     });
+
+  const changeEventCount = async (clubId: number) => {
+    const { rows } = await pool.query<{ events: number }>(
+      `SELECT count(*)::int AS events FROM registration_events
+       WHERE club_id = $1 AND event_type = 'change'`,
+      [clubId],
+    );
+    return rows[0]?.events;
+  };
 
   const registrationOf = async (studentId: number) => {
     const { rows } = await pool.query<{ club_id: number }>(
@@ -264,4 +281,136 @@ describe('registration under concurrency', () => {
       rows: 20 + seated,
     });
   }, 60_000);
+
+  describe('changing club', () => {
+    it('moves exactly as many students as there are free seats; the rest stay put', async () => {
+      const roundId = await createOpenRound(pool);
+      const [from, to] = await Promise.all([
+        createClub(pool, roundId, uniqueCode(), { capacity: 40 }),
+        createClub(pool, roundId, uniqueCode(), { capacity: 10 }),
+      ]);
+      const holders = await createStudents(pool, 5);
+      for (const studentId of holders) await seatStudent(pool, studentId, to);
+      const movers = await createStudents(pool, 40);
+      for (const studentId of movers) await seatStudent(pool, studentId, from);
+
+      const responses = await Promise.all(
+        movers.map(async (studentId) => await change(studentId, to)),
+      );
+
+      expect(countBy(responses)).toEqual({ ok: 5, club_full: 35 });
+      for (const [i, studentId] of movers.entries()) {
+        expect(await registrationOf(studentId)).toEqual([
+          responses[i]!.statusCode === 200 ? to : from,
+        ]);
+      }
+      expect(await storedSeats(pool, to)).toEqual({ registered: 10, capacity: 10, rows: 10 });
+      expect(await storedSeats(pool, from)).toMatchObject({ registered: 35, rows: 35 });
+      expect(await changeEventCount(to)).toBe(5);
+    }, 60_000);
+
+    it('never overfills a club when changes race registrations and cancellations for it', async () => {
+      const roundId = await createOpenRound(pool);
+      const [from, to] = await Promise.all([
+        createClub(pool, roundId, uniqueCode(), { capacity: 30 }),
+        createClub(pool, roundId, uniqueCode(), { capacity: 10 }),
+      ]);
+      const holders = await createStudents(pool, 8);
+      for (const studentId of holders) await seatStudent(pool, studentId, to);
+      const leaving = holders.slice(0, 4);
+      const movers = await createStudents(pool, 20);
+      for (const studentId of movers) await seatStudent(pool, studentId, from);
+      const newcomers = await createStudents(pool, 20);
+
+      const [cancels, changes, registers] = await Promise.all([
+        Promise.all(leaving.map(async (studentId) => await cancel(studentId))),
+        Promise.all(movers.map(async (studentId) => await change(studentId, to))),
+        Promise.all(newcomers.map(async (studentId) => await register(studentId, to))),
+      ]);
+
+      expect(countBy(cancels)).toEqual({ ok: 4 });
+      const moved = changes.filter(({ statusCode }) => statusCode === 200).length;
+      const seated = registers.filter(({ statusCode }) => statusCode === 200).length;
+      // 2 seats free at the start, 4 more freed by the cancels: at most 6 can be handed out.
+      expect(moved + seated).toBeLessThanOrEqual(6);
+      expect(moved + seated).toBeGreaterThanOrEqual(2);
+      expect([...changes, ...registers].every((r) => ['ok', 'club_full'].includes(codeOf(r)))).toBe(
+        true,
+      );
+      expect(await storedSeats(pool, to)).toEqual({
+        registered: 4 + moved + seated,
+        capacity: 10,
+        rows: 4 + moved + seated,
+      });
+      expect(await storedSeats(pool, from)).toMatchObject({
+        registered: 20 - moved,
+        rows: 20 - moved,
+      });
+    }, 60_000);
+
+    // The new seat is taken before the old one is given back, so neither seat is ever free when
+    // the other student asks: a swap between two full clubs is refused both ways, whichever
+    // request runs first (README Phase 2).
+    it('refuses both students who try to swap between two full clubs', async () => {
+      const roundId = await createOpenRound(pool);
+      const [first, second] = await Promise.all([
+        createClub(pool, roundId, uniqueCode(), { capacity: 1 }),
+        createClub(pool, roundId, uniqueCode(), { capacity: 1 }),
+      ]);
+      const [inFirst, inSecond] = await createStudents(pool, 2);
+      await seatStudent(pool, inFirst!, first);
+      await seatStudent(pool, inSecond!, second);
+
+      const responses = await Promise.all([change(inFirst!, second), change(inSecond!, first)]);
+
+      expect(responses.map(codeOf)).toEqual(['club_full', 'club_full']);
+      expect(await registrationOf(inFirst!)).toEqual([first]);
+      expect(await registrationOf(inSecond!)).toEqual([second]);
+    });
+
+    it('carries out a change once when it is sent many times at once with one key', async () => {
+      const roundId = await createOpenRound(pool);
+      const [from, to] = await Promise.all([
+        createClub(pool, roundId, uniqueCode()),
+        createClub(pool, roundId, uniqueCode()),
+      ]);
+      const studentId = await createStudentId(pool);
+      await seatStudent(pool, studentId, from);
+      const key = newKey();
+
+      const responses = await Promise.all(
+        Array.from({ length: 20 }, async () => await change(studentId, to, key)),
+      );
+
+      expect(countBy(responses)).toEqual({ ok: 20 });
+      const bodies = responses.map((response) => response.json<unknown>());
+      expect(new Set(bodies.map((body) => JSON.stringify(body))).size).toBe(1);
+      expect((await eventsOf(pool, studentId)).map(({ event_type: type }) => type)).toEqual([
+        'register',
+        'change',
+      ]);
+      expect(await storedSeats(pool, from)).toMatchObject({ registered: 0, rows: 0 });
+      expect(await storedSeats(pool, to)).toMatchObject({ registered: 1, rows: 1 });
+    });
+
+    it('keeps one seat when a student asks for several clubs at once', async () => {
+      const roundId = await createOpenRound(pool);
+      const [from, ...targets] = await Promise.all(
+        Array.from({ length: 11 }, async () => await createClub(pool, roundId, uniqueCode())),
+      );
+      const studentId = await createStudentId(pool);
+      await seatStudent(pool, studentId, from!);
+
+      const responses = await Promise.all(
+        targets.map(async (clubId) => await change(studentId, clubId)),
+      );
+
+      // Each runs alone under the round lock and moves the seat on from wherever it is.
+      expect(countBy(responses)).toEqual({ ok: 10 });
+      const held = await registrationOf(studentId);
+      expect(held).toHaveLength(1);
+      expect(targets).toContain(held[0]);
+      expect(await changeEventCount(held[0]!)).toBe(1);
+    });
+  });
 });

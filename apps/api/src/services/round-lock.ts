@@ -1,7 +1,7 @@
 import type { Queryable } from '../db.js';
 
-// CLAUDE.md rule 3: every write transaction inside a round (register, cancel, an admin club edit,
-// the import commit, and in Phase 2 change/waitlist/promote) starts with the round's
+// CLAUDE.md rule 3: every write transaction inside a round (register, change, cancel, an admin
+// club edit, the import commit, and later in Phase 2 waitlist/promote) starts with the round's
 // transaction-scoped advisory lock, so writers in one round run one at a time and see each other's
 // commits. The lock is released by COMMIT or ROLLBACK, never by hand.
 //
@@ -12,7 +12,8 @@ import type { Queryable } from '../db.js';
 //    its first statement, holding nothing yet.
 // 2. FOR SHARE on every rounds row: the import commit only (lockRoundsForImport).
 // 3. Round locks in ascending id: the import commit takes the rounds it relies on
-//    (lockRoundsForImport); register, cancel and the club edit take exactly one, holding nothing.
+//    (lockRoundsForImport); register, change, cancel and the club edit take exactly one, holding
+//    nothing (a change moves a seat between two clubs of one round, so one lock covers both).
 // 4. Row locks and writes.
 //
 // No deadlock: a transaction only ever waits for an advisory lock while holding advisory locks
@@ -21,14 +22,15 @@ import type { Queryable } from '../db.js';
 //
 // - The rounds row locks conflict only with an UPDATE or DELETE of a rounds row (the admin round
 //   edit and delete), which take no advisory lock and lock that one row only, so they wait for
-//   the import and never the other way round. Register and cancel touch rounds rows only through
-//   foreign-key checks, which take FOR KEY SHARE; that mode does not conflict with FOR SHARE (nor
-//   with a waiting UPDATE), so a register holding a round lock the import waits for never waits
-//   for the import's rounds row locks (test: import-commit-round-locks.test.ts).
+//   the import and never the other way round. Register, change and cancel touch rounds rows only
+//   through foreign-key checks, which take FOR KEY SHARE; that mode does not conflict with FOR
+//   SHARE (nor with a waiting UPDATE), so a register holding a round lock the import waits for
+//   never waits for the import's rounds row locks (test: import-commit-round-locks.test.ts).
 // - Rows of a round's clubs and registrations are written only by the one holder of its lock.
 //   The one conflicting row lock across rounds is a student's student_profiles row (register's
-//   FOR SHARE against the import's grade update). A register that holds it in a round the import
-//   did not lock waits for nothing the import holds, so it simply commits first.
+//   and change's FOR SHARE against the import's grade update). A register or change that holds it
+//   in a round the import did not lock waits for nothing the import holds, so it simply commits
+//   first.
 // - The import and the password issuance both lock many users and student_profiles rows, in no
 //   common order, so they must never hold row locks at the same time: the import lock makes them
 //   run one after the other. The issuance takes no round lock. Its row locks (FOR NO KEY UPDATE on

@@ -141,6 +141,29 @@ export const waitForAdvisoryLockWaiter = async (pool: Pool): Promise<void> => {
   throw new Error('Nothing ever waited for the round advisory lock');
 };
 
+// How each event type moves seats, as a VALUES list every event check reads: what it does to the
+// seat of club_id and to the seat of from_club_id. A change takes the new club's seat and gives
+// back the old one. waitlist_promote and admin_* add their rows here when they exist (a promote
+// that moves a student is a change; waitlist_join/leave move no seat: 0, 0). An event type
+// missing from this list fails the check below, so a new writer cannot slip past the accounting.
+const SEAT_EFFECTS = `
+  seat_effect (event_type, club_delta, from_club_delta) AS (
+    VALUES ('register', 1, 0), ('cancel', -1, 0), ('change', 1, -1)
+  )`;
+
+// One row per seat an event took (+1) or gave back (-1), keyed by round, student and club.
+const SEAT_MOVES = `
+  ${SEAT_EFFECTS},
+  seat_moves AS (
+    SELECT e.round_id, e.student_id, e.club_id, f.club_delta AS delta
+    FROM registration_events e JOIN seat_effect f USING (event_type)
+    WHERE f.club_delta <> 0
+    UNION ALL
+    SELECT e.round_id, e.student_id, e.from_club_id, f.from_club_delta
+    FROM registration_events e JOIN seat_effect f USING (event_type)
+    WHERE f.from_club_delta <> 0 AND e.from_club_id IS NOT NULL
+  )`;
+
 // Each query returns the rows that break one invariant; all must be empty. The event checks
 // assume every seat came from the service (seatStudent or the API), as in the registration tests.
 const INVARIANTS: Readonly<Record<string, string>> = Object.freeze({
@@ -167,12 +190,24 @@ const INVARIANTS: Readonly<Record<string, string>> = Object.freeze({
   "a registration's club belongs to its round": `
     SELECT r.id FROM registrations r JOIN clubs c ON c.id = r.club_id
     WHERE c.round_id <> r.round_id`,
-  'register minus cancel events equals the seats each student holds': `
-    WITH net AS (
-      SELECT round_id, student_id,
-             count(*) FILTER (WHERE event_type = 'register')
-               - count(*) FILTER (WHERE event_type = 'cancel') AS net
-      FROM registration_events GROUP BY round_id, student_id
+  'every event type has a seat effect in this checker': `
+    WITH ${SEAT_EFFECTS}
+    SELECT DISTINCT e.event_type FROM registration_events e
+    WHERE e.event_type NOT IN (SELECT event_type FROM seat_effect)`,
+  // A promote of a student with no club yet will leave from_club_id null, so only change requires
+  // it; an event type that gives back no from-club seat must not name one.
+  'a change names the other club it left, and no seatless move names one': `
+    WITH ${SEAT_EFFECTS}
+    SELECT e.id, e.event_type, e.club_id, e.from_club_id
+    FROM registration_events e JOIN seat_effect f USING (event_type)
+    WHERE (e.event_type = 'change' AND e.from_club_id IS NULL)
+       OR (f.from_club_delta = 0 AND e.from_club_id IS NOT NULL)
+       OR e.from_club_id = e.club_id`,
+  'seats taken minus seats given back equals the seats each student holds': `
+    WITH ${SEAT_MOVES},
+    net AS (
+      SELECT round_id, student_id, sum(delta) AS net
+      FROM seat_moves GROUP BY round_id, student_id
     )
     SELECT COALESCE(n.round_id, r.round_id) AS round_id,
            COALESCE(n.student_id, r.student_id) AS student_id,
@@ -180,26 +215,26 @@ const INVARIANTS: Readonly<Record<string, string>> = Object.freeze({
     FROM net n
     FULL JOIN registrations r ON r.round_id = n.round_id AND r.student_id = n.student_id
     WHERE COALESCE(n.net, 0) <> CASE WHEN r.id IS NULL THEN 0 ELSE 1 END`,
-  'register minus cancel events per club equals clubs.registered': `
-    WITH net AS (
-      SELECT club_id,
-             count(*) FILTER (WHERE event_type = 'register')
-               - count(*) FILTER (WHERE event_type = 'cancel') AS net
-      FROM registration_events GROUP BY club_id
-    )
+  'seats taken minus seats given back per club equals clubs.registered': `
+    WITH ${SEAT_MOVES},
+    net AS (SELECT club_id, sum(delta) AS net FROM seat_moves GROUP BY club_id)
     SELECT c.id, c.registered, n.net
     FROM clubs c LEFT JOIN net n ON n.club_id = c.id
     WHERE c.registered <> COALESCE(n.net, 0)`,
-  "the student's latest register event names the club they hold": `
-    SELECT r.id, r.club_id, latest.club_id AS event_club_id
+  // The latest event that moved one of the student's seats in the round must be one that gave
+  // them the club they hold (a register or a change into it), not a cancel or another club.
+  "the student's latest seat event gave them the club they hold": `
+    WITH ${SEAT_EFFECTS}
+    SELECT r.id, r.club_id, latest.event_type, latest.club_id AS event_club_id
     FROM registrations r
     LEFT JOIN LATERAL (
-      SELECT e.club_id FROM registration_events e
+      SELECT e.event_type, e.club_id, f.club_delta FROM registration_events e
+      JOIN seat_effect f USING (event_type)
       WHERE e.round_id = r.round_id AND e.student_id = r.student_id
-        AND e.event_type = 'register'
+        AND (f.club_delta <> 0 OR f.from_club_delta <> 0)
       ORDER BY e.id DESC LIMIT 1
     ) latest ON true
-    WHERE latest.club_id IS DISTINCT FROM r.club_id`,
+    WHERE latest.club_id IS DISTINCT FROM r.club_id OR latest.club_delta IS DISTINCT FROM 1`,
   'students act for themselves and every event has a key': `
     SELECT id, actor_id, student_id FROM registration_events
     WHERE actor_id <> student_id OR idempotency_key IS NULL`,

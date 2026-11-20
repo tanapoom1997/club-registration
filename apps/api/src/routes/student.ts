@@ -1,6 +1,7 @@
 import {
   ERROR_CODES,
   cancelRegistrationRequestSchema,
+  changeRegistrationRequestSchema,
   registerRequestSchema,
   studentClubsResponseSchema,
   studentQuerySchema,
@@ -15,12 +16,16 @@ import { requireAuthUser } from '../auth/session.js';
 import type { AuthGuard } from '../auth/session.js';
 import { withTransaction } from '../db.js';
 import { AppError } from '../errors.js';
-import { cancelRegistration, registerForClub } from '../services/registrations.js';
+import {
+  cancelRegistration,
+  changeRegistration,
+  registerForClub,
+} from '../services/registrations.js';
 import type { RegistrationResult } from '../services/registrations.js';
 import { listStudentClubs, readStudentRound } from '../services/student-round.js';
 
-// Register and cancel share one budget per student. A real visit is a handful of clicks plus
-// automatic retries; 30 a minute leaves room for that and still stops a script hammering the
+// Register, change and cancel share one budget per student. A real visit is a handful of clicks
+// plus automatic retries; 30 a minute leaves room for that and still stops a script hammering the
 // round lock. The store is in memory, which is right for the single instance we run.
 const WRITES_PER_STUDENT = 30;
 const WRITE_WINDOW_MS = 60_000;
@@ -53,7 +58,7 @@ export const studentRoutes =
     // Ids and the outcome only: never a student, club or advisor name.
     const runLogged = async (
       request: FastifyRequest,
-      action: 'register' | 'cancel',
+      action: 'register' | 'change' | 'cancel',
       requestedClubId: number | null,
       work: (client: pg.PoolClient) => Promise<RegistrationResult>,
     ): Promise<StudentRegistrationResponse> => {
@@ -70,8 +75,8 @@ export const studentRoutes =
         }
         throw error;
       }
-      const { roundId, clubId, outcome, registration } = result;
-      request.log.info({ studentId, roundId, clubId, outcome }, `student ${action}`);
+      const { roundId, clubId, fromClubId, outcome, registration } = result;
+      request.log.info({ studentId, roundId, clubId, fromClubId, outcome }, `student ${action}`);
       return { registration };
     };
 
@@ -110,6 +115,29 @@ export const studentRoutes =
           'register',
           clubId,
           async (client) => await registerForClub(client, { studentId, clubId, idempotencyKey }),
+        );
+      },
+    );
+
+    // PUT: it replaces which club the student's one registration is for. The club given back is
+    // the one held in the DB, never named by the client.
+    app.put(
+      '/student/registration',
+      {
+        schema: {
+          body: changeRegistrationRequestSchema,
+          response: { 200: studentRegistrationResponseSchema },
+        },
+        preHandler: writeGate,
+      },
+      async (request) => {
+        const { clubId, idempotencyKey } = request.body;
+        const studentId = requireAuthUser(request).id;
+        return await runLogged(
+          request,
+          'change',
+          clubId,
+          async (client) => await changeRegistration(client, { studentId, clubId, idempotencyKey }),
         );
       },
     );

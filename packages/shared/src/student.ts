@@ -76,7 +76,16 @@ export const cancelRegistrationRequestSchema = z.strictObject({
 });
 export type CancelRegistrationRequest = z.infer<typeof cancelRegistrationRequestSchema>;
 
-// Both writes answer with the student's registration in the round as it stands after the request
+// Moves the student's seat in their selected round to another club in one step: the new seat is
+// taken before the old one is given back, so a full club leaves the student where they were.
+// Same shape as register, but its own schema so the two can diverge without surprising either.
+export const changeRegistrationRequestSchema = z.strictObject({
+  clubId: dbIdBodySchema,
+  idempotencyKey: idempotencyKeySchema,
+});
+export type ChangeRegistrationRequest = z.infer<typeof changeRegistrationRequestSchema>;
+
+// Every write answers with the student's registration in the round as it stands after the request
 // (null after a cancel). A replayed key answers with the state now, not a copy of the first reply.
 export const studentRegistrationResponseSchema = z.object({
   registration: studentRegistrationSchema.nullable(),
