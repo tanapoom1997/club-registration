@@ -53,10 +53,16 @@ test('a student waits for a full club and gets the seat when its holder cancels'
       .getByRole('alertdialog')
       .getByRole('button', { name: 'ยืนยัน เข้ารายชื่อรอ' })
       .click();
-    await expect(
-      page.getByText(`เข้ารายชื่อรอชุมนุม ${clubLabel(ONE_SEAT_CLUB)} แล้ว ลำดับที่ 1`),
-    ).toBeVisible();
+    const joinNotice = page.getByText(
+      `เข้ารายชื่อรอชุมนุม ${clubLabel(ONE_SEAT_CLUB)} แล้ว ลำดับที่ 1`,
+    );
+    await expect(joinNotice).toBeVisible();
+    await expect(joinNotice).toBeFocused();
     await expect(card.getByText('รออยู่ ลำดับที่ 1')).toBeVisible();
+    // A keyboard user moves on to the leave button, which the promotion below removes. Checked,
+    // so the test cannot pass on the join notice's own focus fallback instead.
+    await page.keyboard.press('Tab');
+    await expect(page.getByRole('button', { name: 'ออกจากรายชื่อรอ' })).toBeFocused();
 
     await holder.goto('/student/my-registration');
     await holder.getByRole('button', { name: 'ยกเลิกชุมนุมนี้' }).click();
@@ -66,10 +72,15 @@ test('a student waits for a full club and gets the seat when its holder cancels'
       .click();
     await expect(holder.getByText('ยังไม่ได้ลงชุมนุม')).toBeVisible();
 
-    // No reload: the waiting student's page learns of the promotion by polling.
-    await expect(
-      page.getByText(`ได้ที่ในชุมนุม ${clubLabel(ONE_SEAT_CLUB)} จากรายชื่อรอแล้ว`),
-    ).toBeVisible({ timeout: POLL_TIMEOUT_MS });
+    // No reload: the waiting student's page learns of the promotion by polling. Focus goes from
+    // the removed leave button to the notice rather than to <body>, and the join notice, which
+    // would now contradict it, is gone.
+    const promotedNotice = page.getByText(
+      `ได้ที่ในชุมนุม ${clubLabel(ONE_SEAT_CLUB)} จากรายชื่อรอแล้ว`,
+    );
+    await expect(promotedNotice).toBeVisible({ timeout: POLL_TIMEOUT_MS });
+    await expect(promotedNotice).toBeFocused();
+    await expect(joinNotice).toBeHidden();
     await expect(card.getByText('ชุมนุมของฉัน')).toBeVisible();
     await expect(page.getByRole('heading', { name: 'รายชื่อรอของฉัน' })).toHaveCount(0);
 

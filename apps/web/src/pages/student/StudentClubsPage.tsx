@@ -14,12 +14,14 @@ import { HeldClubCard } from './HeldClubCard';
 import { NoRound, RoundHeader, StudentLoadState } from './RoundHeader';
 import { PromotedNotice, WaitlistCard } from './WaitlistCard';
 import { LeaveWaitlistPanel } from './LeaveWaitlistPanel';
+import { useFocusRescue } from './focus-rescue';
 import {
   CLUBS_POLL_INTERVAL_MS,
   STUDENT_CLUBS_QUERY_KEY,
   clubOffer,
   clubsRefetchInterval,
   isClubFull,
+  isNoticeOutdated,
   retryRead,
   useLogoutOnExpiredSession,
   useStudentWrite,
@@ -84,20 +86,29 @@ export const StudentClubsPage = () => {
   const succeeded = mutation.isSuccess;
 
   const headingRef = useRef<HTMLHeadingElement>(null);
-  const leaveRef = useRef<HTMLButtonElement>(null);
-  const noticeRef = useRef<HTMLParagraphElement>(null);
+  const promotedRef = useRef<HTMLParagraphElement>(null);
+  // A poll can remove the leave button or the join notice while it has focus.
+  const { element: leaveRef, ref: leaveButtonRef } = useFocusRescue<HTMLButtonElement>([
+    promotedRef,
+    headingRef,
+  ]);
+  const { element: noticeRef, ref: noticeElementRef } = useFocusRescue<HTMLParagraphElement>([
+    promotedRef,
+    headingRef,
+  ]);
   const lastPanel = useRef<Target>(undefined);
   // A club card returns focus to its own button. After a write went through, that button (or the
-  // waitlist card's) is gone, so focus goes to the notice saying what happened; after leaving
-  // the confirmation of leave, back to its button, or the heading if the entry is gone.
+  // waitlist card's) is gone, so focus goes to the notice saying what happened (or, when a join's
+  // seat came before its answer showed, to the promoted notice); after leaving the confirmation
+  // of leave, back to its button, or the heading if the entry is gone.
   useEffect(() => {
     const closed = lastPanel.current;
     if (closed && !panelOpen) {
-      if (succeeded) noticeRef.current?.focus();
+      if (succeeded) (noticeRef.current ?? promotedRef.current ?? headingRef.current)?.focus();
       else if (closed.kind === 'leave') (leaveRef.current ?? headingRef.current)?.focus();
     }
     lastPanel.current = panelTarget;
-  }, [panelOpen, panelTarget, succeeded]);
+  }, [leaveRef, noticeRef, panelOpen, panelTarget, succeeded]);
 
   const clubWrite = (kind: ClubWriteKind, clubId: number): ClubWrite => ({
     kind,
@@ -149,17 +160,18 @@ export const StudentClubsPage = () => {
             </p>
           )}
           <div role="status">
-            {mutation.isSuccess && (
-              <p
-                ref={noticeRef}
-                tabIndex={-1}
-                className={cn(alertVariants({ variant: 'success' }), 'focus:outline-none')}
-              >
-                {writeSuccessNotice(mutation.variables.kind, mutation.data)}
-              </p>
-            )}
+            {mutation.isSuccess &&
+              !isNoticeOutdated(mutation.variables.kind, mutation.data, data.waitlist) && (
+                <p
+                  ref={noticeElementRef}
+                  tabIndex={-1}
+                  className={cn(alertVariants({ variant: 'success' }), 'focus:outline-none')}
+                >
+                  {writeSuccessNotice(mutation.variables.kind, mutation.data)}
+                </p>
+              )}
           </div>
-          <PromotedNotice registration={data.registration} />
+          <PromotedNotice ref={promotedRef} registration={data.registration} />
           <FormError message={orphanError} />
           {data.registration && (
             <HeldClubCard registration={data.registration}>
@@ -180,7 +192,7 @@ export const StudentClubsPage = () => {
             <WaitlistCard waitlist={data.waitlist} registration={data.registration} round={round}>
               {panelTarget?.kind !== 'leave' && round.status === 'open' && (
                 <Button
-                  ref={leaveRef}
+                  ref={leaveButtonRef}
                   variant="outline"
                   className="w-full sm:w-auto"
                   disabled={mutation.isPending}

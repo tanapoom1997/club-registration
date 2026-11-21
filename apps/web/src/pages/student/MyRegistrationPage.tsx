@@ -11,6 +11,7 @@ import { LeaveWaitlistPanel } from './LeaveWaitlistPanel';
 import { NoRound, RoundHeader, StudentLoadState } from './RoundHeader';
 import { PromotedNotice, WaitlistCard } from './WaitlistCard';
 import { WritePanel } from './WritePanel';
+import { useFocusRescue } from './focus-rescue';
 import {
   STUDENT_ROUND_QUERY_KEY,
   retryRead,
@@ -65,7 +66,12 @@ export const MyRegistrationPage = () => {
 
   const headingRef = useRef<HTMLHeadingElement>(null);
   const cancelRef = useRef<HTMLButtonElement>(null);
-  const leaveRef = useRef<HTMLButtonElement>(null);
+  const promotedRef = useRef<HTMLParagraphElement>(null);
+  // A poll can remove the leave button while it has focus (the seat came, the round closed).
+  const { element: leaveRef, ref: leaveButtonRef } = useFocusRescue<HTMLButtonElement>([
+    promotedRef,
+    headingRef,
+  ]);
   const noticeRef = useRef<HTMLParagraphElement>(null);
   const lastPanel = useRef<Target>(undefined);
   // Closing the panel removes the focused element, so focus goes back to the button it came
@@ -81,7 +87,7 @@ export const MyRegistrationPage = () => {
       (preferred ?? button ?? noticeRef.current ?? headingRef.current)?.focus();
     }
     lastPanel.current = panel;
-  }, [panel, panelOpen, succeeded]);
+  }, [leaveRef, panel, panelOpen, succeeded]);
 
   const writeState = (kind: Target['kind']) => ({
     pending: mutation.isPending,
@@ -127,7 +133,7 @@ export const MyRegistrationPage = () => {
               </p>
             )}
           </div>
-          <PromotedNotice registration={registration} />
+          <PromotedNotice ref={promotedRef} registration={registration} />
 
           {registration ? (
             <HeldClubCard registration={registration}>
@@ -179,7 +185,7 @@ export const MyRegistrationPage = () => {
             <WaitlistCard waitlist={waitlist} registration={registration ?? null} round={round}>
               {panel?.kind !== 'leave' && round.status === 'open' && (
                 <Button
-                  ref={leaveRef}
+                  ref={leaveButtonRef}
                   variant="outline"
                   className="w-full sm:w-auto"
                   disabled={mutation.isPending}
