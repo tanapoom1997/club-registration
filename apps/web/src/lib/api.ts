@@ -56,6 +56,7 @@ import type {
 } from '@club-registration/shared';
 
 const UNAUTHORIZED = 401;
+const SERVER_ERROR = 500;
 const SERVICE_UNAVAILABLE = 503;
 
 type Parser<T> = { parse: (data: unknown) => T };
@@ -71,6 +72,13 @@ export class ApiError extends Error {
     this.code = code;
   }
 }
+
+// No answer from our server (network down, proxy gateway error, unreadable reply) means the write
+// may have been applied with only the reply lost. Retrying with the same idempotency key is then
+// the one safe move: the server replays it instead of acting twice. A 500 from the API itself has
+// rolled back, so the same key is simply processed again.
+export const isOutcomeUnknown = (error: unknown): boolean =>
+  !(error instanceof ApiError) || error.status >= SERVER_ERROR;
 
 const toApiError = async (response: Response): Promise<ApiError> => {
   // A proxy or crash page may answer with HTML, so a non-JSON body still becomes an ApiError.

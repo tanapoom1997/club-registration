@@ -10,7 +10,7 @@ import { HeldClubCard } from './HeldClubCard';
 import { LeaveWaitlistPanel } from './LeaveWaitlistPanel';
 import { NoRound, RoundHeader, StudentLoadState } from './RoundHeader';
 import { PromotedNotice, WaitlistCard } from './WaitlistCard';
-import { WritePanel } from './WritePanel';
+import { WritePanel } from '@/components/WritePanel';
 import { useFocusRescue } from './focus-rescue';
 import {
   STUDENT_ROUND_QUERY_KEY,

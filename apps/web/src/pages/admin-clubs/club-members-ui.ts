@@ -8,10 +8,15 @@ import type {
 } from '@club-registration/shared';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { useRef } from 'react';
-import { ApiError, assignClubMember, removeClubMember, removeClubWaitlistEntry } from '@/lib/api';
+import {
+  ApiError,
+  assignClubMember,
+  isOutcomeUnknown,
+  removeClubMember,
+  removeClubWaitlistEntry,
+} from '@/lib/api';
 import { useSetSession } from '@/lib/session';
 import { ROUNDS_QUERY_KEY } from '@/pages/admin-rounds/round-ui';
-import { isOutcomeUnknown } from '@/pages/student/student-ui';
 import { CLUBS_QUERY_KEY } from './club-ui';
 
 const UNAUTHORIZED = 401;

@@ -15,6 +15,7 @@ import {
   ApiError,
   cancelRegistration,
   changeRegistration,
+  isOutcomeUnknown,
   joinWaitlist,
   leaveWaitlist,
   registerForClub,
@@ -23,7 +24,6 @@ import { refetchWhileOpen, untilNextStatusChange } from '@/lib/round-refetch';
 import { useSetSession } from '@/lib/session';
 
 const UNAUTHORIZED = 401;
-const SERVER_ERROR = 500;
 const MAX_READ_RETRIES = 3;
 
 // One prefix, so a write refreshes both student pages with a single invalidation.
@@ -53,14 +53,7 @@ export const roundRefetchInterval = (
 
 // A refused request (4xx) will be refused again; only network and server failures are retried.
 export const retryRead = (failureCount: number, error: unknown): boolean =>
-  !(error instanceof ApiError && error.status < SERVER_ERROR) && failureCount < MAX_READ_RETRIES;
-
-// No answer from our server (network down, proxy gateway error, unreadable reply) means the write
-// may have been applied with only the reply lost. Retrying with the same idempotency key is then
-// the one safe move: the server replays it instead of acting twice. A 500 from the API itself has
-// rolled back, so the same key is simply processed again.
-export const isOutcomeUnknown = (error: unknown): boolean =>
-  !(error instanceof ApiError) || error.status >= SERVER_ERROR;
+  isOutcomeUnknown(error) && failureCount < MAX_READ_RETRIES;
 
 // What a club card offers. join: the club is full, or others already wait for it (a free seat
 // with waiters is theirs first, README waitlist rule 2), so the server would answer club_full to
