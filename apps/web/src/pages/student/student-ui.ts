@@ -215,6 +215,19 @@ export const writeSuccessNotice = (kind: StudentWriteKind, result: StudentWriteR
     : `ลงชุมนุม ${clubName(registration.club)} เรียบร้อยแล้ว`;
 };
 
+// A join's notice names a place in a queue. Once the data shows no such entry any more (the
+// student got the seat, an admin removed them), it would contradict the page beside the promoted
+// notice, so it is no longer shown. Derived from the data, so no effect has to clear it.
+export const isNoticeOutdated = (
+  kind: StudentWriteKind,
+  result: StudentWriteResult,
+  waitlist: StudentWaitlist | null,
+): boolean =>
+  kind === 'join' &&
+  'waitlist' in result &&
+  result.waitlist !== null &&
+  waitlist?.club.id !== result.waitlist.club.id;
+
 // A session that expires while the page polls sends the student back to the login page.
 export const useLogoutOnExpiredSession = (error: unknown) => {
   const setSession = useSetSession();

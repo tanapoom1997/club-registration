@@ -1,8 +1,9 @@
 import type { StudentRegistration, StudentRound, StudentWaitlist } from '@club-registration/shared';
-import type { ReactNode } from 'react';
+import type { ReactNode, Ref } from 'react';
 import { alertVariants } from '@/components/ui/alert';
 import { Card } from '@/components/ui/card';
 import { formatThaiDateTime } from '@/lib/thai-time';
+import { cn } from '@/lib/utils';
 import { promotedNotice } from './student-ui';
 
 type WaitlistCardProps = {
@@ -42,15 +43,24 @@ export const WaitlistCard = ({
 );
 
 // Always mounted, so a screen reader announces the notice politely when a poll brings the
-// promotion, without moving focus. From data (promotedFromWaitlist), so it survives a reload.
+// promotion. From data (promotedFromWaitlist), so it survives a reload. Focusable only so that
+// focus can land here when the poll removed the focused leave button (useFocusRescue).
 export const PromotedNotice = ({
   registration,
+  ref,
 }: {
   registration: StudentRegistration | null | undefined;
+  ref?: Ref<HTMLParagraphElement>;
 }) => (
   <div role="status">
     {registration?.promotedFromWaitlist && (
-      <p className={alertVariants({ variant: 'success' })}>{promotedNotice(registration)}</p>
+      <p
+        ref={ref}
+        tabIndex={-1}
+        className={cn(alertVariants({ variant: 'success' }), 'focus:outline-none')}
+      >
+        {promotedNotice(registration)}
+      </p>
     )}
   </div>
 );

@@ -25,6 +25,7 @@ const QUEUED_CHESS = { ...CHESS, waitlistCount: 3 };
 const WITH_QUEUED_CHESS = [QUEUED_CHESS, MUSIC, ART];
 const LEAVE_BUTTON = 'ออกจากรายชื่อรอ';
 const PROMOTED_TO_MUSIC = 'ได้ที่ในชุมนุม B200 ชุมนุมดนตรีสมมติ จากรายชื่อรอแล้ว';
+const JOINED_MUSIC = 'เข้ารายชื่อรอชุมนุม B200 ชุมนุมดนตรีสมมติ แล้ว ลำดับที่ 1';
 
 const openClubsPage = async () => {
   renderAt('/student/clubs');
@@ -62,6 +63,19 @@ const confirmLeave = (clubCode: string, name: string) => {
   const dialog = leaveDialog(clubCode, name);
   fireEvent.click(within(dialog).getByRole('button', { name: 'ยืนยัน ออกจากรายชื่อรอ' }));
   return dialog;
+};
+
+// The keyboard user's starting point for what a poll then removes.
+const focusLeaveButton = () => {
+  const button = screen.getByRole('button', { name: LEAVE_BUTTON });
+  button.focus();
+  expect(document.activeElement).toBe(button);
+};
+
+const pollOnce = async () => {
+  await act(async () => {
+    await vi.advanceTimersByTimeAsync(CLUBS_POLL_INTERVAL_MS);
+  });
 };
 
 const waitlistCard = () =>
@@ -591,6 +605,143 @@ describe('student waitlist', () => {
       });
 
       expect(callsTo(fetchMock, 'GET', ROUND_PATH)).toHaveLength(1);
+    });
+
+    it('drops the join notice once a poll shows the seat came from the waitlist', async () => {
+      vi.useFakeTimers({ shouldAdvanceTime: true });
+      const { state } = mockStudentApi();
+      await openClubsPage();
+      confirmJoin(MUSIC.clubCode, MUSIC.name);
+      await screen.findByText(JOINED_MUSIC);
+
+      state.registration = { ...registrationFor(MUSIC), promotedFromWaitlist: true };
+      state.waitlist = null;
+      await pollOnce();
+
+      expect(await screen.findByText(PROMOTED_TO_MUSIC)).toBeTruthy();
+      expect(screen.queryByText(JOINED_MUSIC)).toBeNull();
+    });
+
+    it('drops the join notice once a poll shows the entry removed without a seat', async () => {
+      vi.useFakeTimers({ shouldAdvanceTime: true });
+      const { state } = mockStudentApi();
+      await openClubsPage();
+      confirmJoin(MUSIC.clubCode, MUSIC.name);
+      await screen.findByText(JOINED_MUSIC);
+
+      // An admin removed the entry.
+      state.waitlist = null;
+      await pollOnce();
+
+      await waitFor(() =>
+        expect(screen.queryByRole('heading', { name: 'รายชื่อรอของฉัน' })).toBeNull(),
+      );
+      expect(screen.queryByText(JOINED_MUSIC)).toBeNull();
+      expect(screen.queryByText(/จากรายชื่อรอแล้ว/)).toBeNull();
+    });
+
+    it('moves focus from the join notice to the promoted notice when the join notice goes', async () => {
+      vi.useFakeTimers({ shouldAdvanceTime: true });
+      const { state } = mockStudentApi();
+      await openClubsPage();
+      confirmJoin(MUSIC.clubCode, MUSIC.name);
+      await waitFor(() => expect(document.activeElement).toBe(screen.getByText(JOINED_MUSIC)));
+
+      state.registration = { ...registrationFor(MUSIC), promotedFromWaitlist: true };
+      state.waitlist = null;
+      await pollOnce();
+
+      expect(document.activeElement).toBe(await screen.findByText(PROMOTED_TO_MUSIC));
+    });
+
+    it('focuses the promoted notice when the seat came before the join answer showed', async () => {
+      const api = mockStudentApi(
+        {},
+        {
+          [`POST ${WAITLIST_PATH}`]: () => {
+            // The join went through, then a seat freed at once: the refetch shows the seat.
+            api.state.registration = { ...registrationFor(MUSIC), promotedFromWaitlist: true };
+            return Response.json({ waitlist: waitlistFor(MUSIC) });
+          },
+        },
+      );
+      await openClubsPage();
+
+      confirmJoin(MUSIC.clubCode, MUSIC.name);
+
+      await waitFor(() => expect(screen.queryByRole('alertdialog')).toBeNull());
+      expect(document.activeElement).toBe(screen.getByText(PROMOTED_TO_MUSIC));
+      expect(screen.queryByText(JOINED_MUSIC)).toBeNull();
+    });
+
+    it.each([
+      ['clubs page', openClubsPage],
+      ['my-registration page', openMyRegistration],
+    ])('moves focus from the leave button to the promoted notice on the %s', async (_, open) => {
+      vi.useFakeTimers({ shouldAdvanceTime: true });
+      const { state } = mockStudentApi({
+        registration: registrationFor(ART),
+        waitlist: waitlistFor(MUSIC),
+      });
+      await open();
+      focusLeaveButton();
+
+      state.registration = { ...registrationFor(MUSIC), promotedFromWaitlist: true };
+      state.waitlist = null;
+      await pollOnce();
+
+      expect(document.activeElement).toBe(await screen.findByText(PROMOTED_TO_MUSIC));
+    });
+
+    it.each([
+      ['clubs page', 'an admin removed the entry', openClubsPage, 'ชุมนุมในชั้นของฉัน'],
+      ['clubs page', 'the round closed', openClubsPage, 'ชุมนุมในชั้นของฉัน'],
+      ['my-registration page', 'an admin removed the entry', openMyRegistration, 'ผลของฉัน'],
+      ['my-registration page', 'the round closed', openMyRegistration, 'ผลของฉัน'],
+    ])(
+      'moves focus from the leave button to the heading of the %s when %s',
+      async (_, cause, open, heading) => {
+        vi.useFakeTimers({ shouldAdvanceTime: true });
+        const { state } = mockStudentApi({ waitlist: waitlistFor(MUSIC) });
+        await open();
+        focusLeaveButton();
+
+        if (cause === 'the round closed') state.round = roundFixture({ status: 'closed' });
+        else state.waitlist = null;
+        await pollOnce();
+
+        await waitFor(() =>
+          expect(screen.queryByRole('button', { name: LEAVE_BUTTON })).toBeNull(),
+        );
+        expect(document.activeElement).toBe(screen.getByRole('heading', { name: heading }));
+      },
+    );
+
+    it('does not move focus when the leave button goes without having it', async () => {
+      vi.useFakeTimers({ shouldAdvanceTime: true });
+      const { state } = mockStudentApi({ waitlist: waitlistFor(MUSIC) });
+      await openClubsPage();
+      expect(document.activeElement).toBe(document.body);
+
+      state.registration = { ...registrationFor(MUSIC), promotedFromWaitlist: true };
+      state.waitlist = null;
+      await pollOnce();
+
+      await screen.findByText(PROMOTED_TO_MUSIC);
+      expect(document.activeElement).toBe(document.body);
+    });
+
+    it('gives focus to the leave confirmation opened from the focused leave button', async () => {
+      mockStudentApi({ waitlist: waitlistFor(MUSIC) });
+      await openClubsPage();
+      focusLeaveButton();
+
+      fireEvent.click(screen.getByRole('button', { name: LEAVE_BUTTON }));
+
+      // Opening it removes the button on purpose: the panel keeps focus, not the heading.
+      await waitFor(() =>
+        expect(document.activeElement).toBe(leaveDialog(MUSIC.clubCode, MUSIC.name)),
+      );
     });
 
     it('names the new seat when a cancel cascaded back to the student', async () => {
