@@ -22,7 +22,7 @@ type WritePanelProps = {
   state: WriteState;
   label: string;
   question: string;
-  // One or more short paragraphs: what happens, and what the student gives up.
+  // One or more short paragraphs: what happens, and what is given up.
   note: ReactNode;
   confirmLabel: string;
   pendingLabel: string;
@@ -30,9 +30,10 @@ type WritePanelProps = {
   followUp?: FollowUp | undefined;
 };
 
-// Inline next to what it acts on rather than a modal, so on a phone it opens where the student
-// tapped. It takes focus when it opens so keyboard and screen reader users land on the question,
-// and Escape closes it like the dismiss button (not while a request is in flight).
+// The confirmation of a seat write, on the student pages and in the admin's club lists. Inline
+// next to what it acts on rather than a modal, so on a phone it opens where it was tapped. It
+// takes focus when it opens so keyboard and screen reader users land on the question, and Escape
+// closes it like the dismiss button (not while a request is in flight).
 export const WritePanel = ({
   state: { pending, error, canRetry, onConfirm, onRetry, onDismiss },
   label,

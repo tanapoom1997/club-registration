@@ -9,7 +9,7 @@ import { Card, CardContent, CardHeader } from '@/components/ui/card';
 import { fetchClubMembers, fetchClubWaitlist } from '@/lib/api';
 import { refetchWhileOpen } from '@/lib/round-refetch';
 import { cn } from '@/lib/utils';
-import { WritePanel } from '@/pages/student/WritePanel';
+import { WritePanel } from '@/components/WritePanel';
 import { AddMemberForm } from './AddMemberForm';
 import { MembersTable, WaitlistTable } from './MemberTables';
 import type { RowActions } from './MemberTables';

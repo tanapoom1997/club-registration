@@ -4,8 +4,8 @@ import type { ReactNode } from 'react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
-import { WritePanel } from './WritePanel';
-import type { FollowUp, WriteState } from './WritePanel';
+import { WritePanel } from '@/components/WritePanel';
+import type { FollowUp, WriteState } from '@/components/WritePanel';
 import type { ClubOffer, ClubWriteKind } from './student-ui';
 
 export type ClubWrite = WriteState & { kind: ClubWriteKind; followUp?: FollowUp | undefined };
