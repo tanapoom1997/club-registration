@@ -10,7 +10,7 @@ const pages = vi.hoisted(() => {
   const released = new Promise<void>((resolve) => {
     release = resolve;
   });
-  return { release, released, importLoads: 0, studentLoads: 0 };
+  return { release, released, importLoads: 0, eventsLoads: 0, studentLoads: 0 };
 });
 
 vi.mock('@/pages/admin-rounds/AdminRoundsPage', async (importOriginal) => {
@@ -22,6 +22,10 @@ vi.mock('@/pages/admin-export/AdminExportPage', () => {
 });
 vi.mock('@/pages/admin-import/AdminImportPage', async (importOriginal) => {
   pages.importLoads += 1;
+  return await importOriginal();
+});
+vi.mock('@/pages/admin-events/AdminEventsPage', async (importOriginal) => {
+  pages.eventsLoads += 1;
   return await importOriginal();
 });
 vi.mock('@/pages/student/StudentClubsPage', async (importOriginal) => {
@@ -92,6 +96,25 @@ describe('lazily loaded pages', () => {
 
     await screen.findByRole('heading', { name: `สวัสดี ${STUDENT.fullName}` });
     expect(pages.importLoads).toBe(0);
+  });
+
+  it('does not download the event log, which names students, for a student', async () => {
+    signedInAs(STUDENT);
+    renderAt('/admin/events');
+
+    await screen.findByRole('heading', { name: `สวัสดี ${STUDENT.fullName}` });
+    expect(pages.eventsLoads).toBe(0);
+  });
+
+  it('downloads the event log page for an admin who opens it', async () => {
+    const fetchMock = signedInAs(ADMIN);
+    renderAt('/admin/events');
+
+    expect(
+      await screen.findByRole('heading', { level: 1, name: 'ประวัติการลงทะเบียน' }),
+    ).toBeTruthy();
+    expect(pages.eventsLoads).toBe(1);
+    expect(fetchMock).toHaveBeenCalledWith('/api/admin/events', { method: 'GET' });
   });
 
   it('does not download a student page for an admin sent back to the admin home', async () => {

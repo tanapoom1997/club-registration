@@ -5,6 +5,7 @@ import {
   clubMembersResponseSchema,
   clubWaitlistResponseSchema,
   errorResponseSchema,
+  eventLogResponseSchema,
   healthResponseSchema,
   importCommitResponseSchema,
   importPreviewResponseSchema,
@@ -32,6 +33,7 @@ import type {
   ClassroomPasswordStatus,
   CreateRoundBatchRequest,
   CreateRoundRequest,
+  EventLogResponse,
   ExportQuery,
   HealthResponse,
   ImportCommitResponse,
@@ -195,6 +197,37 @@ export const removeClubWaitlistEntry = async (
     clubWaitlistResponseSchema,
     request,
   );
+
+// The filters the admin event log page sets; unset ones are left out of the URL. before is the
+// cursor (the nextBefore of the page before). The page size is the API's default.
+export type EventLogRequest = {
+  roundId?: number | undefined;
+  clubId?: number | undefined;
+  loginId?: string | undefined;
+  before?: number | undefined;
+};
+
+// Fixed parameter order, so the same filters always ask for the same URL. The loginId is a
+// student's code: the api logs only parameter names (apps/api/src/log.ts) and this URL is
+// fetch's, never the page's, so it stays out of the browser history.
+const eventLogSearch = ({ roundId, clubId, loginId, before }: EventLogRequest): string =>
+  new URLSearchParams(
+    [
+      ['roundId', roundId === undefined ? undefined : String(roundId)],
+      ['clubId', clubId === undefined ? undefined : String(clubId)],
+      ['loginId', loginId],
+      ['before', before === undefined ? undefined : String(before)],
+    ].filter((entry): entry is [string, string] => entry[1] !== undefined),
+  ).toString();
+
+export const fetchEvents = async (request: EventLogRequest): Promise<EventLogResponse> => {
+  const search = eventLogSearch(request);
+  return await sendJson(
+    `/api/admin/events${search === '' ? '' : `?${search}`}`,
+    'GET',
+    eventLogResponseSchema,
+  );
+};
 
 export const IMPORT_TEMPLATE_URL = '/api/admin/import/template';
 

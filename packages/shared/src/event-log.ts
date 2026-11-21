@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { roleSchema } from './auth.js';
+import { loginIdSchema, roleSchema } from './auth.js';
 import { clubRefSchema } from './club-members.js';
 import { dbIdSchema } from './rounds.js';
 
@@ -27,11 +27,14 @@ export const EVENT_LOG_MAX_LIMIT = 200;
 
 // Strict: a misspelt filter (clubid, round) must be a 400, not an unfiltered page that looks like
 // an answer. Every filter is optional and they combine with AND; clubId matches the club an event
-// is about or the club it left (from_club_id). before is the cursor: the nextBefore of the page
-// before, so a page holds the events with a smaller id, newest first.
+// is about or the club it left (from_club_id). loginId is the student's code as an admin types it
+// (trimmed and lower-cased like everywhere else) and studentId the same student by DB id: given
+// both, both must match. before is the cursor: the nextBefore of the page before, so a page holds
+// the events with a smaller id, newest first.
 export const eventLogQuerySchema = z.strictObject({
   roundId: dbIdSchema.optional(),
   studentId: dbIdSchema.optional(),
+  loginId: loginIdSchema.optional(),
   clubId: dbIdSchema.optional(),
   before: dbIdSchema.optional(),
   limit: z.coerce.number().int().min(1).max(EVENT_LOG_MAX_LIMIT).default(EVENT_LOG_DEFAULT_LIMIT),

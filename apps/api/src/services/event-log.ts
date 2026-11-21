@@ -3,8 +3,8 @@ import { eventTypeSchema, roleSchema } from '@club-registration/shared';
 import type { Queryable } from '../db.js';
 
 // The admin's event log (README Phase 2, decision 3 and PR 3b): registration_events newest first,
-// one page at a time, filtered by round, student and club. Read-only, a single statement, so one
-// page is one consistent snapshot without a transaction of its own.
+// one page at a time, filtered by round, student (by DB id or by login ID) and club. Read-only, a
+// single statement, so one page is one consistent snapshot without a transaction of its own.
 //
 // Keyset pagination on id, not created_at: id is unique and only grows, while one transaction's
 // events share created_at. A page is `id < before ORDER BY id DESC LIMIT n`, so the pages after
@@ -20,7 +20,10 @@ import type { Queryable } from '../db.js';
 // (EXPLAIN on ~100k fictional events, README PR 3b): no filter and `before` walk the primary key
 // backwards; roundId walks (round_id, id) backwards (migration
 // 20261122000000_event-log-round-index.sql); studentId and clubId (club_id OR from_club_id, a
-// BitmapOr) read the few hundred rows of their indexes and sort them.
+// BitmapOr) read the few hundred rows of their indexes and sort them. loginId is a subquery, not a
+// join: an InitPlan looks the login up once on the unique index of users.login_id, then the same
+// bitmap scan of (student_id, created_at) as studentId (0.2 ms; with roundId a BitmapAnd, 0.1 ms;
+// an unknown login never reads registration_events at all).
 
 type EventRow = {
   id: number;
@@ -46,13 +49,28 @@ type EventRow = {
   actor_role: string;
 };
 
-type Clause = { sql: (placeholder: string) => string; value: number };
+type Clause = { sql: (placeholder: string) => string; value: number | string };
 
-const filterClauses = ({ roundId, studentId, clubId, before }: EventLogQuery): Clause[] => [
+const filterClauses = ({
+  roundId,
+  studentId,
+  loginId,
+  clubId,
+  before,
+}: EventLogQuery): Clause[] => [
   ...(roundId === undefined ? [] : [{ sql: (p: string) => `e.round_id = ${p}`, value: roundId }]),
   ...(studentId === undefined
     ? []
     : [{ sql: (p: string) => `e.student_id = ${p}`, value: studentId }]),
+  // A login no account has gives NULL, and an admin's id is never a student_id: both an empty page.
+  ...(loginId === undefined
+    ? []
+    : [
+        {
+          sql: (p: string) => `e.student_id = (SELECT id FROM users WHERE login_id = ${p})`,
+          value: loginId,
+        },
+      ]),
   ...(clubId === undefined
     ? []
     : [{ sql: (p: string) => `(e.club_id = ${p} OR e.from_club_id = ${p})`, value: clubId }]),
@@ -60,7 +78,7 @@ const filterClauses = ({ roundId, studentId, clubId, before }: EventLogQuery): C
 ];
 
 // The statement for one page: the WHERE of the filters given, then the cursor and the limit.
-const eventLogStatement = (query: EventLogQuery): { text: string; values: number[] } => {
+const eventLogStatement = (query: EventLogQuery): { text: string; values: (number | string)[] } => {
   const clauses = filterClauses(query);
   const where = clauses.map(({ sql }, index) => sql(`$${index + 1}`));
   return {

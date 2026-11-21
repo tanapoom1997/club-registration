@@ -49,6 +49,9 @@ const PAGES: Readonly<Record<Role, Readonly<Record<string, ReactElement>>>> = Ob
     export: lazyPage(
       async () => (await import('@/pages/admin-export/AdminExportPage')).AdminExportPage,
     ),
+    events: lazyPage(
+      async () => (await import('@/pages/admin-events/AdminEventsPage')).AdminEventsPage,
+    ),
     'initial-passwords': lazyPage(
       async () =>
         (await import('@/pages/admin-initial-passwords/AdminInitialPasswordsPage'))

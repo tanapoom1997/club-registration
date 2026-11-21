@@ -294,12 +294,27 @@ describe('eventLogQuerySchema', () => {
         roundId: '1',
         studentId: '2',
         clubId: '3',
+        loginId: 'fictional01',
         before: '40',
         limit: String(EVENT_LOG_MAX_LIMIT),
       }),
     ).toEqual({
       success: true,
-      data: { roundId: 1, studentId: 2, clubId: 3, before: 40, limit: EVENT_LOG_MAX_LIMIT },
+      data: {
+        roundId: 1,
+        studentId: 2,
+        clubId: 3,
+        loginId: 'fictional01',
+        before: 40,
+        limit: EVENT_LOG_MAX_LIMIT,
+      },
+    });
+  });
+
+  it('normalises a login ID as an admin types it, like every other login ID', () => {
+    expect(eventLogQuerySchema.safeParse({ loginId: '  Fictional.01 ' })).toEqual({
+      success: true,
+      data: { loginId: 'fictional.01', limit: EVENT_LOG_DEFAULT_LIMIT },
     });
   });
 
@@ -311,6 +326,12 @@ describe('eventLogQuerySchema', () => {
     ['an id past the integer range', { clubId: '2147483648' }],
     ['an unknown parameter', { eventType: 'register' }],
     ['a filter given twice', { studentId: ['1', '2'] }],
+    ['an empty login ID', { loginId: '' }],
+    ['a login ID of spaces only', { loginId: '   ' }],
+    ['a login ID with a space inside', { loginId: 'fictional 01' }],
+    ['a login ID with a character no login has', { loginId: 'fictional!' }],
+    ['a login ID over 64 characters', { loginId: 'a'.repeat(65) }],
+    ['a login ID given twice', { loginId: ['fictional01', 'fictional02'] }],
   ])('refuses %s', (_case, query) => {
     expect(eventLogQuerySchema.safeParse(query).success).toBe(false);
   });

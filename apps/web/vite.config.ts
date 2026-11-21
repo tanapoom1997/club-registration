@@ -42,7 +42,7 @@ export default defineConfig({
       reporter: ['text-summary', 'html'],
       // Floors at the last measured level (rounded down): CI fails if a change lowers coverage.
       // Raise them when tests are added; never lower them to pass.
-      thresholds: { statements: 95, branches: 88, functions: 96, lines: 96 },
+      thresholds: { statements: 95, branches: 89, functions: 96, lines: 96 },
     },
   },
 });
