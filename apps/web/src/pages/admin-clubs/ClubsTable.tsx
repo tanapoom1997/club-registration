@@ -27,11 +27,15 @@ const Advisors = ({ advisors }: { advisors: readonly ClubAdvisor[] }) =>
     </ul>
   );
 
-type ClubsTableProps = { clubs: readonly AdminClub[]; onEdit: (club: AdminClub) => void };
+type ClubsTableProps = {
+  clubs: readonly AdminClub[];
+  onEdit: (club: AdminClub) => void;
+  onShowMembers: (club: AdminClub) => void;
+};
 
 // Names, descriptions and advisor details are rendered as text nodes only: they come from admin
 // input and the Excel file, so they must never reach the page as HTML.
-export const ClubsTable = ({ clubs, onEdit }: ClubsTableProps) => (
+export const ClubsTable = ({ clubs, onEdit, onShowMembers }: ClubsTableProps) => (
   <Table aria-label="รายการชุมนุม">
     <TableHeader>
       <tr>
@@ -67,7 +71,15 @@ export const ClubsTable = ({ clubs, onEdit }: ClubsTableProps) => (
             {club.remaining === 0 ? <Badge variant="warning">เต็ม</Badge> : club.remaining}
           </TableCell>
           <TableCell>
-            <div className="flex justify-end">
+            <div className="flex justify-end gap-2">
+              <Button
+                variant="outline"
+                className="px-3 py-1"
+                aria-label={`รายชื่อชุมนุม ${club.clubCode}`}
+                onClick={() => onShowMembers(club)}
+              >
+                รายชื่อ
+              </Button>
               <Button
                 variant="outline"
                 className="px-3 py-1"

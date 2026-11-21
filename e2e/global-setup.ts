@@ -11,6 +11,9 @@ import pg from 'pg';
 import { hashPassword } from '../apps/api/src/auth/password.js';
 import {
   ADMIN,
+  ADMIN_FROM_CLUB,
+  ADMIN_TO_CLUB,
+  ADMIN_WAITLIST_CLUB,
   ADVISOR_NAME,
   API_PORT,
   CHANGE_FROM_CLUB,
@@ -116,6 +119,8 @@ const seed = async (databaseUrl: string): Promise<void> => {
       { account: STUDENTS.waits, mustChange: false, seatNo: 4 },
       { account: STUDENTS.holdsSeat, mustChange: false, seatNo: 5 },
       { account: STUDENTS.changes, mustChange: false, seatNo: 6 },
+      { account: STUDENTS.seatedByAdmin, mustChange: false, seatNo: 7 },
+      { account: STUDENTS.removedFromWaitlist, mustChange: false, seatNo: 8 },
     ];
     for (const { account, mustChange, seatNo } of students) {
       const id = await insertUser(account, 'student', mustChange);
@@ -132,7 +137,16 @@ const seed = async (databaseUrl: string): Promise<void> => {
       [TERM, GRADE],
     );
     const roundId = rows[0]?.id;
-    for (const club of [OPEN_CLUB, FULL_CLUB, ONE_SEAT_CLUB, CHANGE_FROM_CLUB, CHANGE_TO_CLUB]) {
+    for (const club of [
+      OPEN_CLUB,
+      FULL_CLUB,
+      ONE_SEAT_CLUB,
+      CHANGE_FROM_CLUB,
+      CHANGE_TO_CLUB,
+      ADMIN_FROM_CLUB,
+      ADMIN_TO_CLUB,
+      ADMIN_WAITLIST_CLUB,
+    ]) {
       const inserted = await client.query<{ id: number }>(
         `INSERT INTO clubs (round_id, club_code, name, capacity) VALUES ($1, $2, $3, $4)
          RETURNING id`,

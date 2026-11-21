@@ -1,6 +1,9 @@
 import {
   ISSUED_COUNT_HEADER,
   adminClubResponseSchema,
+  clubMemberWriteResponseSchema,
+  clubMembersResponseSchema,
+  clubWaitlistResponseSchema,
   errorResponseSchema,
   healthResponseSchema,
   importCommitResponseSchema,
@@ -20,6 +23,11 @@ import type {
   AdminClub,
   CancelRegistrationRequest,
   ChangePasswordRequest,
+  ClubMemberRequest,
+  ClubMemberWriteResponse,
+  ClubMembersResponse,
+  ClubWaitlistRemoveRequest,
+  ClubWaitlistResponse,
   ChangeRegistrationRequest,
   ClassroomPasswordStatus,
   CreateRoundBatchRequest,
@@ -144,6 +152,49 @@ export const fetchRoundClassrooms = async (roundId: number): Promise<RoundClassr
 
 export const updateClub = async (id: number, request: UpdateClubRequest): Promise<AdminClub> =>
   (await sendJson(`/api/admin/clubs/${id}`, 'PATCH', adminClubResponseSchema, request)).club;
+
+// An admin's view of a club's members and waitlist, and the writes that fix them in the
+// students' place (README Phase 2, PR 3a and 3b). Allowed in every round status. The member
+// writes answer with the student's seat in this club after every promotion they caused (null =
+// not in this club now), the waitlist removal with the whole queue after it.
+export const fetchClubMembers = async (clubId: number): Promise<ClubMembersResponse> =>
+  await sendJson(`/api/admin/clubs/${clubId}/members`, 'GET', clubMembersResponseSchema);
+
+export const assignClubMember = async (
+  clubId: number,
+  request: ClubMemberRequest,
+): Promise<ClubMemberWriteResponse> =>
+  await sendJson(
+    `/api/admin/clubs/${clubId}/members`,
+    'POST',
+    clubMemberWriteResponseSchema,
+    request,
+  );
+
+export const removeClubMember = async (
+  clubId: number,
+  request: ClubMemberRequest,
+): Promise<ClubMemberWriteResponse> =>
+  await sendJson(
+    `/api/admin/clubs/${clubId}/members/remove`,
+    'POST',
+    clubMemberWriteResponseSchema,
+    request,
+  );
+
+export const fetchClubWaitlist = async (clubId: number): Promise<ClubWaitlistResponse> =>
+  await sendJson(`/api/admin/clubs/${clubId}/waitlist`, 'GET', clubWaitlistResponseSchema);
+
+export const removeClubWaitlistEntry = async (
+  clubId: number,
+  request: ClubWaitlistRemoveRequest,
+): Promise<ClubWaitlistResponse> =>
+  await sendJson(
+    `/api/admin/clubs/${clubId}/waitlist/remove`,
+    'POST',
+    clubWaitlistResponseSchema,
+    request,
+  );
 
 export const IMPORT_TEMPLATE_URL = '/api/admin/import/template';
 
