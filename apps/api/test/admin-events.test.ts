@@ -362,6 +362,60 @@ describe('admin event log', () => {
       expect(page.events.every(({ student }) => student.id === students.s3)).toBe(true);
     });
 
+    it('filters by login ID', async () => {
+      const { students } = await seedScenario();
+
+      const page = await eventsOk({ loginId: await loginOf(students.s3) });
+
+      expect(idsOf(page)).toEqual(await storedIds('student_id = $1', [students.s3]));
+      expect(page.events.length).toBeGreaterThan(0);
+    });
+
+    it('matches a login ID typed in upper case with spaces around it', async () => {
+      const { students } = await seedScenario();
+      const loginId = await loginOf(students.s2);
+
+      const page = await eventsOk({ loginId: `  ${loginId.toUpperCase()} ` });
+
+      expect(idsOf(page)).toEqual(await storedIds('student_id = $1', [students.s2]));
+      expect(page.events.every(({ student }) => student.loginId === loginId)).toBe(true);
+    });
+
+    it('answers an empty page for a login ID no student has, or an admin has', async () => {
+      await seedScenario();
+
+      const unknown = await eventsOk({ loginId: 'fictional-nobody' });
+      const admin = await eventsOk({ loginId: await loginOf(adminId) });
+
+      expect(unknown).toEqual({ events: [], nextBefore: null });
+      expect(admin).toEqual({ events: [], nextBefore: null });
+    });
+
+    it('combines a login ID with a round by AND', async () => {
+      const { round1, round2, students } = await seedScenario();
+      const loginId = await loginOf(students.t1);
+
+      const ownRound = await eventsOk({ loginId, roundId: round2 });
+      const otherRound = await eventsOk({ loginId, roundId: round1 });
+
+      expect(idsOf(ownRound)).toEqual(
+        await storedIds('round_id = $1 AND student_id = $2', [round2, students.t1]),
+      );
+      expect(ownRound.events).toHaveLength(2);
+      expect(otherRound.events).toEqual([]);
+    });
+
+    it('needs a login ID and a student id given together to name the same student', async () => {
+      const { students } = await seedScenario();
+      const loginId = await loginOf(students.s1);
+
+      const same = await eventsOk({ loginId, studentId: students.s1 });
+      const conflicting = await eventsOk({ loginId, studentId: students.s2 });
+
+      expect(idsOf(same)).toEqual(await storedIds('student_id = $1', [students.s1]));
+      expect(conflicting).toEqual({ events: [], nextBefore: null });
+    });
+
     it('filters by club, matching the club an event left as well', async () => {
       const { clubs } = await seedScenario();
 
@@ -457,6 +511,30 @@ describe('admin event log', () => {
       );
     });
 
+    it('pages through the events of one login ID with nextBefore', async () => {
+      const { students } = await seedScenario();
+      const loginId = (await loginOf(students.s2)).toUpperCase();
+      const all = await storedIds('student_id = $1', [students.s2]);
+
+      const pages: EventLogResponse[] = [];
+      let before: number | null = null;
+      do {
+        const page: EventLogResponse = await eventsOk({
+          loginId,
+          limit: 2,
+          ...(before === null ? {} : { before }),
+        });
+        pages.push(page);
+        before = page.nextBefore;
+      } while (before !== null);
+
+      expect(all.length).toBeGreaterThan(4);
+      expect(pages.flatMap(idsOf)).toEqual(all);
+      expect(pages.slice(0, -1).map(({ nextBefore }) => nextBefore)).toEqual(
+        pages.slice(0, -1).map(({ events }) => events.at(-1)!.id),
+      );
+    });
+
     it('says there is no older page when the last one is exactly full', async () => {
       await seedScenario();
       const all = await storedIds();
@@ -525,6 +603,10 @@ describe('admin event log', () => {
       ['an unknown parameter', { actorId: '1' }],
       ['a misspelt filter', { clubid: '1' }],
       ['an event type filter, which is not offered', { eventType: 'register' }],
+      ['an empty login ID', { loginId: '' }],
+      ['a login ID of spaces only', { loginId: '   ' }],
+      ['a login ID with a character no login has', { loginId: 'fictional student' }],
+      ['a login ID over 64 characters', { loginId: 'a'.repeat(65) }],
     ])('refuses %s with 400', async (_case, query) => {
       const response = await listEvents(query);
 
@@ -532,11 +614,11 @@ describe('admin event log', () => {
       expect(codeOf(response)).toBe('validation_error');
     });
 
-    it('refuses a filter given twice with 400', async () => {
-      const response = await asAdmin({
-        method: 'GET',
-        url: '/api/admin/events?roundId=1&roundId=2',
-      });
+    it.each([
+      ['a round', 'roundId=1&roundId=2'],
+      ['a login ID', 'loginId=fictional-a&loginId=fictional-b'],
+    ])('refuses %s given twice with 400', async (_case, query) => {
+      const response = await asAdmin({ method: 'GET', url: `/api/admin/events?${query}` });
 
       expect(response.statusCode).toBe(400);
     });
@@ -560,8 +642,13 @@ describe('admin event log', () => {
       const scenarioLogLines = logLines.length;
       const loginIds = await Promise.all([...Object.values(students), adminId].map(loginOf));
 
+      const typedLoginId = ` ${(await loginOf(students.s4)).toUpperCase()} `;
+      const malformedLoginId = 'FICTIONAL BAD!';
+
       await listEvents();
       await listEvents({ roundId: round1, studentId: students.s3, clubId: clubs.clubB });
+      const filtered = await listEvents({ loginId: typedLoginId, roundId: round1 });
+      const refused = await listEvents({ loginId: malformedLoginId });
       await listEvents({ clubid: 'fictional-text' });
 
       const log = logLines.slice(scenarioLogLines).join('\n');
@@ -569,7 +656,14 @@ describe('admin event log', () => {
       expect(log).not.toContain(STUDENT_NAME);
       expect(log).not.toContain(ADMIN_NAME);
       expect(log).not.toContain(CLUB_NAME);
+      expect(filtered.statusCode).toBe(200);
+      expect(refused.statusCode).toBe(400);
+      expect(log).toContain('"loginId"');
       expect(log).not.toContain('fictional-text');
+      expect(log).not.toContain(typedLoginId.trim());
+      expect(log).not.toContain(encodeURIComponent(typedLoginId));
+      expect(log).not.toContain('FICTIONAL');
+      expect(log).not.toContain('BAD!');
       expect(log).not.toContain(`"${students.s3}"`);
       loginIds.forEach((loginId) => expect(log).not.toContain(loginId));
     });

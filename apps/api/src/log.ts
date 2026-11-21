@@ -91,9 +91,12 @@ export const serializeError = (error: unknown): SerializedError => serializeAt(e
 const QUERY_KEY_PATTERN = /^[A-Za-z][A-Za-z0-9_]{0,31}$/;
 const MAX_QUERY_KEYS = 10;
 
-// The query string's parameter names, never its values: no route takes personal data in its
-// query, but the line is written before validation, and a client can still put a password or a
-// student's login there (a form falling back to GET, a script building the URL).
+// The query string's parameter names, never its values. One route does take personal data in
+// its query: the admin event log's loginId filter is a student's code (GET /api/admin/events,
+// README Phase 2 PR 5b), which is exactly why no value is ever written. The line is also written
+// before validation, and a client can put a password or a student's login in any query (a form
+// falling back to GET, a script building the URL). Caddy keeps no access log (Caddyfile), so this
+// line is the only record of a request's URL.
 const describeQuery = (query: string) => {
   if (query === '') return {};
   const names = [...new Set(new URLSearchParams(query).keys())];

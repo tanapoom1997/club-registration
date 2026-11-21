@@ -65,6 +65,11 @@ export const STUDENTS = Object.freeze({
     password: 'e2e-student-h-fictional',
     fullName: 'ด.ญ.สมมติ ถูกนำออกจากคิว',
   },
+  inEventLog: {
+    loginId: 'e2e-student-i',
+    password: 'e2e-student-i-fictional',
+    fullName: 'ด.ช.สมมติ ในประวัติ',
+  },
 } satisfies Record<string, Account>);
 
 export const OPEN_CLUB = { code: 'E2E01', name: 'ชุมนุมสมมติ ดนตรี', capacity: 5 };
@@ -79,4 +84,6 @@ export const CHANGE_TO_CLUB = { code: 'E2E05', name: 'ชุมนุมสม�
 export const ADMIN_FROM_CLUB = { code: 'E2E06', name: 'ชุมนุมสมมติ จัดให้', capacity: 2 };
 export const ADMIN_TO_CLUB = { code: 'E2E07', name: 'ชุมนุมสมมติ ย้ายไป', capacity: 2 };
 export const ADMIN_WAITLIST_CLUB = { code: 'E2E08', name: 'ชุมนุมสมมติ คิวรอ', capacity: 0 };
+// The event log page: a student registers here, then the admin finds the event by their code.
+export const EVENT_LOG_CLUB = { code: 'E2E09', name: 'ชุมนุมสมมติ ประวัติ', capacity: 2 };
 export const ADVISOR_NAME = 'ครูสมมติ ใจดี';

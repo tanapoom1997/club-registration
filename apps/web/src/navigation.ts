@@ -39,6 +39,12 @@ export const MENUS: Readonly<Record<Role, readonly MenuItem[]>> = Object.freeze(
       description: 'ดาวน์โหลดรายชื่อรายชุมนุมหรือรายห้องเป็น Excel หรือ PDF',
     },
     {
+      path: 'events',
+      label: 'ประวัติการลงทะเบียน',
+      description:
+        'ดูย้อนหลังว่าใครลง ยกเลิก ย้าย หรือเข้า/ออกรายชื่อรอเมื่อไร กรองด้วยรอบ ชุมนุม หรือรหัสนักเรียน',
+    },
+    {
       path: 'initial-passwords',
       label: 'รหัสผ่านเริ่มต้น',
       description: 'สุ่มรหัสผ่านให้นักเรียนแล้วดาวน์โหลดเป็น Excel (ดาวน์โหลดซ้ำไม่ได้)',
