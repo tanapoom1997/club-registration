@@ -73,9 +73,7 @@ describe('auth routes', () => {
 
     fillLogin('demo1001', 'initial-password');
 
-    expect(
-      await screen.findByText('เข้าสู่ระบบครั้งแรก กรุณาตั้งรหัสผ่านใหม่ก่อนใช้งาน'),
-    ).toBeTruthy();
+    expect(await screen.findByText('เข้าสู่ระบบครั้งแรก กรุณาตั้งรหัสผ่านใหม่ก่อนใช้งาน')).toBeTruthy();
     expect(router.state.location.pathname).toBe('/change-password');
   });
 

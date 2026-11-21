@@ -63,9 +63,9 @@ describe('student my-registration page', () => {
     await openPage();
 
     const empty = screen.getByText('ยังไม่ได้ลงชุมนุม').parentElement as HTMLElement;
-    expect(
-      within(empty).getByRole('link', { name: 'ชุมนุมในชั้นของฉัน' }).getAttribute('href'),
-    ).toBe('/student/clubs');
+    expect(within(empty).getByRole('link', { name: 'ชุมนุมในชั้นของฉัน' }).getAttribute('href')).toBe(
+      '/student/clubs',
+    );
     expect(screen.queryByRole('button', { name: CANCEL_BUTTON })).toBeNull();
   });
 

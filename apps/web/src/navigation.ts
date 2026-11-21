@@ -41,8 +41,7 @@ export const MENUS: Readonly<Record<Role, readonly MenuItem[]>> = Object.freeze(
     {
       path: 'events',
       label: 'ประวัติการลงทะเบียน',
-      description:
-        'ดูย้อนหลังว่าใครลง ยกเลิก ย้าย หรือเข้า/ออกรายชื่อรอเมื่อไร กรองด้วยรอบ ชุมนุม หรือรหัสนักเรียน',
+      description: 'ดูย้อนหลังว่าใครลง ยกเลิก ย้าย หรือเข้า/ออกรายชื่อรอเมื่อไร กรองด้วยรอบ ชุมนุม หรือรหัสนักเรียน',
     },
     {
       path: 'initial-passwords',

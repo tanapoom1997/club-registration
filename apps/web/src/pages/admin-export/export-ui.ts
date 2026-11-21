@@ -12,8 +12,7 @@ export const VIEW_OPTIONS: Readonly<Record<ExportView, { label: string; descript
     },
     classroom: {
       label: 'รายห้อง',
-      description:
-        'ให้ครูประจำชั้นตามคนที่ยังไม่ลง: นักเรียนทุกคนในห้อง เรียงตามเลขที่ พร้อมชุมนุมที่ลง',
+      description: 'ให้ครูประจำชั้นตามคนที่ยังไม่ลง: นักเรียนทุกคนในห้อง เรียงตามเลขที่ พร้อมชุมนุมที่ลง',
     },
   });
 
@@ -31,10 +30,8 @@ export const FORMAT_OPTIONS: Readonly<
 });
 
 const ERROR_MESSAGES: Readonly<Record<string, string>> = Object.freeze({
-  [ERROR_CODES.notFound]:
-    'ไม่พบรอบ ชุมนุม หรือห้องที่เลือก (อาจถูกลบหรือนักเรียนถูกย้ายไปแล้ว) กรุณาโหลดหน้านี้ใหม่',
-  [ERROR_CODES.nothingToExport]:
-    'ยังไม่มีข้อมูลให้ส่งออก (รอบนี้ยังไม่มีชุมนุม หรือชั้นนี้ยังไม่มีนักเรียน)',
+  [ERROR_CODES.notFound]: 'ไม่พบรอบ ชุมนุม หรือห้องที่เลือก (อาจถูกลบหรือนักเรียนถูกย้ายไปแล้ว) กรุณาโหลดหน้านี้ใหม่',
+  [ERROR_CODES.nothingToExport]: 'ยังไม่มีข้อมูลให้ส่งออก (รอบนี้ยังไม่มีชุมนุม หรือชั้นนี้ยังไม่มีนักเรียน)',
   [ERROR_CODES.forbidden]: 'บัญชีนี้ไม่มีสิทธิ์ส่งออกรายชื่อ',
   [ERROR_CODES.validationError]: 'ตัวเลือกไม่ถูกต้อง กรุณาเลือกใหม่',
 });

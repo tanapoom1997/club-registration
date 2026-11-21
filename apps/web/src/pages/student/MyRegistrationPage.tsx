@@ -159,9 +159,7 @@ export const MyRegistrationPage = () => {
             <div className="space-y-2 rounded-lg border border-border bg-card p-4">
               <p className="font-medium">ยังไม่ได้ลงชุมนุม</p>
               {round.status === 'closed' ? (
-                <p className="text-sm text-muted-foreground">
-                  รอบนี้ปิดแล้ว กรุณาติดต่อครูที่ดูแลการลงทะเบียน
-                </p>
+                <p className="text-sm text-muted-foreground">รอบนี้ปิดแล้ว กรุณาติดต่อครูที่ดูแลการลงทะเบียน</p>
               ) : (
                 <p className="text-sm">
                   ดูรายการและลงชุมนุมได้ที่หน้า <ClubsLink>ชุมนุมในชั้นของฉัน</ClubsLink>

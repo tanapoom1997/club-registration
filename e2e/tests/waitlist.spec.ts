@@ -49,13 +49,8 @@ test('a student waits for a full club and gets the seat when its holder cancels'
     const card = page.getByRole('article', { name: ONE_SEAT_CLUB.name, exact: true });
     await expect(card.getByText('เต็ม', { exact: true })).toBeVisible();
     await card.getByRole('button', { name: `เข้ารายชื่อรอ ${clubLabel(ONE_SEAT_CLUB)}` }).click();
-    await page
-      .getByRole('alertdialog')
-      .getByRole('button', { name: 'ยืนยัน เข้ารายชื่อรอ' })
-      .click();
-    const joinNotice = page.getByText(
-      `เข้ารายชื่อรอชุมนุม ${clubLabel(ONE_SEAT_CLUB)} แล้ว ลำดับที่ 1`,
-    );
+    await page.getByRole('alertdialog').getByRole('button', { name: 'ยืนยัน เข้ารายชื่อรอ' }).click();
+    const joinNotice = page.getByText(`เข้ารายชื่อรอชุมนุม ${clubLabel(ONE_SEAT_CLUB)} แล้ว ลำดับที่ 1`);
     await expect(joinNotice).toBeVisible();
     await expect(joinNotice).toBeFocused();
     await expect(card.getByText('รออยู่ ลำดับที่ 1')).toBeVisible();
@@ -66,18 +61,13 @@ test('a student waits for a full club and gets the seat when its holder cancels'
 
     await holder.goto('/student/my-registration');
     await holder.getByRole('button', { name: 'ยกเลิกชุมนุมนี้' }).click();
-    await holder
-      .getByRole('alertdialog')
-      .getByRole('button', { name: 'ยืนยัน ยกเลิกชุมนุม' })
-      .click();
+    await holder.getByRole('alertdialog').getByRole('button', { name: 'ยืนยัน ยกเลิกชุมนุม' }).click();
     await expect(holder.getByText('ยังไม่ได้ลงชุมนุม')).toBeVisible();
 
     // No reload: the waiting student's page learns of the promotion by polling. Focus goes from
     // the removed leave button to the notice rather than to <body>, and the join notice, which
     // would now contradict it, is gone.
-    const promotedNotice = page.getByText(
-      `ได้ที่ในชุมนุม ${clubLabel(ONE_SEAT_CLUB)} จากรายชื่อรอแล้ว`,
-    );
+    const promotedNotice = page.getByText(`ได้ที่ในชุมนุม ${clubLabel(ONE_SEAT_CLUB)} จากรายชื่อรอแล้ว`);
     await expect(promotedNotice).toBeVisible({ timeout: POLL_TIMEOUT_MS });
     await expect(promotedNotice).toBeFocused();
     await expect(joinNotice).toBeHidden();
@@ -107,9 +97,7 @@ test('a student moves to another club in one step', async ({ page }) => {
   await expect(dialog).toContainText('ถ้าชุมนุมใหม่เต็มก่อน คุณยังอยู่ชุมนุมเดิม');
   await dialog.getByRole('button', { name: 'ยืนยัน ย้ายชุมนุม' }).click();
 
-  await expect(
-    page.getByText(`ย้ายมาชุมนุม ${clubLabel(CHANGE_TO_CLUB)} เรียบร้อยแล้ว`),
-  ).toBeVisible();
+  await expect(page.getByText(`ย้ายมาชุมนุม ${clubLabel(CHANGE_TO_CLUB)} เรียบร้อยแล้ว`)).toBeVisible();
   await expect(card.getByText('ชุมนุมของฉัน')).toBeVisible();
   await expect(
     page

@@ -137,9 +137,7 @@ describe('admin initial passwords page', () => {
 
     const dialog = screen.getByRole('alertdialog', { name: 'ยืนยันการออกรหัสผ่าน' });
     expect(dialog.textContent).toContain('ออกรหัสผ่านให้ ม.1/2 ประมาณ 27 คน?');
-    expect(dialog.textContent).toContain(
-      'รหัสผ่านเดิมของนักเรียน 25 คนที่พิมพ์แจกไปแล้วจะใช้ไม่ได้ทันที',
-    );
+    expect(dialog.textContent).toContain('รหัสผ่านเดิมของนักเรียน 25 คนที่พิมพ์แจกไปแล้วจะใช้ไม่ได้ทันที');
   });
 
   it('sends the chosen scope with a fresh key and downloads the file it gets back', async () => {
@@ -224,9 +222,7 @@ describe('admin initial passwords page', () => {
     fireEvent.click(screen.getByRole('button', { name: 'ยืนยัน ออกรหัสผ่าน' }));
 
     await waitFor(() => {
-      expect(screen.getByRole('alert').textContent).toContain(
-        'ไม่มีนักเรียนที่ออกรหัสผ่านได้ในขอบเขตนี้แล้ว',
-      );
+      expect(screen.getByRole('alert').textContent).toContain('ไม่มีนักเรียนที่ออกรหัสผ่านได้ในขอบเขตนี้แล้ว');
     });
     expect(downloads).toEqual([]);
   });

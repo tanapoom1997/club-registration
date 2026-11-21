@@ -81,13 +81,7 @@ describe('changePasswordRequestSchema', () => {
 
   // The change-password page shows the first message as is, so each must be one a student reads.
   it.each([
-    [
-      'an empty current password',
-      '',
-      'fictional-pass-2',
-      'กรุณากรอกรหัสผ่านเดิม',
-      'currentPassword',
-    ],
+    ['an empty current password', '', 'fictional-pass-2', 'กรุณากรอกรหัสผ่านเดิม', 'currentPassword'],
     [
       'a current password longer than any account can have',
       'a'.repeat(PASSWORD_MAX_LENGTH + 1),

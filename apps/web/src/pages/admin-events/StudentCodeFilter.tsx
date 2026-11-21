@@ -30,12 +30,7 @@ export const StudentCodeFilter = ({
   };
 
   return (
-    <form
-      aria-label="กรองด้วยรหัสนักเรียน"
-      className="space-y-1.5"
-      onSubmit={handleSubmit}
-      noValidate
-    >
+    <form aria-label="กรองด้วยรหัสนักเรียน" className="space-y-1.5" onSubmit={handleSubmit} noValidate>
       <Label htmlFor="events-login-id">รหัสนักเรียน</Label>
       <div className="flex flex-wrap items-center gap-2">
         <Input

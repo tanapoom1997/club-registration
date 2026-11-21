@@ -661,9 +661,7 @@ describe('admin club members panel', () => {
     expect(dialog.textContent).toContain('คนที่รอข้างหลังเลื่อนขึ้นหนึ่งลำดับ');
     fireEvent.click(within(dialog).getByRole('button', { name: 'ยืนยัน นำออกจากรายชื่อรอ' }));
 
-    expect(await notice(panel)).toBe(
-      'นำ demo1001 ออกจากรายชื่อรอชุมนุม B200 ชุมนุมดนตรีสมมติ แล้ว',
-    );
+    expect(await notice(panel)).toBe('นำ demo1001 ออกจากรายชื่อรอชุมนุม B200 ชุมนุมดนตรีสมมติ แล้ว');
     expect(document.activeElement).toBe(within(panel).getByRole('status').firstElementChild);
     const waiters = waitlistTable(panel, MUSIC);
     expect(within(waiters).queryByText(S1.loginId)).toBeNull();

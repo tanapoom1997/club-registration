@@ -94,9 +94,7 @@ export const ChangePasswordPage = () => {
         <CardHeader>
           <CardTitle>เปลี่ยนรหัสผ่าน</CardTitle>
           <p className="text-sm text-muted-foreground">
-            {isForced
-              ? 'เข้าสู่ระบบครั้งแรก กรุณาตั้งรหัสผ่านใหม่ก่อนใช้งาน'
-              : 'ตั้งรหัสผ่านใหม่สำหรับบัญชีของคุณ'}
+            {isForced ? 'เข้าสู่ระบบครั้งแรก กรุณาตั้งรหัสผ่านใหม่ก่อนใช้งาน' : 'ตั้งรหัสผ่านใหม่สำหรับบัญชีของคุณ'}
           </p>
         </CardHeader>
         <CardContent>

@@ -96,10 +96,7 @@ export const clubCodeSchema = z
   .toUpperCase()
   .min(1, 'กรุณากรอกรหัสชุมนุม')
   .max(CLUB_CODE_MAX_LENGTH, `รหัสชุมนุมยาวได้ไม่เกิน ${CLUB_CODE_MAX_LENGTH} ตัวอักษร`)
-  .regex(
-    /^[\p{L}\p{M}\p{N}._/-]+$/u,
-    'รหัสชุมนุมใช้ได้เฉพาะตัวอักษร ตัวเลข . _ / - (ไม่มีช่องว่าง)',
-  );
+  .regex(/^[\p{L}\p{M}\p{N}._/-]+$/u, 'รหัสชุมนุมใช้ได้เฉพาะตัวอักษร ตัวเลข . _ / - (ไม่มีช่องว่าง)');
 
 // Shared with the admin screens that pick a classroom, so a value accepted there matches what the
 // import stored.
@@ -144,10 +141,7 @@ export const clubDescriptionSchema = z
   .string()
   .trim()
   .max(DESCRIPTION_MAX_LENGTH, `รายละเอียดยาวได้ไม่เกิน ${DESCRIPTION_MAX_LENGTH} ตัวอักษร`)
-  .refine(
-    (value) => !CONTROL_CHARS_EXCEPT_LINE_BREAKS.test(value),
-    'รายละเอียดมีอักขระที่ใช้ไม่ได้',
-  );
+  .refine((value) => !CONTROL_CHARS_EXCEPT_LINE_BREAKS.test(value), 'รายละเอียดมีอักขระที่ใช้ไม่ได้');
 
 // Row schemas take one string (or undefined for an empty cell) per template column; the API turns
 // Excel cell values into that shape before parsing.

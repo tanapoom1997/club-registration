@@ -62,9 +62,7 @@ export const AppLayout = ({ role }: { role: Role }) => {
         </nav>
       </header>
       <main className={cn('mx-auto px-4 py-6 sm:py-8', width)}>
-        <FormError
-          message={logoutMutation.isError ? 'ออกจากระบบไม่สำเร็จ กรุณาลองใหม่' : undefined}
-        />
+        <FormError message={logoutMutation.isError ? 'ออกจากระบบไม่สำเร็จ กรุณาลองใหม่' : undefined} />
         <Outlet />
       </main>
     </div>

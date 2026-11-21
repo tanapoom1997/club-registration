@@ -19,10 +19,7 @@ test('an admin finds the registration of a student in the event log by their cod
       .getByRole('article', { name: EVENT_LOG_CLUB.name, exact: true })
       .getByRole('button', { name: `ลงชุมนุม ${clubLabel(EVENT_LOG_CLUB)}` })
       .click();
-    await studentPage
-      .getByRole('alertdialog')
-      .getByRole('button', { name: 'ยืนยัน ลงชุมนุม' })
-      .click();
+    await studentPage.getByRole('alertdialog').getByRole('button', { name: 'ยืนยัน ลงชุมนุม' }).click();
     await expect(
       studentPage.getByText(`ลงชุมนุม ${clubLabel(EVENT_LOG_CLUB)} เรียบร้อยแล้ว`),
     ).toBeVisible();

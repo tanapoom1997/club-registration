@@ -81,11 +81,7 @@ describe('change password page', () => {
       apiError(429, 'rate_limited'),
       'ลองหลายครั้งเกินไป กรุณารอสักครู่แล้วลองใหม่',
     ],
-    [
-      'the server fails',
-      apiError(500, 'internal_error'),
-      'เปลี่ยนรหัสผ่านไม่สำเร็จ กรุณาลองใหม่อีกครั้ง',
-    ],
+    ['the server fails', apiError(500, 'internal_error'), 'เปลี่ยนรหัสผ่านไม่สำเร็จ กรุณาลองใหม่อีกครั้ง'],
   ])('stays on the page and says so when %s', async (_case, handler, message) => {
     const { router } = await openPage(STUDENT, handler);
 
