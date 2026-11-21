@@ -1,44 +1,135 @@
-import type { StudentClub } from '@club-registration/shared';
+import type { StudentClub, StudentRegistration, StudentWaitlist } from '@club-registration/shared';
 import { useEffect, useId, useRef } from 'react';
+import type { ReactNode } from 'react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 import { WritePanel } from './WritePanel';
-import type { WriteState } from './WritePanel';
+import type { FollowUp, WriteState } from './WritePanel';
+import type { ClubOffer, ClubWriteKind } from './student-ui';
+
+export type ClubWrite = WriteState & { kind: ClubWriteKind; followUp?: FollowUp | undefined };
 
 type ClubCardProps = {
   club: StudentClub;
-  // This card is the club the student holds.
-  held: boolean;
-  // The student holds a club in this round, this one or another. The held-club card at the top
-  // already explains how to change, so no card offers a register button that could never work.
-  holdsClub: boolean;
-  canRegister: boolean;
+  // The student's registration and waitlist entry in the round, for what this card offers and
+  // what its confirmation warns about.
+  registration: StudentRegistration | null;
+  waitlist: StudentWaitlist | null;
+  offer: ClubOffer;
+  // The round is open and no write is on its way.
+  enabled: boolean;
   // Set while this club's confirmation is open.
-  write: WriteState | undefined;
-  onRegister: () => void;
+  write: ClubWrite | undefined;
+  onStart: (kind: ClubWriteKind) => void;
 };
 
-const clubLabel = ({ clubCode, name }: StudentClub) => `${clubCode} ${name}`;
+const clubLabel = ({ clubCode, name }: { clubCode: string; name: string }) => `${clubCode} ${name}`;
+
+// The visible text starts the accessible name, which adds the club so every card's button is
+// told apart (WCAG label in name).
+const ACTION_TEXT: Readonly<Record<ClubWriteKind, string>> = Object.freeze({
+  register: 'ลงชุมนุม',
+  change: 'ย้ายมาชุมนุมนี้',
+  join: 'เข้ารายชื่อรอ',
+});
+
+type PanelText = {
+  label: string;
+  question: string;
+  note: ReactNode;
+  confirmLabel: string;
+  pendingLabel: string;
+  dismissLabel: string;
+};
+
+const panelText = (
+  kind: ClubWriteKind,
+  club: StudentClub,
+  registration: StudentRegistration | null,
+  waitlist: StudentWaitlist | null,
+): PanelText => {
+  const target = clubLabel(club);
+  if (kind === 'register') {
+    return {
+      label: `ยืนยันการลงชุมนุม ${target}`,
+      question: `ลงชุมนุม ${target}?`,
+      note: 'ลงได้ 1 ชุมนุมต่อรอบ ถ้าจะเปลี่ยนภายหลัง ย้ายไปชุมนุมที่ยังมีที่ว่างได้ หรือเข้ารายชื่อรอของชุมนุมที่เต็ม',
+      confirmLabel: 'ยืนยัน ลงชุมนุม',
+      pendingLabel: 'กำลังลงทะเบียน…',
+      dismissLabel: 'ไม่ลง',
+    };
+  }
+  const held = registration ? clubLabel(registration.club) : undefined;
+  if (kind === 'change') {
+    return {
+      label: `ยืนยันการย้ายไปชุมนุม ${target}`,
+      question: `ย้ายจากชุมนุม ${held ?? ''} ไปชุมนุม ${target}?`,
+      note: (
+        <>
+          <p className="font-medium">
+            คุณจะออกจากชุมนุมเดิมก็ต่อเมื่อได้ที่ในชุมนุมใหม่แล้วเท่านั้น ถ้าชุมนุมใหม่เต็มก่อน
+            คุณยังอยู่ชุมนุมเดิม
+          </p>
+          <p>ย้ายแล้วที่นั่งเดิมจะว่างและอาจมีคนอื่นได้แทน ถ้าเปลี่ยนใจภายหลังอาจกลับไปไม่ได้</p>
+        </>
+      ),
+      confirmLabel: 'ยืนยัน ย้ายชุมนุม',
+      pendingLabel: 'กำลังย้ายชุมนุม…',
+      dismissLabel: 'ไม่ย้าย',
+    };
+  }
+  return {
+    label: `ยืนยันการเข้ารายชื่อรอชุมนุม ${target}`,
+    question: `เข้ารายชื่อรอชุมนุม ${target}?`,
+    note: (
+      <>
+        <p>
+          คุณจะต่อท้ายรายชื่อรอ (ตอนนี้มีคนรอ {club.waitlistCount} คน) เมื่อมีที่ว่าง
+          ระบบจะให้ที่ตามลำดับเอง และแจ้งผลที่หน้านี้เท่านั้น
+        </p>
+        {held && (
+          <p className="font-medium">
+            ถ้าได้ที่ ระบบจะย้ายคุณออกจากชุมนุม {held} มาชุมนุมนี้ทันที และที่นั่งเดิมจะว่าง
+          </p>
+        )}
+        {waitlist && (
+          <p className="font-medium">
+            คุณรอชุมนุม {clubLabel(waitlist.club)} อยู่ (ลำดับที่ {waitlist.position}) รอได้ทีละ 1
+            ชุมนุม ถ้าเข้ารายชื่อรอชุมนุมนี้ ลำดับเดิมจะหายไป
+          </p>
+        )}
+      </>
+    ),
+    confirmLabel: 'ยืนยัน เข้ารายชื่อรอ',
+    pendingLabel: 'กำลังเข้ารายชื่อรอ…',
+    dismissLabel: 'ไม่เข้า',
+  };
+};
 
 // Every name and the description come from admin input, so they are rendered as text nodes only,
 // never as HTML; whitespace-pre-line keeps the admin's line breaks.
 export const ClubCard = ({
   club,
-  held,
-  holdsClub,
-  canRegister,
+  registration,
+  waitlist,
+  offer,
+  enabled,
   write,
-  onRegister,
+  onStart,
 }: ClubCardProps) => {
   const headingId = useId();
-  const registerRef = useRef<HTMLButtonElement>(null);
+  // One ref for whichever action the card shows: after a change refused as full, the refetch
+  // turns the same button into the waitlist one, and focus still has to come back to it.
+  const actionRef = useRef<HTMLButtonElement>(null);
   const wasConfirming = useRef(false);
   const confirming = write !== undefined;
+  const held = registration?.club.id === club.id;
+  const waiting = waitlist?.club.id === club.id ? waitlist : undefined;
 
   // Closing the confirmation removes the focused button, so focus goes back where it started.
   useEffect(() => {
-    if (wasConfirming.current && !confirming) registerRef.current?.focus();
+    if (wasConfirming.current && !confirming) actionRef.current?.focus();
     wasConfirming.current = confirming;
   }, [confirming]);
 
@@ -57,6 +148,7 @@ export const ClubCard = ({
             {club.name}
           </h3>
           {held && <Badge variant="success">ชุมนุมของฉัน</Badge>}
+          {waiting && <Badge variant="warning">รออยู่ ลำดับที่ {waiting.position}</Badge>}
         </div>
         <div className="shrink-0 text-right">
           {club.remaining === 0 ? (
@@ -67,6 +159,9 @@ export const ClubCard = ({
             </p>
           )}
           <p className="text-xs text-muted-foreground">รับ {club.capacity} คน</p>
+          {club.waitlistCount > 0 && (
+            <p className="text-xs text-warning-foreground">มีคนรอ {club.waitlistCount} คน</p>
+          )}
         </div>
       </div>
 
@@ -82,24 +177,23 @@ export const ClubCard = ({
 
       {write ? (
         <WritePanel
+          // A follow-up (club_full → waitlist) opens a new confirmation that takes focus again.
+          key={write.kind}
           state={write}
-          label={`ยืนยันการลงชุมนุม ${clubLabel(club)}`}
-          question={`ลงชุมนุม ${clubLabel(club)}?`}
-          note="ลงได้ 1 ชุมนุมต่อรอบ ถ้าจะเปลี่ยนภายหลังต้องยกเลิกก่อน และที่นั่งที่ยกเลิกอาจมีคนอื่นลงแทน"
-          confirmLabel="ยืนยัน ลงชุมนุม"
-          pendingLabel="กำลังลงทะเบียน…"
-          dismissLabel="ไม่ลง"
+          followUp={write.followUp}
+          {...panelText(write.kind, club, registration, waitlist)}
         />
       ) : (
-        !holdsClub && (
+        offer !== 'none' && (
           <Button
-            ref={registerRef}
+            ref={actionRef}
+            variant={offer === 'join' ? 'outline' : 'primary'}
             className="w-full sm:w-auto"
-            aria-label={`ลงชุมนุม ${clubLabel(club)}`}
-            disabled={!canRegister || club.remaining === 0}
-            onClick={onRegister}
+            aria-label={`${ACTION_TEXT[offer]} ${clubLabel(club)}`}
+            disabled={!enabled}
+            onClick={() => onStart(offer)}
           >
-            ลงชุมนุม
+            {ACTION_TEXT[offer]}
           </Button>
         )
       )}

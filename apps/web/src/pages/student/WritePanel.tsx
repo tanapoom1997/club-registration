@@ -1,5 +1,5 @@
 import { useEffect, useRef } from 'react';
-import type { KeyboardEvent } from 'react';
+import type { KeyboardEvent, ReactNode } from 'react';
 import { FormError } from '@/components/FormError';
 import { Button } from '@/components/ui/button';
 import { alertVariants } from '@/components/ui/alert';
@@ -15,14 +15,19 @@ export type WriteState = {
   onDismiss: () => void;
 };
 
+// A next step to offer once the request was refused, e.g. a full club's waitlist.
+export type FollowUp = { label: string; onClick: () => void };
+
 type WritePanelProps = {
   state: WriteState;
   label: string;
   question: string;
-  note: string;
+  // One or more short paragraphs: what happens, and what the student gives up.
+  note: ReactNode;
   confirmLabel: string;
   pendingLabel: string;
   dismissLabel: string;
+  followUp?: FollowUp | undefined;
 };
 
 // Inline next to what it acts on rather than a modal, so on a phone it opens where the student
@@ -36,6 +41,7 @@ export const WritePanel = ({
   confirmLabel,
   pendingLabel,
   dismissLabel,
+  followUp,
 }: WritePanelProps) => {
   const panelRef = useRef<HTMLDivElement>(null);
   useEffect(() => {
@@ -67,7 +73,7 @@ export const WritePanel = ({
       {!refused && (
         <>
           <p className="font-medium">{question}</p>
-          <p className="text-sm">{note}</p>
+          <div className="space-y-1 text-sm">{note}</div>
         </>
       )}
       {pending && (
@@ -77,7 +83,9 @@ export const WritePanel = ({
       )}
       <FormError message={error} />
       <div className="flex flex-wrap gap-2">
-        {refused ? null : canRetry ? (
+        {refused ? (
+          followUp && <Button onClick={followUp.onClick}>{followUp.label}</Button>
+        ) : canRetry ? (
           <Button onClick={onRetry} disabled={pending}>
             ลองอีกครั้ง
           </Button>

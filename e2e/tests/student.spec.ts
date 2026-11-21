@@ -40,7 +40,7 @@ test('a student registers for a club, sees it as theirs, then cancels it', async
   expect(events.map(({ event_type: type }) => type)).toEqual(['register', 'cancel']);
 });
 
-test('a full club is shown as full and cannot be chosen', async ({ page }) => {
+test('a full club is shown as full and offers its waitlist instead of a seat', async ({ page }) => {
   await logIn(page, STUDENTS.browses, STUDENT_HOME);
 
   await page.goto('/student/clubs');
@@ -48,8 +48,11 @@ test('a full club is shown as full and cannot be chosen', async ({ page }) => {
 
   await expect(card.getByText('เต็ม', { exact: true })).toBeVisible();
   await expect(
-    card.getByRole('button', { name: `ลงชุมนุม ${clubLabel(FULL_CLUB)}` }),
-  ).toBeDisabled();
+    card.getByRole('button', { name: `เข้ารายชื่อรอ ${clubLabel(FULL_CLUB)}` }),
+  ).toBeEnabled();
+  await expect(card.getByRole('button', { name: `ลงชุมนุม ${clubLabel(FULL_CLUB)}` })).toHaveCount(
+    0,
+  );
 });
 
 test('the first login asks for a new password before anything else', async ({ page }) => {

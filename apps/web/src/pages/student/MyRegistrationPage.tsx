@@ -1,21 +1,24 @@
-import type { StudentRegistration } from '@club-registration/shared';
+import type { StudentClubRef } from '@club-registration/shared';
 import { useQuery } from '@tanstack/react-query';
 import { useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router';
 import { Button } from '@/components/ui/button';
 import { alertVariants } from '@/components/ui/alert';
 import { cn } from '@/lib/utils';
-import { cancelRegistration, fetchStudentRound } from '@/lib/api';
+import { fetchStudentRound } from '@/lib/api';
 import { HeldClubCard } from './HeldClubCard';
+import { LeaveWaitlistPanel } from './LeaveWaitlistPanel';
 import { NoRound, RoundHeader, StudentLoadState } from './RoundHeader';
+import { PromotedNotice, WaitlistCard } from './WaitlistCard';
 import { WritePanel } from './WritePanel';
 import {
   STUDENT_ROUND_QUERY_KEY,
-  cancelErrorMessage,
   retryRead,
   roundRefetchInterval,
   useLogoutOnExpiredSession,
   useStudentWrite,
+  writeErrorMessage,
+  writeSuccessNotice,
 } from './student-ui';
 
 const CLUBS_PATH = '/student/clubs';
@@ -26,50 +29,68 @@ const ClubsLink = ({ children }: { children: string }) => (
   </Link>
 );
 
+// The confirmation that is open, with the club it names. Kept apart from the query data so the
+// panel and its answer stay on screen when the refetch after a write shows no club any more.
+type Target = { kind: 'cancel' | 'leave'; club: StudentClubRef };
+
 export const MyRegistrationPage = () => {
-  // Kept apart from the query data so the panel and its answer stay on screen when the refetch
-  // after a cancel shows no club any more.
-  const [confirming, setConfirming] = useState<StudentRegistration['club']>();
+  const [target, setTarget] = useState<Target>();
   const query = useQuery({
     queryKey: STUDENT_ROUND_QUERY_KEY,
     queryFn: fetchStudentRound,
     retry: retryRead,
-    refetchInterval: (current) => roundRefetchInterval(current.state.data?.round),
+    refetchInterval: (current) =>
+      roundRefetchInterval(current.state.data?.round, current.state.data?.waitlist),
   });
   useLogoutOnExpiredSession(query.error);
-  // Cancel names no club: a student holds at most one seat in their round.
-  const { mutation, start, retry, canRetry } = useStudentWrite<object>(cancelRegistration);
+  // Neither write names a club: a student holds at most one seat and one waitlist entry.
+  const { mutation, start, retry, canRetry } = useStudentWrite();
 
-  const openConfirmation = (club: StudentRegistration['club']) => {
+  const openConfirmation = (next: Target) => {
     mutation.reset();
-    setConfirming(club);
+    setTarget(next);
   };
 
   const closeConfirmation = () => {
     mutation.reset();
-    setConfirming(undefined);
+    setTarget(undefined);
   };
 
   const { data } = query;
   const round = data?.round;
   const registration = data?.registration;
-  const panelClub = mutation.isSuccess ? undefined : confirming;
-  const panelOpen = panelClub !== undefined;
+  const waitlist = data?.waitlist;
+  const panel = mutation.isSuccess ? undefined : target;
+  const panelOpen = panel !== undefined;
 
   const headingRef = useRef<HTMLHeadingElement>(null);
   const cancelRef = useRef<HTMLButtonElement>(null);
+  const leaveRef = useRef<HTMLButtonElement>(null);
   const noticeRef = useRef<HTMLParagraphElement>(null);
-  const wasPanelOpen = useRef(false);
-  // Closing the panel removes the focused element, so focus goes back to the cancel button it
-  // came from, as on the clubs page. After a cancel that button is gone; the notice says what
-  // happened and holds the link to choose a new club, so focus lands there instead. The heading
-  // is the last resort (e.g. the round closed while the panel was open).
+  const lastPanel = useRef<Target>(undefined);
+  // Closing the panel removes the focused element, so focus goes back to the button it came
+  // from, as on the clubs page. After the write went through, the notice says what happened (and
+  // holds the link to choose a new club), so focus lands there instead. The heading is the last
+  // resort (e.g. the round closed while the panel was open).
+  const succeeded = mutation.isSuccess;
   useEffect(() => {
-    if (wasPanelOpen.current && !panelOpen) {
-      (cancelRef.current ?? noticeRef.current ?? headingRef.current)?.focus();
+    const closed = lastPanel.current;
+    if (closed && !panelOpen) {
+      const button = closed.kind === 'cancel' ? cancelRef.current : leaveRef.current;
+      const preferred = succeeded ? noticeRef.current : button;
+      (preferred ?? button ?? noticeRef.current ?? headingRef.current)?.focus();
     }
-    wasPanelOpen.current = panelOpen;
-  }, [panelOpen]);
+    lastPanel.current = panel;
+  }, [panel, panelOpen, succeeded]);
+
+  const writeState = (kind: Target['kind']) => ({
+    pending: mutation.isPending,
+    error: mutation.isError ? writeErrorMessage(kind, mutation.error) : undefined,
+    canRetry,
+    onConfirm: () => start({ kind }),
+    onRetry: retry,
+    onDismiss: closeConfirmation,
+  });
 
   return (
     <section className="space-y-4">
@@ -95,24 +116,28 @@ export const MyRegistrationPage = () => {
                 tabIndex={-1}
                 className={cn(alertVariants({ variant: 'success' }), 'focus:outline-none')}
               >
-                ยกเลิกชุมนุมแล้ว{' '}
-                {round.status === 'open' && (
-                  <>
-                    เลือกชุมนุมใหม่ได้ที่หน้า <ClubsLink>ชุมนุมในชั้นของฉัน</ClubsLink>
-                  </>
-                )}
+                {writeSuccessNotice(mutation.variables.kind, mutation.data)}{' '}
+                {mutation.variables.kind === 'cancel' &&
+                  !registration &&
+                  round.status === 'open' && (
+                    <>
+                      เลือกชุมนุมใหม่ได้ที่หน้า <ClubsLink>ชุมนุมในชั้นของฉัน</ClubsLink>
+                    </>
+                  )}
               </p>
             )}
           </div>
+          <PromotedNotice registration={registration} />
 
           {registration ? (
             <HeldClubCard registration={registration}>
-              {panelClub ? null : round.status === 'open' ? (
+              {panel?.kind === 'cancel' ? null : round.status === 'open' ? (
                 <Button
                   ref={cancelRef}
                   variant="outline"
                   className="w-full sm:w-auto"
-                  onClick={() => openConfirmation(registration.club)}
+                  disabled={mutation.isPending}
+                  onClick={() => openConfirmation({ kind: 'cancel', club: registration.club })}
                 >
                   ยกเลิกชุมนุมนี้
                 </Button>
@@ -138,23 +163,35 @@ export const MyRegistrationPage = () => {
               )}
             </div>
           )}
-          {panelClub && (
+          {panel?.kind === 'cancel' && (
             <WritePanel
-              state={{
-                pending: mutation.isPending,
-                error: mutation.isError ? cancelErrorMessage(mutation.error) : undefined,
-                canRetry,
-                onConfirm: () => start({}),
-                onRetry: retry,
-                onDismiss: closeConfirmation,
-              }}
-              label={`ยืนยันการยกเลิกชุมนุม ${panelClub.clubCode} ${panelClub.name}`}
-              question={`ยกเลิกชุมนุม ${panelClub.clubCode} ${panelClub.name}?`}
+              state={writeState('cancel')}
+              label={`ยืนยันการยกเลิกชุมนุม ${panel.club.clubCode} ${panel.club.name}`}
+              question={`ยกเลิกชุมนุม ${panel.club.clubCode} ${panel.club.name}?`}
               note="ที่นั่งจะว่างทันทีและอาจมีคนอื่นลงแทน ถ้าเปลี่ยนใจภายหลังอาจลงชุมนุมนี้กลับไม่ได้"
               confirmLabel="ยืนยัน ยกเลิกชุมนุม"
               pendingLabel="กำลังยกเลิก…"
               dismissLabel="ไม่ยกเลิก"
             />
+          )}
+
+          {waitlist && (
+            <WaitlistCard waitlist={waitlist} registration={registration ?? null} round={round}>
+              {panel?.kind !== 'leave' && round.status === 'open' && (
+                <Button
+                  ref={leaveRef}
+                  variant="outline"
+                  className="w-full sm:w-auto"
+                  disabled={mutation.isPending}
+                  onClick={() => openConfirmation({ kind: 'leave', club: waitlist.club })}
+                >
+                  ออกจากรายชื่อรอ
+                </Button>
+              )}
+            </WaitlistCard>
+          )}
+          {panel?.kind === 'leave' && (
+            <LeaveWaitlistPanel club={panel.club} state={writeState('leave')} />
           )}
         </>
       )}
