@@ -10,12 +10,16 @@ import { fetchRoundClubs, fetchRounds } from '@/lib/api';
 import { STATUS_DISPLAY, roundOptionLabel } from '@/lib/round-display';
 import { refetchWhileOpen } from '@/lib/round-refetch';
 import { ROUNDS_QUERY_KEY } from '@/pages/admin-rounds/round-ui';
+import { ClubMembersPanel } from './ClubMembersPanel';
 import { ClubsTable } from './ClubsTable';
 import { EditClubForm } from './EditClubForm';
 import { CLUBS_POLL_INTERVAL_MS, CLUBS_QUERY_KEY, preferredRound } from './club-ui';
 
 // The rounds page lists every term under the same key, so both pages share one cached list.
 const ALL_TERMS = '';
+
+// One club's editor or its member lists, never both: opening one closes the other.
+type OpenPanel = { kind: 'edit' | 'members'; clubId: number };
 
 const RoundSummary = ({ round }: { round: Round }) => {
   const status = STATUS_DISPLAY[round.status];
@@ -43,7 +47,7 @@ export const AdminClubsPage = () => {
   // Starts unset and is filled in from the rounds list once; after that only the admin changes it.
   const [roundId, setRoundId] = useState<number>();
   // An id, not a snapshot, so the editor sees the latest registered count after every poll.
-  const [editingId, setEditingId] = useState<number>();
+  const [openPanel, setOpenPanel] = useState<OpenPanel>();
   const [saved, setSaved] = useState<string>();
 
   const roundsQuery = useQuery({
@@ -73,18 +77,21 @@ export const AdminClubsPage = () => {
 
   const chooseRound = (value: string) => {
     setRoundId(Number(value));
-    setEditingId(undefined);
+    setOpenPanel(undefined);
     setSaved(undefined);
   };
 
-  const startEdit = ({ id }: AdminClub) => {
-    setEditingId(id);
-    setSaved(undefined);
-  };
+  const open =
+    (kind: OpenPanel['kind']) =>
+    ({ id }: AdminClub) => {
+      setOpenPanel({ kind, clubId: id });
+      setSaved(undefined);
+    };
 
   const rounds = roundsQuery.data ?? [];
   const clubs = clubsQuery.data?.clubs ?? [];
-  const editing = clubs.find(({ id }) => id === editingId);
+  const shownClub = clubs.find(({ id }) => id === openPanel?.clubId);
+  const closePanel = () => setOpenPanel(undefined);
 
   return (
     <section className="space-y-6">
@@ -92,7 +99,8 @@ export const AdminClubsPage = () => {
         <h1 className="text-2xl font-bold">ชุมนุม</h1>
         <p className="text-sm text-muted-foreground">
           ดูจำนวนรับ จำนวนที่ลงแล้ว และครูที่ปรึกษาของแต่ละชุมนุมในรอบ แก้ชื่อ รายละเอียด
-          และจำนวนรับได้ เพิ่มหรือลบชุมนุมและครูทำผ่านการนำเข้า Excel
+          และจำนวนรับได้ ปุ่ม "รายชื่อ" ดูสมาชิกและรายชื่อรอ เพิ่ม ย้าย
+          หรือนำนักเรียนออกแทนได้ทุกสถานะของรอบ เพิ่มหรือลบชุมนุมและครูทำผ่านการนำเข้า Excel
         </p>
       </div>
 
@@ -161,21 +169,30 @@ export const AdminClubsPage = () => {
               </Link>
             </p>
           ) : (
-            <ClubsTable clubs={clubs} onEdit={startEdit} />
+            <ClubsTable clubs={clubs} onEdit={open('edit')} onShowMembers={open('members')} />
           )}
         </div>
       )}
 
-      {editing && (
+      {shownClub && openPanel?.kind === 'edit' && (
         // Keyed so choosing another club starts a fresh form instead of keeping old input.
         <EditClubForm
-          key={editing.id}
-          club={editing}
+          key={shownClub.id}
+          club={shownClub}
           onSaved={(club) => {
-            setEditingId(undefined);
+            setOpenPanel(undefined);
             setSaved(`บันทึกชุมนุม ${club.clubCode} แล้ว`);
           }}
-          onClose={() => setEditingId(undefined)}
+          onClose={closePanel}
+        />
+      )}
+      {shownClub && openPanel?.kind === 'members' && clubsQuery.data && (
+        // Keyed like the editor, so another club starts with its own lists and no open confirmation.
+        <ClubMembersPanel
+          key={shownClub.id}
+          club={shownClub}
+          round={clubsQuery.data.round}
+          onClose={closePanel}
         />
       )}
     </section>

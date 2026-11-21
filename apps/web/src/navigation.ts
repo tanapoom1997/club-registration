@@ -30,7 +30,8 @@ export const MENUS: Readonly<Record<Role, readonly MenuItem[]>> = Object.freeze(
     {
       path: 'clubs',
       label: 'ชุมนุม',
-      description: 'ดูจำนวนรับ จำนวนที่ลงแล้ว และครูรายรอบ แก้ชื่อ รายละเอียด และจำนวนรับ',
+      description:
+        'ดูจำนวนรับ จำนวนที่ลงแล้ว และครูรายรอบ แก้ชื่อ รายละเอียด และจำนวนรับ ดู/แก้รายชื่อสมาชิกและรายชื่อรอ',
     },
     {
       path: 'export',

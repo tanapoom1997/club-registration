@@ -55,6 +55,16 @@ export const STUDENTS = Object.freeze({
     password: 'e2e-student-f-fictional',
     fullName: 'ด.ญ.สมมติ ย้ายชุมนุม',
   },
+  seatedByAdmin: {
+    loginId: 'e2e-student-g',
+    password: 'e2e-student-g-fictional',
+    fullName: 'ด.ช.สมมติ ผู้ดูแลจัดให้',
+  },
+  removedFromWaitlist: {
+    loginId: 'e2e-student-h',
+    password: 'e2e-student-h-fictional',
+    fullName: 'ด.ญ.สมมติ ถูกนำออกจากคิว',
+  },
 } satisfies Record<string, Account>);
 
 export const OPEN_CLUB = { code: 'E2E01', name: 'ชุมนุมสมมติ ดนตรี', capacity: 5 };
@@ -64,4 +74,9 @@ export const FULL_CLUB = { code: 'E2E02', name: 'ชุมนุมสมมต�
 export const ONE_SEAT_CLUB = { code: 'E2E03', name: 'ชุมนุมสมมติ ที่นั่งเดียว', capacity: 1 };
 export const CHANGE_FROM_CLUB = { code: 'E2E04', name: 'ชุมนุมสมมติ ต้นทาง', capacity: 3 };
 export const CHANGE_TO_CLUB = { code: 'E2E05', name: 'ชุมนุมสมมติ ปลายทาง', capacity: 3 };
+// The admin's member lists: a student seated in one club then moved to the other, and a club with
+// no seats whose waitlist the admin clears.
+export const ADMIN_FROM_CLUB = { code: 'E2E06', name: 'ชุมนุมสมมติ จัดให้', capacity: 2 };
+export const ADMIN_TO_CLUB = { code: 'E2E07', name: 'ชุมนุมสมมติ ย้ายไป', capacity: 2 };
+export const ADMIN_WAITLIST_CLUB = { code: 'E2E08', name: 'ชุมนุมสมมติ คิวรอ', capacity: 0 };
 export const ADVISOR_NAME = 'ครูสมมติ ใจดี';
