@@ -13,9 +13,12 @@ import {
   ADMIN,
   ADVISOR_NAME,
   API_PORT,
+  CHANGE_FROM_CLUB,
+  CHANGE_TO_CLUB,
   DATABASE_URL_ENV,
   FULL_CLUB,
   GRADE,
+  ONE_SEAT_CLUB,
   OPEN_CLUB,
   STUDENTS,
   TERM,
@@ -110,6 +113,9 @@ const seed = async (databaseUrl: string): Promise<void> => {
       { account: STUDENTS.registers, mustChange: false, seatNo: 1 },
       { account: STUDENTS.firstLogin, mustChange: true, seatNo: 2 },
       { account: STUDENTS.browses, mustChange: false, seatNo: 3 },
+      { account: STUDENTS.waits, mustChange: false, seatNo: 4 },
+      { account: STUDENTS.holdsSeat, mustChange: false, seatNo: 5 },
+      { account: STUDENTS.changes, mustChange: false, seatNo: 6 },
     ];
     for (const { account, mustChange, seatNo } of students) {
       const id = await insertUser(account, 'student', mustChange);
@@ -126,7 +132,7 @@ const seed = async (databaseUrl: string): Promise<void> => {
       [TERM, GRADE],
     );
     const roundId = rows[0]?.id;
-    for (const club of [OPEN_CLUB, FULL_CLUB]) {
+    for (const club of [OPEN_CLUB, FULL_CLUB, ONE_SEAT_CLUB, CHANGE_FROM_CLUB, CHANGE_TO_CLUB]) {
       const inserted = await client.query<{ id: number }>(
         `INSERT INTO clubs (round_id, club_code, name, capacity) VALUES ($1, $2, $3, $4)
          RETURNING id`,

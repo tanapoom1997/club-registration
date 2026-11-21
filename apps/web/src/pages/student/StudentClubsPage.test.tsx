@@ -6,6 +6,7 @@ import {
   CLUBS_PATH,
   REGISTER_PATH,
   UUID_PATTERN,
+  WAITLIST_PATH,
   apiError,
   bodyOf,
   callsTo,
@@ -13,6 +14,7 @@ import {
   networkFailure,
   registrationFor,
   roundFixture,
+  waitlistFor,
 } from '@/test-support/student-api';
 import { CLUBS_POLL_INTERVAL_MS } from './student-ui';
 
@@ -28,6 +30,26 @@ const cardOf = (name: string) => screen.getByRole('article', { name });
 
 const registerButton = (clubCode: string, name: string) =>
   screen.getByRole<HTMLButtonElement>('button', { name: `ลงชุมนุม ${clubCode} ${name}` });
+
+const joinButton = (clubCode: string, name: string) =>
+  screen.getByRole<HTMLButtonElement>('button', { name: `เข้ารายชื่อรอ ${clubCode} ${name}` });
+
+const changeButton = (clubCode: string, name: string) =>
+  screen.getByRole<HTMLButtonElement>('button', { name: `ย้ายมาชุมนุมนี้ ${clubCode} ${name}` });
+
+const startChange = (clubCode: string, name: string) => {
+  fireEvent.click(changeButton(clubCode, name));
+  return screen.getByRole('alertdialog', { name: `ยืนยันการย้ายไปชุมนุม ${clubCode} ${name}` });
+};
+
+const confirmChange = (clubCode: string, name: string) => {
+  const dialog = startChange(clubCode, name);
+  fireEvent.click(within(dialog).getByRole('button', { name: 'ยืนยัน ย้ายชุมนุม' }));
+  return dialog;
+};
+
+const keysOf = (calls: ReturnType<typeof callsTo>) =>
+  calls.map(([, init]) => (bodyOf(init) as { idempotencyKey: string }).idempotencyKey);
 
 const startRegister = (clubCode: string, name: string) => {
   fireEvent.click(registerButton(clubCode, name));
@@ -77,23 +99,40 @@ describe('student clubs page', () => {
     expect(music.textContent).toContain('ครูที่ปรึกษา: ยังไม่ระบุ');
   });
 
-  it('lets a student register only for a club with seats left while the round is open', async () => {
+  it('offers register for a club with seats left and the waitlist for a full one', async () => {
     mockStudentApi();
 
     await openPage();
 
     expect(registerButton(CHESS.clubCode, CHESS.name).disabled).toBe(false);
-    expect(registerButton(MUSIC.clubCode, MUSIC.name).disabled).toBe(true);
+    expect(
+      screen.queryByRole('button', { name: `ลงชุมนุม ${MUSIC.clubCode} ${MUSIC.name}` }),
+    ).toBeNull();
+    expect(joinButton(MUSIC.clubCode, MUSIC.name).disabled).toBe(false);
+  });
+
+  it('offers the waitlist, not register, for a club with a free seat that others wait for', async () => {
+    mockStudentApi({ clubs: [{ ...CHESS, waitlistCount: 2 }, MUSIC, ART] });
+
+    await openPage();
+
+    expect(
+      screen.queryByRole('button', { name: `ลงชุมนุม ${CHESS.clubCode} ${CHESS.name}` }),
+    ).toBeNull();
+    expect(joinButton(CHESS.clubCode, CHESS.name).disabled).toBe(false);
+    expect(cardOf(CHESS.name).textContent).toContain('มีคนรอ 2 คน');
   });
 
   it.each(['upcoming', 'closed'] as const)(
-    'disables every register button while the round is %s',
+    'disables every action button while the round is %s',
     async (status) => {
       mockStudentApi({ round: roundFixture({ status }) });
 
       await openPage();
 
-      CLUBS.forEach((club) => expect(registerButton(club.clubCode, club.name).disabled).toBe(true));
+      expect(registerButton(CHESS.clubCode, CHESS.name).disabled).toBe(true);
+      expect(registerButton(ART.clubCode, ART.name).disabled).toBe(true);
+      expect(joinButton(MUSIC.clubCode, MUSIC.name).disabled).toBe(true);
     },
   );
 
@@ -185,11 +224,15 @@ describe('student clubs page', () => {
   });
 
   it.each([
-    [409, 'club_full', 'ชุมนุมนี้เต็มแล้ว กรุณาเลือกชุมนุมอื่น'],
+    [
+      409,
+      'club_full',
+      'ชุมนุมนี้เต็มแล้วหรือมีคนรอที่ว่างอยู่ เข้ารายชื่อรอของชุมนุมนี้ได้ หรือเลือกชุมนุมอื่น',
+    ],
     [
       409,
       'already_registered',
-      'คุณลงชุมนุมอื่นในรอบนี้ไว้แล้ว ถ้าจะเปลี่ยนต้องยกเลิกชุมนุมเดิมที่หน้า "ผลของฉัน" ก่อน',
+      'คุณลงชุมนุมอื่นในรอบนี้ไว้แล้ว ถ้าจะเปลี่ยน กด "ย้ายมาชุมนุมนี้" ที่ชุมนุมที่ยังมีที่ว่าง',
     ],
     [409, 'round_not_open', 'ตอนนี้ไม่อยู่ในช่วงเปิดลงทะเบียน (ยังไม่เปิดหรือปิดไปแล้ว)'],
     [409, 'idempotency_key_reused', 'คำขอนี้ซ้ำกับคำขอก่อนหน้า กรุณากดใหม่อีกครั้ง'],
@@ -341,5 +384,270 @@ describe('student clubs page', () => {
     expect((await screen.findByRole('alert')).textContent).toContain(
       'กรุณาติดต่อผู้ดูแลระบบหรือครูที่ดูแลการลงทะเบียน',
     );
+  });
+  describe('changing club', () => {
+    it('offers a move to every other club with a free seat and nobody waiting', async () => {
+      mockStudentApi({ registration: registrationFor(ART) });
+
+      await openPage();
+
+      expect(changeButton(CHESS.clubCode, CHESS.name).disabled).toBe(false);
+      expect(joinButton(MUSIC.clubCode, MUSIC.name).disabled).toBe(false);
+      expect(within(cardOf(ART.name)).queryByRole('button')).toBeNull();
+      const held = screen.getByRole('heading', { name: 'ชุมนุมของฉัน' })
+        .parentElement as HTMLElement;
+      expect(held.textContent).toContain('ย้ายมาชุมนุมนี้');
+    });
+
+    it('offers no move to a student without a club', async () => {
+      mockStudentApi();
+
+      await openPage();
+
+      expect(screen.queryByRole('button', { name: /^ย้ายมาชุมนุมนี้ / })).toBeNull();
+    });
+
+    it.each(['upcoming', 'closed'] as const)(
+      'offers no move and no waitlist to a student holding a club while the round is %s',
+      async (status) => {
+        mockStudentApi({ round: roundFixture({ status }), registration: registrationFor(ART) });
+
+        await openPage();
+
+        expect(screen.queryByRole('button', { name: /^ย้ายมาชุมนุมนี้ / })).toBeNull();
+        expect(screen.queryByRole('button', { name: /^เข้ารายชื่อรอ / })).toBeNull();
+        const held = screen.getByRole('heading', { name: 'ชุมนุมของฉัน' })
+          .parentElement as HTMLElement;
+        expect(held.textContent).not.toContain('ย้ายมาชุมนุมนี้');
+      },
+    );
+
+    it('says the student leaves their club only once the new seat is theirs', async () => {
+      const { fetchMock } = mockStudentApi({ registration: registrationFor(ART) });
+      await openPage();
+
+      const dialog = startChange(CHESS.clubCode, CHESS.name);
+
+      expect(dialog.textContent).toContain(
+        'ย้ายจากชุมนุม C300 ชุมนุมวาดภาพสมมติ ไปชุมนุม A100 ชุมนุมหมากรุกสมมติ?',
+      );
+      expect(dialog.textContent).toContain(
+        'คุณจะออกจากชุมนุมเดิมก็ต่อเมื่อได้ที่ในชุมนุมใหม่แล้วเท่านั้น',
+      );
+      expect(dialog.textContent).toContain('ถ้าชุมนุมใหม่เต็มก่อน คุณยังอยู่ชุมนุมเดิม');
+      expect(callsTo(fetchMock, 'PUT', REGISTER_PATH)).toHaveLength(0);
+    });
+
+    it('moves after confirmation with a new key and shows the new club as held', async () => {
+      const { fetchMock } = mockStudentApi({ registration: registrationFor(ART) });
+      await openPage();
+
+      confirmChange(CHESS.clubCode, CHESS.name);
+
+      const notice = await screen.findByText('ย้ายมาชุมนุม A100 ชุมนุมหมากรุกสมมติ เรียบร้อยแล้ว');
+      expect(document.activeElement).toBe(notice);
+      const [call] = callsTo(fetchMock, 'PUT', REGISTER_PATH);
+      expect(bodyOf(call?.[1])).toEqual({
+        clubId: CHESS.id,
+        idempotencyKey: expect.stringMatching(UUID_PATTERN) as unknown,
+      });
+      const held = screen.getByRole('heading', { name: 'ชุมนุมของฉัน' })
+        .parentElement as HTMLElement;
+      expect(held.textContent).toContain('A100 ชุมนุมหมากรุกสมมติ');
+      await waitFor(() => expect(cardOf(CHESS.name).textContent).toContain('เหลือ 17 ที่'));
+      expect(cardOf(ART.name).textContent).toContain('เหลือ 23 ที่');
+      expect(changeButton(ART.clubCode, ART.name).disabled).toBe(false);
+      expect(callsTo(fetchMock, 'GET', CLUBS_PATH).length).toBeGreaterThanOrEqual(2);
+    });
+
+    it('closes with Escape, sends nothing and returns focus to the move button', async () => {
+      const { fetchMock } = mockStudentApi({ registration: registrationFor(ART) });
+      await openPage();
+      const dialog = startChange(CHESS.clubCode, CHESS.name);
+      expect(document.activeElement).toBe(dialog);
+
+      fireEvent.keyDown(dialog, { key: 'Escape' });
+
+      expect(screen.queryByRole('alertdialog')).toBeNull();
+      expect(document.activeElement).toBe(changeButton(CHESS.clubCode, CHESS.name));
+      expect(callsTo(fetchMock, 'PUT', REGISTER_PATH)).toHaveLength(0);
+    });
+
+    it('keeps the student where they are on club_full and offers the waitlist', async () => {
+      const { fetchMock, state } = mockStudentApi({ registration: registrationFor(ART) });
+      await openPage();
+      // The last seat went to someone else while the student was deciding.
+      state.clubs = state.clubs.map((club) =>
+        club.id === CHESS.id ? { ...club, registered: 30, remaining: 0 } : club,
+      );
+
+      const dialog = confirmChange(CHESS.clubCode, CHESS.name);
+
+      expect((await within(dialog).findByRole('alert')).textContent).toBe(
+        'ย้ายไม่สำเร็จ เพราะชุมนุมนี้เต็มแล้วหรือมีคนรอที่ว่างอยู่ คุณยังอยู่ชุมนุมเดิม ถ้ายังอยากได้ชุมนุมนี้ เข้ารายชื่อรอได้',
+      );
+      expect(within(dialog).queryByRole('button', { name: 'ลองอีกครั้ง' })).toBeNull();
+      const held = screen.getByRole('heading', { name: 'ชุมนุมของฉัน' })
+        .parentElement as HTMLElement;
+      expect(held.textContent).toContain('C300 ชุมนุมวาดภาพสมมติ');
+
+      fireEvent.click(within(dialog).getByRole('button', { name: 'เข้ารายชื่อรอชุมนุมนี้' }));
+
+      const join = screen.getByRole('alertdialog', {
+        name: `ยืนยันการเข้ารายชื่อรอชุมนุม ${CHESS.clubCode} ${CHESS.name}`,
+      });
+      expect(document.activeElement).toBe(join);
+      fireEvent.click(within(join).getByRole('button', { name: 'ยืนยัน เข้ารายชื่อรอ' }));
+      expect(
+        await screen.findByText('เข้ารายชื่อรอชุมนุม A100 ชุมนุมหมากรุกสมมติ แล้ว ลำดับที่ 1'),
+      ).toBeTruthy();
+      const keys = [
+        ...keysOf(callsTo(fetchMock, 'PUT', REGISTER_PATH)),
+        ...keysOf(callsTo(fetchMock, 'POST', WAITLIST_PATH)),
+      ];
+      expect(keys).toHaveLength(2);
+      expect(keys[1]).not.toBe(keys[0]);
+    });
+
+    it('returns focus to the card button, now the waitlist one, when a club_full is dismissed', async () => {
+      const { state } = mockStudentApi({ registration: registrationFor(ART) });
+      await openPage();
+      state.clubs = state.clubs.map((club) =>
+        club.id === CHESS.id ? { ...club, waitlistCount: 1 } : club,
+      );
+      const dialog = confirmChange(CHESS.clubCode, CHESS.name);
+      await within(dialog).findByRole('alert');
+      await waitFor(() => expect(cardOf(CHESS.name).textContent).toContain('มีคนรอ 1 คน'));
+
+      fireEvent.click(within(dialog).getByRole('button', { name: 'ปิด' }));
+
+      expect(document.activeElement).toBe(joinButton(CHESS.clubCode, CHESS.name));
+    });
+
+    it.each([
+      [
+        409,
+        'not_registered',
+        'คุณยังไม่มีชุมนุมในรอบนี้ (อาจยกเลิกไปแล้ว) กรุณาดูรายการล่าสุดแล้วกด "ลงชุมนุม" แทน',
+      ],
+      [409, 'round_not_open', 'ตอนนี้ไม่อยู่ในช่วงเปิดลงทะเบียน (ยังไม่เปิดหรือปิดไปแล้ว)'],
+      [404, 'not_found', 'ไม่พบชุมนุมนี้แล้ว รายการอาจเปลี่ยนไป กรุณาดูรายการล่าสุด'],
+      [409, 'idempotency_key_reused', 'คำขอนี้ซ้ำกับคำขอก่อนหน้า กรุณากดใหม่อีกครั้ง'],
+      [400, 'validation_error', 'ย้ายชุมนุมไม่สำเร็จ กรุณาลองใหม่อีกครั้ง'],
+    ])('explains a %i %s refusal of a move in Thai', async (status, code, message) => {
+      const { fetchMock } = mockStudentApi(
+        { registration: registrationFor(ART) },
+        { [`PUT ${REGISTER_PATH}`]: apiError(status, code) },
+      );
+      await openPage();
+
+      const dialog = confirmChange(CHESS.clubCode, CHESS.name);
+
+      expect((await within(dialog).findByRole('alert')).textContent).toBe(message);
+      expect(within(dialog).queryByRole('button', { name: 'ลองอีกครั้ง' })).toBeNull();
+      expect(within(dialog).queryByRole('button', { name: 'เข้ารายชื่อรอชุมนุมนี้' })).toBeNull();
+      await waitFor(() => expect(callsTo(fetchMock, 'GET', CLUBS_PATH)).toHaveLength(2));
+    });
+
+    it.each([
+      ['a lost connection', networkFailure],
+      ['a 502 from the proxy', () => new Response('Bad Gateway', { status: 502 })],
+    ])('retries a move after %s with the same key', async (_, failure) => {
+      const { fetchMock, state } = mockStudentApi({ registration: registrationFor(ART) });
+      let failNext = true;
+      const answer = fetchMock.getMockImplementation();
+      fetchMock.mockImplementation((input: string, init?: RequestInit) => {
+        if (input === REGISTER_PATH && init?.method === 'PUT' && failNext) {
+          failNext = false;
+          // The server applied the move; only the reply was lost on the way back.
+          state.registration = registrationFor(CHESS);
+          return Promise.resolve(failure());
+        }
+        return answer?.(input, init) ?? networkFailure();
+      });
+      await openPage();
+
+      const dialog = confirmChange(CHESS.clubCode, CHESS.name);
+      expect((await within(dialog).findByRole('alert')).textContent).toContain(
+        'ยังไม่รู้ว่าย้ายชุมนุมสำเร็จหรือไม่',
+      );
+      fireEvent.click(within(dialog).getByRole('button', { name: 'ลองอีกครั้ง' }));
+
+      expect(
+        await screen.findByText('ย้ายมาชุมนุม A100 ชุมนุมหมากรุกสมมติ เรียบร้อยแล้ว'),
+      ).toBeTruthy();
+      const keys = keysOf(callsTo(fetchMock, 'PUT', REGISTER_PATH));
+      expect(keys).toHaveLength(2);
+      expect(keys[0]).toMatch(UUID_PATTERN);
+      expect(keys[1]).toBe(keys[0]);
+    });
+
+    it('uses a new key for a new move after a refusal', async () => {
+      let refuse = true;
+      const { fetchMock } = mockStudentApi(
+        { registration: registrationFor(ART) },
+        {
+          [`PUT ${REGISTER_PATH}`]: () => {
+            if (refuse) {
+              refuse = false;
+              return apiError(429, 'rate_limited')();
+            }
+            return Response.json({ registration: registrationFor(CHESS) });
+          },
+        },
+      );
+      await openPage();
+      const first = confirmChange(CHESS.clubCode, CHESS.name);
+      await within(first).findByRole('alert');
+      fireEvent.click(within(first).getByRole('button', { name: 'ปิด' }));
+
+      confirmChange(CHESS.clubCode, CHESS.name);
+
+      await screen.findByText('ย้ายมาชุมนุม A100 ชุมนุมหมากรุกสมมติ เรียบร้อยแล้ว');
+      const keys = keysOf(callsTo(fetchMock, 'PUT', REGISTER_PATH));
+      expect(keys).toHaveLength(2);
+      expect(keys[1]).not.toBe(keys[0]);
+    });
+
+    it('disables every button on the page while a move is on its way', async () => {
+      mockStudentApi(
+        { registration: registrationFor(ART), waitlist: waitlistFor(MUSIC) },
+        { [`PUT ${REGISTER_PATH}`]: () => new Promise<Response>(() => {}) },
+      );
+      await openPage();
+
+      const dialog = confirmChange(CHESS.clubCode, CHESS.name);
+
+      expect(await within(dialog).findByText('กำลังย้ายชุมนุม…')).toBeTruthy();
+      expect(
+        screen.getByRole<HTMLButtonElement>('button', { name: 'ออกจากรายชื่อรอ' }).disabled,
+      ).toBe(true);
+      fireEvent.keyDown(dialog, { key: 'Escape' });
+      expect(screen.getByRole('alertdialog')).toBe(dialog);
+    });
+
+    it('says when a move cascaded into a seat off the student own waitlist entry', async () => {
+      const promoted = { ...registrationFor(MUSIC), promotedFromWaitlist: true };
+      const api = mockStudentApi(
+        { registration: registrationFor(ART), waitlist: waitlistFor(MUSIC) },
+        {
+          [`PUT ${REGISTER_PATH}`]: () => {
+            // A held ART, waited for MUSIC; the move freed ART, whose head of queue came from
+            // MUSIC, and MUSIC's freed seat went to A in the same transaction.
+            api.state.registration = promoted;
+            api.state.waitlist = null;
+            return Response.json({ registration: promoted });
+          },
+        },
+      );
+      await openPage();
+
+      confirmChange(CHESS.clubCode, CHESS.name);
+
+      expect(await screen.findByText('ย้ายชุมนุมแล้ว และได้ที่จากรายชื่อรอต่อ')).toBeTruthy();
+      expect(
+        screen.getByText('ได้ที่ในชุมนุม B200 ชุมนุมดนตรีสมมติ จากรายชื่อรอแล้ว'),
+      ).toBeTruthy();
+    });
   });
 });

@@ -14,11 +14,13 @@ import {
   studentClubsResponseSchema,
   studentRegistrationResponseSchema,
   studentRoundResponseSchema,
+  studentWaitlistResponseSchema,
 } from '@club-registration/shared';
 import type {
   AdminClub,
   CancelRegistrationRequest,
   ChangePasswordRequest,
+  ChangeRegistrationRequest,
   ClassroomPasswordStatus,
   CreateRoundBatchRequest,
   CreateRoundRequest,
@@ -27,6 +29,8 @@ import type {
   ImportCommitResponse,
   ImportPreviewResponse,
   IssueInitialPasswordsRequest,
+  JoinWaitlistRequest,
+  LeaveWaitlistRequest,
   LoginRequest,
   RegisterRequest,
   Round,
@@ -36,6 +40,7 @@ import type {
   StudentClubsResponse,
   StudentRegistrationResponse,
   StudentRoundResponse,
+  StudentWaitlistResponse,
   UpdateClubRequest,
   UpdateRoundRequest,
 } from '@club-registration/shared';
@@ -246,8 +251,9 @@ export const fetchStudentRound = async (): Promise<StudentRoundResponse> =>
 export const fetchStudentClubs = async (): Promise<StudentClubsResponse> =>
   await sendJson('/api/student/clubs', 'GET', studentClubsResponseSchema);
 
-// Both writes answer with the student's registration as it stands afterwards. Sending the same
-// idempotencyKey again replays the first request instead of acting twice.
+// The registration writes answer with the student's registration as it stands afterwards, the
+// waitlist writes with their waitlist entry. Sending the same idempotencyKey again replays the
+// first request instead of acting twice.
 export const registerForClub = async (
   request: RegisterRequest,
 ): Promise<StudentRegistrationResponse> =>
@@ -262,3 +268,19 @@ export const cancelRegistration = async (
     studentRegistrationResponseSchema,
     request,
   );
+
+// Moves the student's seat to another club in one step; the club left is the one the DB holds.
+export const changeRegistration = async (
+  request: ChangeRegistrationRequest,
+): Promise<StudentRegistrationResponse> =>
+  await sendJson('/api/student/registration', 'PUT', studentRegistrationResponseSchema, request);
+
+export const joinWaitlist = async (
+  request: JoinWaitlistRequest,
+): Promise<StudentWaitlistResponse> =>
+  await sendJson('/api/student/waitlist', 'POST', studentWaitlistResponseSchema, request);
+
+export const leaveWaitlist = async (
+  request: LeaveWaitlistRequest,
+): Promise<StudentWaitlistResponse> =>
+  await sendJson('/api/student/waitlist/leave', 'POST', studentWaitlistResponseSchema, request);

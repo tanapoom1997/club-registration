@@ -1,31 +1,38 @@
-import type { StudentClubsResponse, StudentRegistrationResponse } from '@club-registration/shared';
+import type { StudentClubRef, StudentClubsResponse } from '@club-registration/shared';
 import { useQuery } from '@tanstack/react-query';
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router';
 import { FormError } from '@/components/FormError';
 import { alertVariants } from '@/components/ui/alert';
-import { fetchStudentClubs, registerForClub } from '@/lib/api';
+import { Button } from '@/components/ui/button';
+import { fetchStudentClubs } from '@/lib/api';
 import { formatThaiDateTime } from '@/lib/thai-time';
+import { cn } from '@/lib/utils';
 import { ClubCard } from './ClubCard';
+import type { ClubWrite } from './ClubCard';
 import { HeldClubCard } from './HeldClubCard';
 import { NoRound, RoundHeader, StudentLoadState } from './RoundHeader';
+import { PromotedNotice, WaitlistCard } from './WaitlistCard';
+import { LeaveWaitlistPanel } from './LeaveWaitlistPanel';
 import {
   CLUBS_POLL_INTERVAL_MS,
   STUDENT_CLUBS_QUERY_KEY,
+  clubOffer,
   clubsRefetchInterval,
-  registerErrorMessage,
+  isClubFull,
   retryRead,
   useLogoutOnExpiredSession,
   useStudentWrite,
+  writeErrorMessage,
+  writeSuccessNotice,
 } from './student-ui';
+import type { ClubWriteKind } from './student-ui';
 
 const MY_REGISTRATION_PATH = '/student/my-registration';
 
-const registeredNotice = ({ registration }: StudentRegistrationResponse): string =>
-  registration
-    ? `ลงชุมนุม ${registration.club.clubCode} ${registration.club.name} เรียบร้อยแล้ว`
-    : // A replayed key answers with the state now, which a cancel elsewhere may have emptied.
-      'ยังไม่ได้ลงชุมนุมนี้ กรุณาดูรายการล่าสุดแล้วลองใหม่';
+// The confirmation that is open: one club's action, or leaving the waitlist (with the club named
+// when it opened, so its answer stays on screen after a refetch shows no entry any more).
+type Target = { kind: ClubWriteKind; clubId: number } | { kind: 'leave'; club: StudentClubRef };
 
 const RoundHint = ({ data: { round, registration } }: { data: StudentClubsResponse }) => {
   if (!round) return null;
@@ -43,14 +50,14 @@ const RoundHint = ({ data: { round, registration } }: { data: StudentClubsRespon
   return (
     <p className="text-sm text-muted-foreground">
       {registration ? '' : 'กดลงชุมนุมที่ต้องการได้ 1 ชุมนุม '}
-      จำนวนที่เหลืออัปเดตอัตโนมัติทุก {CLUBS_POLL_INTERVAL_MS / 1000} วินาที
+      ชุมนุมที่เต็มหรือมีคนรออยู่เข้ารายชื่อรอได้ 1 ชุมนุม จำนวนที่เหลืออัปเดตอัตโนมัติทุก{' '}
+      {CLUBS_POLL_INTERVAL_MS / 1000} วินาที
     </p>
   );
 };
 
 export const StudentClubsPage = () => {
-  // The club whose confirmation is open.
-  const [targetId, setTargetId] = useState<number>();
+  const [target, setTarget] = useState<Target>();
   const query = useQuery({
     queryKey: STUDENT_CLUBS_QUERY_KEY,
     queryFn: fetchStudentClubs,
@@ -58,23 +65,72 @@ export const StudentClubsPage = () => {
     refetchInterval: (current) => clubsRefetchInterval(current.state.data?.round),
   });
   useLogoutOnExpiredSession(query.error);
-  const { mutation, start, retry, canRetry } = useStudentWrite<{ clubId: number }>(registerForClub);
+  const { mutation, start, retry, canRetry } = useStudentWrite();
 
-  const openConfirmation = (clubId: number) => {
+  const openConfirmation = (next: Target) => {
     mutation.reset();
-    setTargetId(clubId);
+    setTarget(next);
   };
 
   const closeConfirmation = () => {
     mutation.reset();
-    setTargetId(undefined);
+    setTarget(undefined);
   };
 
   const { data } = query;
+  const round = data?.round ?? null;
+  const panelTarget = mutation.isSuccess ? undefined : target;
+  const panelOpen = panelTarget !== undefined;
+  const succeeded = mutation.isSuccess;
+
+  const headingRef = useRef<HTMLHeadingElement>(null);
+  const leaveRef = useRef<HTMLButtonElement>(null);
+  const noticeRef = useRef<HTMLParagraphElement>(null);
+  const lastPanel = useRef<Target>(undefined);
+  // A club card returns focus to its own button. After a write went through, that button (or the
+  // waitlist card's) is gone, so focus goes to the notice saying what happened; after leaving
+  // the confirmation of leave, back to its button, or the heading if the entry is gone.
+  useEffect(() => {
+    const closed = lastPanel.current;
+    if (closed && !panelOpen) {
+      if (succeeded) noticeRef.current?.focus();
+      else if (closed.kind === 'leave') (leaveRef.current ?? headingRef.current)?.focus();
+    }
+    lastPanel.current = panelTarget;
+  }, [panelOpen, panelTarget, succeeded]);
+
+  const clubWrite = (kind: ClubWriteKind, clubId: number): ClubWrite => ({
+    kind,
+    pending: mutation.isPending,
+    error: mutation.isError ? writeErrorMessage(kind, mutation.error) : undefined,
+    canRetry,
+    onConfirm: () => start({ kind, clubId }),
+    onRetry: retry,
+    onDismiss: closeConfirmation,
+    // README waitlist rule 1: a full club offers its waitlist with the refusal.
+    followUp:
+      kind !== 'join' && isClubFull(mutation.error) && round?.status === 'open'
+        ? {
+            label: 'เข้ารายชื่อรอชุมนุมนี้',
+            onClick: () => openConfirmation({ kind: 'join', clubId }),
+          }
+        : undefined,
+  });
+
+  // The club's own card shows its answer, unless the refetch removed that club.
+  const orphanError =
+    mutation.isError &&
+    panelTarget !== undefined &&
+    panelTarget.kind !== 'leave' &&
+    !data?.clubs.some(({ id }) => id === panelTarget.clubId)
+      ? writeErrorMessage(panelTarget.kind, mutation.error)
+      : undefined;
 
   return (
     <section className="space-y-4">
-      <h1 className="text-2xl font-bold">ชุมนุมในชั้นของฉัน</h1>
+      <h1 ref={headingRef} tabIndex={-1} className="text-2xl font-bold focus:outline-none">
+        ชุมนุมในชั้นของฉัน
+      </h1>
 
       {!data ? (
         <StudentLoadState
@@ -82,11 +138,11 @@ export const StudentClubsPage = () => {
           isPending={query.isPending}
           onRetry={() => void query.refetch()}
         />
-      ) : !data.round ? (
+      ) : !round ? (
         <NoRound />
       ) : (
         <>
-          <RoundHeader round={data.round} />
+          <RoundHeader round={round} />
           {query.isRefetchError && (
             <p className="text-sm text-muted-foreground">
               เชื่อมต่อระบบไม่ได้ชั่วคราว ตัวเลขที่เห็นอาจไม่ใช่ล่าสุด
@@ -94,23 +150,23 @@ export const StudentClubsPage = () => {
           )}
           <div role="status">
             {mutation.isSuccess && (
-              <p className={alertVariants({ variant: 'success' })}>
-                {registeredNotice(mutation.data)}
+              <p
+                ref={noticeRef}
+                tabIndex={-1}
+                className={cn(alertVariants({ variant: 'success' }), 'focus:outline-none')}
+              >
+                {writeSuccessNotice(mutation.variables.kind, mutation.data)}
               </p>
             )}
           </div>
-          {/* The club's own card shows its answer, unless the refetch removed that club. */}
-          <FormError
-            message={
-              mutation.isError && !data.clubs.some(({ id }) => id === targetId)
-                ? registerErrorMessage(mutation.error)
-                : undefined
-            }
-          />
+          <PromotedNotice registration={data.registration} />
+          <FormError message={orphanError} />
           {data.registration && (
             <HeldClubCard registration={data.registration}>
               <p className="text-sm">
-                ลงได้ 1 ชุมนุมต่อรอบ ถ้าจะเปลี่ยนต้องยกเลิกชุมนุมนี้ก่อน{' '}
+                ลงได้ 1 ชุมนุมต่อรอบ
+                {round.status === 'open' &&
+                  ' ถ้าจะเปลี่ยน กด "ย้ายมาชุมนุมนี้" ที่ชุมนุมที่ยังมีที่ว่าง (ได้ที่ใหม่ก่อนจึงออกจากที่เดิม) หรือเข้ารายชื่อรอของชุมนุมที่เต็ม'}{' '}
                 <Link
                   className="font-medium text-primary underline underline-offset-4"
                   to={MY_REGISTRATION_PATH}
@@ -119,6 +175,37 @@ export const StudentClubsPage = () => {
                 </Link>
               </p>
             </HeldClubCard>
+          )}
+          {data.waitlist && (
+            <WaitlistCard waitlist={data.waitlist} registration={data.registration} round={round}>
+              {panelTarget?.kind !== 'leave' && round.status === 'open' && (
+                <Button
+                  ref={leaveRef}
+                  variant="outline"
+                  className="w-full sm:w-auto"
+                  disabled={mutation.isPending}
+                  onClick={() => {
+                    if (data.waitlist)
+                      openConfirmation({ kind: 'leave', club: data.waitlist.club });
+                  }}
+                >
+                  ออกจากรายชื่อรอ
+                </Button>
+              )}
+            </WaitlistCard>
+          )}
+          {panelTarget?.kind === 'leave' && (
+            <LeaveWaitlistPanel
+              club={panelTarget.club}
+              state={{
+                pending: mutation.isPending,
+                error: mutation.isError ? writeErrorMessage('leave', mutation.error) : undefined,
+                canRetry,
+                onConfirm: () => start({ kind: 'leave' }),
+                onRetry: retry,
+                onDismiss: closeConfirmation,
+              }}
+            />
           )}
           <RoundHint data={data} />
 
@@ -131,24 +218,20 @@ export const StudentClubsPage = () => {
                 <li key={club.id}>
                   <ClubCard
                     club={club}
-                    held={data.registration?.club.id === club.id}
-                    holdsClub={data.registration !== null}
-                    canRegister={data.round?.status === 'open' && !mutation.isPending}
+                    registration={data.registration}
+                    waitlist={data.waitlist}
+                    offer={clubOffer(club, {
+                      round,
+                      registration: data.registration,
+                      waitlist: data.waitlist,
+                    })}
+                    enabled={round.status === 'open' && !mutation.isPending}
                     write={
-                      targetId === club.id && !mutation.isSuccess
-                        ? {
-                            pending: mutation.isPending,
-                            error: mutation.isError
-                              ? registerErrorMessage(mutation.error)
-                              : undefined,
-                            canRetry,
-                            onConfirm: () => start({ clubId: club.id }),
-                            onRetry: retry,
-                            onDismiss: closeConfirmation,
-                          }
+                      panelTarget?.kind !== 'leave' && panelTarget?.clubId === club.id
+                        ? clubWrite(panelTarget.kind, club.id)
                         : undefined
                     }
-                    onRegister={() => openConfirmation(club.id)}
+                    onStart={(kind) => openConfirmation({ kind, clubId: club.id })}
                   />
                 </li>
               ))}

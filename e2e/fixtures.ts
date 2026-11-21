@@ -40,8 +40,28 @@ export const STUDENTS = Object.freeze({
     password: 'e2e-student-c-fictional',
     fullName: 'ด.ช.สมมติ ดูรายการ',
   },
+  waits: {
+    loginId: 'e2e-student-d',
+    password: 'e2e-student-d-fictional',
+    fullName: 'ด.ญ.สมมติ รอคิว',
+  },
+  holdsSeat: {
+    loginId: 'e2e-student-e',
+    password: 'e2e-student-e-fictional',
+    fullName: 'ด.ช.สมมติ ถือที่นั่ง',
+  },
+  changes: {
+    loginId: 'e2e-student-f',
+    password: 'e2e-student-f-fictional',
+    fullName: 'ด.ญ.สมมติ ย้ายชุมนุม',
+  },
 } satisfies Record<string, Account>);
 
 export const OPEN_CLUB = { code: 'E2E01', name: 'ชุมนุมสมมติ ดนตรี', capacity: 5 };
 export const FULL_CLUB = { code: 'E2E02', name: 'ชุมนุมสมมติ เต็มแล้ว', capacity: 0 };
+// One club per scenario, like the accounts: the waitlist one has a single seat, and the change
+// goes from one to the other.
+export const ONE_SEAT_CLUB = { code: 'E2E03', name: 'ชุมนุมสมมติ ที่นั่งเดียว', capacity: 1 };
+export const CHANGE_FROM_CLUB = { code: 'E2E04', name: 'ชุมนุมสมมติ ต้นทาง', capacity: 3 };
+export const CHANGE_TO_CLUB = { code: 'E2E05', name: 'ชุมนุมสมมติ ปลายทาง', capacity: 3 };
 export const ADVISOR_NAME = 'ครูสมมติ ใจดี';

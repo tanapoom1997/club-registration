@@ -66,8 +66,9 @@ jobs:
       - run: pnpm build
 
   # Browser tests (e2e/): Chromium drives the web app against the api and a real Postgres together
-  # (login, first-login password change, register and cancel, a full club, role redirects). The
-  # suite starts its own Postgres (Testcontainers), api and web dev server; see e2e/global-setup.ts.
+  # (login, first-login password change, register and cancel, a full club and its waitlist, a
+  # promotion seen by polling, a change of club, role redirects). The suite starts its own Postgres
+  # (Testcontainers), api and web dev server; see e2e/global-setup.ts.
   e2e:
     runs-on: ubuntu-24.04
     timeout-minutes: 20

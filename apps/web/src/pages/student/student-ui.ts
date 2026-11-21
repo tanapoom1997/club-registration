@@ -1,14 +1,24 @@
 import { ERROR_CODES } from '@club-registration/shared';
 import type {
+  StudentClub,
   StudentClubsResponse,
   StudentRegistration,
   StudentRegistrationResponse,
   StudentRound,
   StudentRoundResponse,
+  StudentWaitlist,
+  StudentWaitlistResponse,
 } from '@club-registration/shared';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { useEffect } from 'react';
-import { ApiError } from '@/lib/api';
+import {
+  ApiError,
+  cancelRegistration,
+  changeRegistration,
+  joinWaitlist,
+  leaveWaitlist,
+  registerForClub,
+} from '@/lib/api';
 import { refetchWhileOpen, untilNextStatusChange } from '@/lib/round-refetch';
 import { useSetSession } from '@/lib/session';
 
@@ -29,9 +39,17 @@ export const CLUBS_POLL_INTERVAL_MS = 5_000;
 export const clubsRefetchInterval = (round: StudentRound | null | undefined): number | false =>
   refetchWhileOpen(round, CLUBS_POLL_INTERVAL_MS);
 
-// The result page only needs the status, to show or hide the cancel button at the right time.
-export const roundRefetchInterval = (round: StudentRound | null | undefined): number | false =>
-  !round || round.status === 'closed' ? false : untilNextStatusChange(round);
+// The result page needs the status, to show or hide the buttons at the right time. A student on a
+// waitlist learns of a promotion from the web page only (README Phase 2, decision 2), so while
+// they wait in an open round it polls as often as the club list.
+export const roundRefetchInterval = (
+  round: StudentRound | null | undefined,
+  waitlist: StudentWaitlist | null | undefined,
+): number | false => {
+  if (!round || round.status === 'closed') return false;
+  if (round.status === 'open' && waitlist) return CLUBS_POLL_INTERVAL_MS;
+  return untilNextStatusChange(round);
+};
 
 // A refused request (4xx) will be refused again; only network and server failures are retried.
 export const retryRead = (failureCount: number, error: unknown): boolean =>
@@ -44,6 +62,28 @@ export const retryRead = (failureCount: number, error: unknown): boolean =>
 export const isOutcomeUnknown = (error: unknown): boolean =>
   !(error instanceof ApiError) || error.status >= SERVER_ERROR;
 
+// What a club card offers. join: the club is full, or others already wait for it (a free seat
+// with waiters is theirs first, README waitlist rule 2), so the server would answer club_full to
+// register and change alike.
+export type ClubWriteKind = 'register' | 'change' | 'join';
+export type StudentWriteKind = ClubWriteKind | 'cancel' | 'leave';
+export type ClubOffer = ClubWriteKind | 'none';
+
+export const isSeatFree = ({ remaining, waitlistCount }: StudentClub): boolean =>
+  remaining > 0 && waitlistCount === 0;
+
+// The club held or waited for needs no button. Outside the open window a student without a club
+// still sees the button they will get (disabled), as before; one holding a club sees none.
+export const clubOffer = (
+  club: StudentClub,
+  { round, registration, waitlist }: Omit<StudentRoundResponse, 'round'> & { round: StudentRound },
+): ClubOffer => {
+  if (registration?.club.id === club.id || waitlist?.club.id === club.id) return 'none';
+  if (registration && round.status !== 'open') return 'none';
+  if (!isSeatFree(club)) return 'join';
+  return registration ? 'change' : 'register';
+};
+
 const COMMON_ERRORS: Readonly<Record<string, string>> = Object.freeze({
   [ERROR_CODES.idempotencyKeyReused]: 'คำขอนี้ซ้ำกับคำขอก่อนหน้า กรุณากดใหม่อีกครั้ง',
   [ERROR_CODES.rateLimited]: 'ส่งคำขอถี่เกินไป กรุณารอสักครู่แล้วลองใหม่',
@@ -52,49 +92,128 @@ const COMMON_ERRORS: Readonly<Record<string, string>> = Object.freeze({
   [ERROR_CODES.unauthorized]: 'หมดเวลาการเข้าสู่ระบบ กรุณาเข้าสู่ระบบใหม่',
 });
 
-const REGISTER_ERRORS: Readonly<Record<string, string>> = Object.freeze({
-  ...COMMON_ERRORS,
-  [ERROR_CODES.clubFull]: 'ชุมนุมนี้เต็มแล้ว กรุณาเลือกชุมนุมอื่น',
-  [ERROR_CODES.alreadyRegistered]:
-    'คุณลงชุมนุมอื่นในรอบนี้ไว้แล้ว ถ้าจะเปลี่ยนต้องยกเลิกชุมนุมเดิมที่หน้า "ผลของฉัน" ก่อน',
-  [ERROR_CODES.roundNotOpen]: 'ตอนนี้ไม่อยู่ในช่วงเปิดลงทะเบียน (ยังไม่เปิดหรือปิดไปแล้ว)',
-  [ERROR_CODES.notFound]: 'ไม่พบชุมนุมนี้แล้ว รายการอาจเปลี่ยนไป กรุณาดูรายการล่าสุด',
+const ROUND_NOT_OPEN = 'ตอนนี้ไม่อยู่ในช่วงเปิดลงทะเบียน (ยังไม่เปิดหรือปิดไปแล้ว)';
+const CLUB_NOT_FOUND = 'ไม่พบชุมนุมนี้แล้ว รายการอาจเปลี่ยนไป กรุณาดูรายการล่าสุด';
+
+type WriteMessages = {
+  // Codes the server may answer for this kind of write.
+  errors: Readonly<Record<string, string>>;
+  // No answer: the write may or may not have happened.
+  unknownOutcome: string;
+  // Any other refusal.
+  fallback: string;
+};
+
+// Every student-facing write message, by kind of write.
+const WRITE_MESSAGES: Readonly<Record<StudentWriteKind, WriteMessages>> = Object.freeze({
+  register: {
+    errors: {
+      ...COMMON_ERRORS,
+      [ERROR_CODES.clubFull]:
+        'ชุมนุมนี้เต็มแล้วหรือมีคนรอที่ว่างอยู่ เข้ารายชื่อรอของชุมนุมนี้ได้ หรือเลือกชุมนุมอื่น',
+      [ERROR_CODES.alreadyRegistered]:
+        'คุณลงชุมนุมอื่นในรอบนี้ไว้แล้ว ถ้าจะเปลี่ยน กด "ย้ายมาชุมนุมนี้" ที่ชุมนุมที่ยังมีที่ว่าง',
+      [ERROR_CODES.roundNotOpen]: ROUND_NOT_OPEN,
+      [ERROR_CODES.notFound]: CLUB_NOT_FOUND,
+    },
+    unknownOutcome:
+      'เชื่อมต่อระบบไม่สำเร็จ จึงยังไม่รู้ว่าลงทะเบียนสำเร็จหรือไม่ กด "ลองอีกครั้ง" เพื่อส่งคำขอเดิม (ระบบจะไม่ลงซ้ำ)',
+    fallback: 'ลงทะเบียนไม่สำเร็จ กรุณาลองใหม่อีกครั้ง',
+  },
+  change: {
+    errors: {
+      ...COMMON_ERRORS,
+      [ERROR_CODES.clubFull]:
+        'ย้ายไม่สำเร็จ เพราะชุมนุมนี้เต็มแล้วหรือมีคนรอที่ว่างอยู่ คุณยังอยู่ชุมนุมเดิม ถ้ายังอยากได้ชุมนุมนี้ เข้ารายชื่อรอได้',
+      [ERROR_CODES.notRegistered]:
+        'คุณยังไม่มีชุมนุมในรอบนี้ (อาจยกเลิกไปแล้ว) กรุณาดูรายการล่าสุดแล้วกด "ลงชุมนุม" แทน',
+      [ERROR_CODES.roundNotOpen]: ROUND_NOT_OPEN,
+      [ERROR_CODES.notFound]: CLUB_NOT_FOUND,
+    },
+    unknownOutcome:
+      'เชื่อมต่อระบบไม่สำเร็จ จึงยังไม่รู้ว่าย้ายชุมนุมสำเร็จหรือไม่ กด "ลองอีกครั้ง" เพื่อส่งคำขอเดิม (ระบบจะไม่ย้ายซ้ำ)',
+    fallback: 'ย้ายชุมนุมไม่สำเร็จ กรุณาลองใหม่อีกครั้ง',
+  },
+  join: {
+    errors: {
+      ...COMMON_ERRORS,
+      [ERROR_CODES.alreadyInClub]: 'คุณอยู่ในชุมนุมนี้แล้ว ไม่ต้องเข้ารายชื่อรอ',
+      [ERROR_CODES.waitlistNotNeeded]:
+        'ชุมนุมนี้มีที่ว่างแล้ว ไม่ต้องรอ กรุณาดูรายการล่าสุดแล้วลงหรือย้ายมาชุมนุมนี้ได้เลย',
+      [ERROR_CODES.roundNotOpen]: 'เข้ารายชื่อรอไม่ได้ เพราะตอนนี้ไม่อยู่ในช่วงเปิดลงทะเบียน',
+      [ERROR_CODES.notFound]: CLUB_NOT_FOUND,
+    },
+    unknownOutcome:
+      'เชื่อมต่อระบบไม่สำเร็จ จึงยังไม่รู้ว่าเข้ารายชื่อรอสำเร็จหรือไม่ กด "ลองอีกครั้ง" เพื่อส่งคำขอเดิม (ระบบจะไม่เข้าซ้ำ)',
+    fallback: 'เข้ารายชื่อรอไม่สำเร็จ กรุณาลองใหม่อีกครั้ง',
+  },
+  cancel: {
+    errors: {
+      ...COMMON_ERRORS,
+      [ERROR_CODES.roundNotOpen]: 'ยกเลิกไม่ได้ เพราะรอบนี้ไม่ได้เปิดอยู่แล้ว',
+      [ERROR_CODES.notRegistered]: 'คุณไม่มีชุมนุมที่ลงไว้ในรอบนี้ (อาจยกเลิกไปแล้ว)',
+    },
+    unknownOutcome:
+      'เชื่อมต่อระบบไม่สำเร็จ จึงยังไม่รู้ว่ายกเลิกสำเร็จหรือไม่ กด "ลองอีกครั้ง" เพื่อส่งคำขอเดิม (ระบบจะไม่ทำซ้ำ)',
+    fallback: 'ยกเลิกไม่สำเร็จ กรุณาลองใหม่อีกครั้ง',
+  },
+  leave: {
+    errors: {
+      ...COMMON_ERRORS,
+      [ERROR_CODES.roundNotOpen]: 'ออกจากรายชื่อรอไม่ได้ เพราะรอบนี้ไม่ได้เปิดอยู่แล้ว',
+      [ERROR_CODES.notWaitlisted]:
+        'คุณไม่ได้อยู่ในรายชื่อรอของรอบนี้แล้ว (อาจได้ที่แล้วหรือออกไปแล้ว) กรุณาดูสถานะล่าสุด',
+    },
+    unknownOutcome:
+      'เชื่อมต่อระบบไม่สำเร็จ จึงยังไม่รู้ว่าออกจากรายชื่อรอสำเร็จหรือไม่ กด "ลองอีกครั้ง" เพื่อส่งคำขอเดิม (ระบบจะไม่ทำซ้ำ)',
+    fallback: 'ออกจากรายชื่อรอไม่สำเร็จ กรุณาลองใหม่อีกครั้ง',
+  },
 });
 
-const CANCEL_ERRORS: Readonly<Record<string, string>> = Object.freeze({
-  ...COMMON_ERRORS,
-  [ERROR_CODES.roundNotOpen]: 'ยกเลิกไม่ได้ เพราะรอบนี้ไม่ได้เปิดอยู่แล้ว',
-  [ERROR_CODES.notRegistered]: 'คุณไม่มีชุมนุมที่ลงไว้ในรอบนี้ (อาจยกเลิกไปแล้ว)',
-});
+export const writeErrorMessage = (kind: StudentWriteKind, error: unknown): string => {
+  const { errors, unknownOutcome, fallback } = WRITE_MESSAGES[kind];
+  if (isOutcomeUnknown(error)) return unknownOutcome;
+  return (error instanceof ApiError ? errors[error.code] : undefined) ?? fallback;
+};
 
-const messageFor = (
-  messages: Readonly<Record<string, string>>,
-  unknownOutcome: string,
-  fallback: string,
-  error: unknown,
-): string =>
-  isOutcomeUnknown(error)
-    ? unknownOutcome
-    : ((error instanceof ApiError ? messages[error.code] : undefined) ?? fallback);
-
-export const registerErrorMessage = (error: unknown): string =>
-  messageFor(
-    REGISTER_ERRORS,
-    'เชื่อมต่อระบบไม่สำเร็จ จึงยังไม่รู้ว่าลงทะเบียนสำเร็จหรือไม่ กด "ลองอีกครั้ง" เพื่อส่งคำขอเดิม (ระบบจะไม่ลงซ้ำ)',
-    'ลงทะเบียนไม่สำเร็จ กรุณาลองใหม่อีกครั้ง',
-    error,
-  );
-
-export const cancelErrorMessage = (error: unknown): string =>
-  messageFor(
-    CANCEL_ERRORS,
-    'เชื่อมต่อระบบไม่สำเร็จ จึงยังไม่รู้ว่ายกเลิกสำเร็จหรือไม่ กด "ลองอีกครั้ง" เพื่อส่งคำขอเดิม (ระบบจะไม่ทำซ้ำ)',
-    'ยกเลิกไม่สำเร็จ กรุณาลองใหม่อีกครั้ง',
-    error,
-  );
+// club_full to a register or change: the card can offer that club's waitlist straight away.
+export const isClubFull = (error: unknown): boolean =>
+  error instanceof ApiError && error.code === ERROR_CODES.clubFull;
 
 export const isProfileMissing = (error: unknown): boolean =>
   error instanceof ApiError && error.code === ERROR_CODES.studentProfileMissing;
+
+const clubName = ({ clubCode, name }: { clubCode: string; name: string }) => `${clubCode} ${name}`;
+
+// The notice for a promotion off the waitlist. Shown from data (promotedFromWaitlist), so it is
+// there after a reload too, and appears by itself when a poll brings the new seat.
+export const promotedNotice = (registration: StudentRegistration): string =>
+  `ได้ที่ในชุมนุม ${clubName(registration.club)} จากรายชื่อรอแล้ว`;
+
+// What a successful write says, from the answer rather than from the club the student picked: a
+// change or cancel can cascade (README Phase 2, "คำตอบหลัง promote") and a replayed key answers
+// with the state now.
+export const writeSuccessNotice = (kind: StudentWriteKind, result: StudentWriteResult): string => {
+  if ('waitlist' in result) {
+    const { waitlist } = result;
+    if (kind === 'leave')
+      return waitlist ? 'ยังอยู่ในรายชื่อรอ กรุณาดูสถานะล่าสุด' : 'ออกจากรายชื่อรอแล้ว';
+    return waitlist
+      ? `เข้ารายชื่อรอชุมนุม ${clubName(waitlist.club)} แล้ว ลำดับที่ ${waitlist.position}`
+      : 'ไม่ได้อยู่ในรายชื่อรอ กรุณาดูรายการล่าสุดแล้วลองใหม่';
+  }
+  const { registration } = result;
+  if (kind === 'cancel') {
+    return registration ? 'ยกเลิกชุมนุมเดิมแล้ว' : 'ยกเลิกชุมนุมแล้ว';
+  }
+  if (!registration) return 'ยังไม่ได้ลงชุมนุมนี้ กรุณาดูรายการล่าสุดแล้วลองใหม่';
+  // The change freed a seat whose cascade then promoted the student off their own waitlist entry;
+  // the promoted notice beside it says which club, so this one does not repeat it.
+  if (registration.promotedFromWaitlist) return 'ย้ายชุมนุมแล้ว และได้ที่จากรายชื่อรอต่อ';
+  return kind === 'change'
+    ? `ย้ายมาชุมนุม ${clubName(registration.club)} เรียบร้อยแล้ว`
+    : `ลงชุมนุม ${clubName(registration.club)} เรียบร้อยแล้ว`;
+};
 
 // A session that expires while the page polls sends the student back to the login page.
 export const useLogoutOnExpiredSession = (error: unknown) => {
@@ -104,27 +223,51 @@ export const useLogoutOnExpiredSession = (error: unknown) => {
   }, [error, setSession]);
 };
 
-const withRegistration = <T extends StudentRoundResponse>(
-  data: T | undefined,
-  registration: StudentRegistration | null,
-): T | undefined => (data ? { ...data, registration } : data);
+export type StudentWriteRequest =
+  { kind: ClubWriteKind; clubId: number } | { kind: 'cancel' | 'leave' };
+export type StudentWriteResult = StudentRegistrationResponse | StudentWaitlistResponse;
 
-// One write per confirmation. start() makes a new idempotency key for a new confirmation;
-// retry() sends the last request again with its key, for when the outcome is unknown.
-export const useStudentWrite = <TVariables extends object>(
-  write: (request: TVariables & { idempotencyKey: string }) => Promise<StudentRegistrationResponse>,
-) => {
+// The API bodies are strict, so only clubId and the key are sent, never the kind.
+const sendStudentWrite = async (
+  request: StudentWriteRequest & { idempotencyKey: string },
+): Promise<StudentWriteResult> => {
+  const { idempotencyKey } = request;
+  switch (request.kind) {
+    case 'register':
+      return await registerForClub({ clubId: request.clubId, idempotencyKey });
+    case 'change':
+      return await changeRegistration({ clubId: request.clubId, idempotencyKey });
+    case 'join':
+      return await joinWaitlist({ clubId: request.clubId, idempotencyKey });
+    case 'cancel':
+      return await cancelRegistration({ idempotencyKey });
+    case 'leave':
+      return await leaveWaitlist({ idempotencyKey });
+  }
+};
+
+// The answer names the registration or the waitlist entry as it stands now; the rest of the
+// cached page is brought up to date by the refetch.
+const withWriteResult = <T extends StudentRoundResponse>(
+  data: T | undefined,
+  result: StudentWriteResult,
+): T | undefined => (data ? { ...data, ...result } : data);
+
+// One write per confirmation, whatever its kind, so one pending state disables every button on
+// the page. start() makes a new idempotency key for a new confirmation; retry() sends the last
+// request again with its key, for when the outcome is unknown.
+export const useStudentWrite = () => {
   const queryClient = useQueryClient();
   const setSession = useSetSession();
   const mutation = useMutation({
-    mutationFn: write,
+    mutationFn: sendStudentWrite,
     // Shown at once; the refetch below then brings the seat counts up to date.
-    onSuccess: ({ registration }) => {
+    onSuccess: (result) => {
       queryClient.setQueryData<StudentClubsResponse>(STUDENT_CLUBS_QUERY_KEY, (data) =>
-        withRegistration(data, registration),
+        withWriteResult(data, result),
       );
       queryClient.setQueryData<StudentRoundResponse>(STUDENT_ROUND_QUERY_KEY, (data) =>
-        withRegistration(data, registration),
+        withWriteResult(data, result),
       );
     },
     onError: (error) => {
@@ -139,7 +282,8 @@ export const useStudentWrite = <TVariables extends object>(
   const { variables, mutate } = mutation;
   return {
     mutation,
-    start: (request: TVariables) => mutate({ ...request, idempotencyKey: crypto.randomUUID() }),
+    start: (request: StudentWriteRequest) =>
+      mutate({ ...request, idempotencyKey: crypto.randomUUID() }),
     retry: () => {
       if (variables) mutate(variables);
     },
