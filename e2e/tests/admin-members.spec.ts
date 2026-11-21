@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test';
-import type { Page } from '@playwright/test';
+import type { Locator, Page } from '@playwright/test';
 import {
   ADMIN,
   ADMIN_FROM_CLUB,
@@ -24,6 +24,13 @@ const assign = async (page: Page, club: Club, loginId: string) => {
   await panel.getByLabel('รหัสนักเรียน', { exact: true }).fill(loginId);
   await panel.getByRole('button', { name: 'เพิ่มเข้าชุมนุม' }).click();
   return panel;
+};
+
+// The panel's result notice. Matched by its text, not as the panel's only status: while a removal
+// is on its way the confirmation shows its own "กำลัง…" status too, and on a slow runner the check
+// can look while both are there.
+const expectNotice = async (panel: Locator, text: string) => {
+  await expect(panel.getByRole('status').filter({ hasText: text })).toHaveText(text);
 };
 
 const clubIdOf = async (code: string): Promise<number | undefined> =>
@@ -57,13 +64,13 @@ test('an admin seats a student, moves them to another club, then removes them', 
 
   const from = await assign(page, ADMIN_FROM_CLUB, student.loginId.toUpperCase());
   const seated = `บันทึกแล้ว: ${student.loginId} ${student.fullName} อยู่ในชุมนุม`;
-  await expect(from.getByRole('status')).toHaveText(`${seated} ${clubLabel(ADMIN_FROM_CLUB)}`);
+  await expectNotice(from, `${seated} ${clubLabel(ADMIN_FROM_CLUB)}`);
   await expect(
     from.getByRole('table', { name: `สมาชิกชุมนุม ${ADMIN_FROM_CLUB.code}` }),
   ).toContainText(student.fullName);
 
   const to = await assign(page, ADMIN_TO_CLUB, student.loginId);
-  await expect(to.getByRole('status')).toHaveText(`${seated} ${clubLabel(ADMIN_TO_CLUB)}`);
+  await expectNotice(to, `${seated} ${clubLabel(ADMIN_TO_CLUB)}`);
   expect(await seatsOf(ADMIN_FROM_CLUB.code)).toBe(0);
   expect(await seatsOf(ADMIN_TO_CLUB.code)).toBe(1);
 
@@ -72,9 +79,7 @@ test('an admin seats a student, moves them to another club, then removes them', 
     .getByRole('alertdialog')
     .getByRole('button', { name: 'ยืนยัน นำออกจากชุมนุม' })
     .click();
-  await expect(to.getByRole('status')).toHaveText(
-    `นำ ${student.loginId} ออกจากชุมนุม ${clubLabel(ADMIN_TO_CLUB)} แล้ว`,
-  );
+  await expectNotice(to, `นำ ${student.loginId} ออกจากชุมนุม ${clubLabel(ADMIN_TO_CLUB)} แล้ว`);
   await expect(to.getByText('ยังไม่มีสมาชิก')).toBeVisible();
 
   expect(await seatsOf(ADMIN_TO_CLUB.code)).toBe(0);
@@ -117,7 +122,8 @@ test('an admin removes a student from a waitlist', async ({ browser, page }) => 
   await expect(dialog).toContainText('ไม่ทำให้ใครได้ที่');
   await dialog.getByRole('button', { name: 'ยืนยัน นำออกจากรายชื่อรอ' }).click();
 
-  await expect(panel.getByRole('status')).toHaveText(
+  await expectNotice(
+    panel,
     `นำ ${student.loginId} ออกจากรายชื่อรอชุมนุม ${clubLabel(ADMIN_WAITLIST_CLUB)} แล้ว`,
   );
   await expect(panel.getByText('ไม่มีคนรอ')).toBeVisible();
