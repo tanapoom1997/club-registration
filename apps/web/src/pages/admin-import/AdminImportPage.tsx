@@ -25,8 +25,7 @@ const ERROR_MESSAGES: Readonly<Record<string, string>> = Object.freeze({
   [ERROR_CODES.fileTooLarge]: `ไฟล์ใหญ่เกิน ${MAX_FILE_MB} MB หรือมีข้อมูลข้างในมากเกินไป`,
   [ERROR_CODES.unsupportedFile]:
     'รองรับเฉพาะไฟล์ .xlsx (ไฟล์ .xls แบบเก่าหรือไฟล์ที่ตั้งรหัสผ่านไว้ ให้บันทึกใหม่เป็น .xlsx)',
-  [ERROR_CODES.invalidWorkbook]:
-    'เปิดไฟล์นี้ไม่ได้ ไฟล์อาจเสีย ลองเปิดใน Excel แล้วบันทึกใหม่เป็น .xlsx',
+  [ERROR_CODES.invalidWorkbook]: 'เปิดไฟล์นี้ไม่ได้ ไฟล์อาจเสีย ลองเปิดใน Excel แล้วบันทึกใหม่เป็น .xlsx',
   [ERROR_CODES.validationError]: 'ข้อมูลที่ส่งไม่ครบ กรุณาเลือกภาคเรียนและไฟล์',
   [ERROR_CODES.forbidden]: 'บัญชีนี้ไม่มีสิทธิ์นำเข้าข้อมูล',
   [ERROR_CODES.rateLimited]: 'ส่งไฟล์ถี่เกินไป กรุณารอสักครู่แล้วลองใหม่',
@@ -138,9 +137,8 @@ export const AdminImportPage = () => {
         <h1 className="text-2xl font-bold">นำเข้า Excel</h1>
         <p className="text-sm text-muted-foreground">
           อัปโหลดไฟล์ .xlsx ที่มีชีต students, clubs, advisors (มีชีตใดก็ได้)
-          ระบบจะตรวจและสรุปให้ดูก่อนโดยยังไม่บันทึก เมื่อไม่มีข้อผิดพลาดจึงกดยืนยันเพื่อบันทึกลงระบบ
-          ไฟล์ละไม่เกิน {MAX_FILE_MB} MB และชีตละไม่เกิน{' '}
-          {IMPORT_MAX_ROWS_PER_SHEET.toLocaleString('th-TH')} แถว
+          ระบบจะตรวจและสรุปให้ดูก่อนโดยยังไม่บันทึก เมื่อไม่มีข้อผิดพลาดจึงกดยืนยันเพื่อบันทึกลงระบบ ไฟล์ละไม่เกิน{' '}
+          {MAX_FILE_MB} MB และชีตละไม่เกิน {IMPORT_MAX_ROWS_PER_SHEET.toLocaleString('th-TH')} แถว
         </p>
         <p className="text-sm">
           <a

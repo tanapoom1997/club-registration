@@ -402,10 +402,7 @@ describe('admin name list export', () => {
       const [sheet, ...others] = await readClassroomSheets(response.rawPayload);
       expect(others).toEqual([]);
       expect(sheet!.name).toBe(`ม.1-${classroom}`);
-      expect(sheet!.headings.slice(0, 2)).toEqual([
-        `ชั้น/ห้อง ม.1/${classroom}`,
-        'ลงแล้ว/ทั้งห้อง: 1/3',
-      ]);
+      expect(sheet!.headings.slice(0, 2)).toEqual([`ชั้น/ห้อง ม.1/${classroom}`, 'ลงแล้ว/ทั้งห้อง: 1/3']);
       expect(sheet!.header).toEqual(Object.values(CLASSROOM_LIST_COLUMNS));
       expect(sheet!.rows).toEqual([
         [1, first.loginId, 'เด็กหญิงสมมติ ลงแล้ว', `${code} ชุมนุมดนตรีสมมติ`],
@@ -727,10 +724,7 @@ describe('admin name list export', () => {
 
       const [page, ...others] = readPdfPages(response.rawPayload);
       expect(others).toEqual([]);
-      expect(page!.lines.slice(0, 2)).toEqual([
-        `ชั้น/ห้อง ม.1/${classroom}`,
-        'ลงแล้ว/ทั้งห้อง: 1/2',
-      ]);
+      expect(page!.lines.slice(0, 2)).toEqual([`ชั้น/ห้อง ม.1/${classroom}`, 'ลงแล้ว/ทั้งห้อง: 1/2']);
       expect(tableRows(page!.lines, Object.values(CLASSROOM_LIST_COLUMNS))).toEqual([
         ['1', registered.loginId, 'เด็กหญิงสมมติ ลงแล้ว', `${code} ชุมนุมน้ำใสสมมติ`],
         ['2', missing.loginId, 'เด็กชายสมมติ ยังไม่เลือก', NOT_REGISTERED_LABEL],

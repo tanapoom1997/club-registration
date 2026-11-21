@@ -123,9 +123,7 @@ describe('student waitlist', () => {
       expect(callsTo(fetchMock, 'POST', WAITLIST_PATH)).toHaveLength(0);
       fireEvent.click(within(dialog).getByRole('button', { name: 'ยืนยัน เข้ารายชื่อรอ' }));
 
-      const notice = await screen.findByText(
-        'เข้ารายชื่อรอชุมนุม B200 ชุมนุมดนตรีสมมติ แล้ว ลำดับที่ 1',
-      );
+      const notice = await screen.findByText('เข้ารายชื่อรอชุมนุม B200 ชุมนุมดนตรีสมมติ แล้ว ลำดับที่ 1');
       expect(document.activeElement).toBe(notice);
       const [call] = callsTo(fetchMock, 'POST', WAITLIST_PATH);
       expect(bodyOf(call?.[1])).toEqual({
@@ -243,11 +241,7 @@ describe('student waitlist', () => {
 
     it.each([
       [409, 'already_in_club', 'คุณอยู่ในชุมนุมนี้แล้ว ไม่ต้องเข้ารายชื่อรอ'],
-      [
-        409,
-        'waitlist_not_needed',
-        'ชุมนุมนี้มีที่ว่างแล้ว ไม่ต้องรอ กรุณาดูรายการล่าสุดแล้วลงหรือย้ายมาชุมนุมนี้ได้เลย',
-      ],
+      [409, 'waitlist_not_needed', 'ชุมนุมนี้มีที่ว่างแล้ว ไม่ต้องรอ กรุณาดูรายการล่าสุดแล้วลงหรือย้ายมาชุมนุมนี้ได้เลย'],
       [409, 'round_not_open', 'เข้ารายชื่อรอไม่ได้ เพราะตอนนี้ไม่อยู่ในช่วงเปิดลงทะเบียน'],
       [404, 'not_found', 'ไม่พบชุมนุมนี้แล้ว รายการอาจเปลี่ยนไป กรุณาดูรายการล่าสุด'],
       [429, 'rate_limited', 'ส่งคำขอถี่เกินไป กรุณารอสักครู่แล้วลองใหม่'],
@@ -323,9 +317,7 @@ describe('student waitlist', () => {
 
       confirmJoin(MUSIC.clubCode, MUSIC.name);
 
-      expect(
-        await screen.findByText('ไม่ได้อยู่ในรายชื่อรอ กรุณาดูรายการล่าสุดแล้วลองใหม่'),
-      ).toBeTruthy();
+      expect(await screen.findByText('ไม่ได้อยู่ในรายชื่อรอ กรุณาดูรายการล่าสุดแล้วลองใหม่')).toBeTruthy();
     });
   });
 
@@ -445,11 +437,7 @@ describe('student waitlist', () => {
     });
 
     it.each([
-      [
-        409,
-        'not_waitlisted',
-        'คุณไม่ได้อยู่ในรายชื่อรอของรอบนี้แล้ว (อาจได้ที่แล้วหรือออกไปแล้ว) กรุณาดูสถานะล่าสุด',
-      ],
+      [409, 'not_waitlisted', 'คุณไม่ได้อยู่ในรายชื่อรอของรอบนี้แล้ว (อาจได้ที่แล้วหรือออกไปแล้ว) กรุณาดูสถานะล่าสุด'],
       [409, 'round_not_open', 'ออกจากรายชื่อรอไม่ได้ เพราะรอบนี้ไม่ได้เปิดอยู่แล้ว'],
       [409, 'idempotency_key_reused', 'คำขอนี้ซ้ำกับคำขอก่อนหน้า กรุณากดใหม่อีกครั้ง'],
       [400, 'validation_error', 'ออกจากรายชื่อรอไม่สำเร็จ กรุณาลองใหม่อีกครั้ง'],
@@ -490,9 +478,7 @@ describe('student waitlist', () => {
         within(leaveDialog(MUSIC.clubCode, MUSIC.name)).getByRole('alert').textContent,
       ).toContain('คุณไม่ได้อยู่ในรายชื่อรอของรอบนี้แล้ว');
       fireEvent.click(within(dialog).getByRole('button', { name: 'ปิด' }));
-      expect(document.activeElement).toBe(
-        screen.getByRole('heading', { name: 'ชุมนุมในชั้นของฉัน' }),
-      );
+      expect(document.activeElement).toBe(screen.getByRole('heading', { name: 'ชุมนุมในชั้นของฉัน' }));
     });
 
     it('retries a leave whose answer was lost with the same key', async () => {

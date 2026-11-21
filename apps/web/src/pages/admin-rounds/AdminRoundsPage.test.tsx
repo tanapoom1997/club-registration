@@ -128,9 +128,7 @@ describe('admin rounds page', () => {
     fillTimes(form, '2026-12-01T08:00', '2026-12-01T16:00');
     fireEvent.click(within(form).getByRole('button', { name: 'สร้างรอบ' }));
 
-    expect((await within(form).findByRole('alert')).textContent).toBe(
-      'มีรอบของภาคเรียนและชั้นนี้อยู่แล้ว',
-    );
+    expect((await within(form).findByRole('alert')).textContent).toBe('มีรอบของภาคเรียนและชั้นนี้อยู่แล้ว');
   });
 
   it('does not send a round whose closing time is not after its opening time', async () => {
@@ -143,9 +141,7 @@ describe('admin rounds page', () => {
     fillTimes(form, '2026-12-01T16:00', '2026-12-01T08:00');
     fireEvent.click(within(form).getByRole('button', { name: 'สร้างรอบ' }));
 
-    expect((await within(form).findByRole('alert')).textContent).toBe(
-      'เวลาปิดต้องอยู่หลังเวลาเปิด',
-    );
+    expect((await within(form).findByRole('alert')).textContent).toBe('เวลาปิดต้องอยู่หลังเวลาเปิด');
     expect(fetchCalls(fetchMock, 'POST', '/api/admin/rounds')).toHaveLength(0);
   });
 
@@ -184,9 +180,7 @@ describe('admin rounds page', () => {
 
     fireEvent.click(within(form).getByRole('button', { name: 'บันทึกการแก้ไข' }));
 
-    expect(within(form).getByRole('alertdialog').textContent).toContain(
-      'รอบนี้เปิดให้ลงทะเบียนอยู่',
-    );
+    expect(within(form).getByRole('alertdialog').textContent).toContain('รอบนี้เปิดให้ลงทะเบียนอยู่');
     expect(fetchCalls(fetchMock, 'PATCH', '/api/admin/rounds/1')).toHaveLength(0);
 
     fireEvent.click(within(form).getByRole('button', { name: 'ยืนยันบันทึก' }));

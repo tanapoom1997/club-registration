@@ -75,10 +75,7 @@ test('an admin seats a student, moves them to another club, then removes them', 
   expect(await seatsOf(ADMIN_TO_CLUB.code)).toBe(1);
 
   await to.getByRole('button', { name: `นำออก ${student.loginId} ${student.fullName}` }).click();
-  await page
-    .getByRole('alertdialog')
-    .getByRole('button', { name: 'ยืนยัน นำออกจากชุมนุม' })
-    .click();
+  await page.getByRole('alertdialog').getByRole('button', { name: 'ยืนยัน นำออกจากชุมนุม' }).click();
   await expectNotice(to, `นำ ${student.loginId} ออกจากชุมนุม ${clubLabel(ADMIN_TO_CLUB)} แล้ว`);
   await expect(to.getByText('ยังไม่มีสมาชิก')).toBeVisible();
 

@@ -358,9 +358,7 @@ describe('AdminEventsPage', () => {
       await waitFor(() =>
         expect(queryOf(eventQueries.at(-1))).toEqual({ roundId: '2', clubId: '21' }),
       );
-      expect(
-        screen.getByText(/ตัวกรองที่ใช้อยู่: รอบ 2569\/1 ม\.2 \(ปิดแล้ว\) · ชุมนุม C300/),
-      ).toBeTruthy();
+      expect(screen.getByText(/ตัวกรองที่ใช้อยู่: รอบ 2569\/1 ม\.2 \(ปิดแล้ว\) · ชุมนุม C300/)).toBeTruthy();
     });
 
     it('drops the club when the round changes', async () => {

@@ -41,8 +41,8 @@ const RoundHint = ({ data: { round, registration } }: { data: StudentClubsRespon
   if (round.status === 'upcoming') {
     return (
       <p className="text-sm text-muted-foreground">
-        รอบนี้ยังไม่เปิด ลงได้ตั้งแต่ {formatThaiDateTime(round.opensAt)} น.
-        เมื่อถึงเวลาหน้านี้จะเปิดให้ลงเอง ไม่ต้องโหลดใหม่
+        รอบนี้ยังไม่เปิด ลงได้ตั้งแต่ {formatThaiDateTime(round.opensAt)} น. เมื่อถึงเวลาหน้านี้จะเปิดให้ลงเอง
+        ไม่ต้องโหลดใหม่
       </p>
     );
   }
@@ -52,8 +52,9 @@ const RoundHint = ({ data: { round, registration } }: { data: StudentClubsRespon
   return (
     <p className="text-sm text-muted-foreground">
       {registration ? '' : 'กดลงชุมนุมที่ต้องการได้ 1 ชุมนุม '}
-      ชุมนุมที่เต็มหรือมีคนรออยู่เข้ารายชื่อรอได้ 1 ชุมนุม จำนวนที่เหลืออัปเดตอัตโนมัติทุก{' '}
-      {CLUBS_POLL_INTERVAL_MS / 1000} วินาที
+      ชุมนุมที่เต็มหรือมีคนรออยู่เข้ารายชื่อรอได้ 1 ชุมนุม จำนวนที่เหลืออัปเดตอัตโนมัติทุก {CLUBS_POLL_INTERVAL_MS /
+        1000}{' '}
+      วินาที
     </p>
   );
 };

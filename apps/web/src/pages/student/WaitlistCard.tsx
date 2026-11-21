@@ -28,9 +28,7 @@ export const WaitlistCard = ({
     <p className="text-sm">
       ลำดับที่ <span className="text-2xl font-bold text-primary">{position}</span>
     </p>
-    <p className="text-sm text-muted-foreground">
-      เข้ารายชื่อรอเมื่อ {formatThaiDateTime(joinedAt)} น.
-    </p>
+    <p className="text-sm text-muted-foreground">เข้ารายชื่อรอเมื่อ {formatThaiDateTime(joinedAt)} น.</p>
     <p className="text-sm">
       {round.status === 'closed'
         ? 'รอบนี้ปิดแล้ว จะไม่มีการให้ที่จากรายชื่อรออีก'

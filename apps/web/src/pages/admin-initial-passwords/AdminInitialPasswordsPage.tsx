@@ -49,9 +49,7 @@ const sumScope = (classrooms: readonly ClassroomPasswordStatus[], { grade, class
     );
 
 const scopeLabel = ({ grade, classroom }: Scope) =>
-  classroom === ALL_CLASSROOMS
-    ? `${gradeLabel(grade)} ทุกห้อง`
-    : `${gradeLabel(grade)}/${classroom}`;
+  classroom === ALL_CLASSROOMS ? `${gradeLabel(grade)} ทุกห้อง` : `${gradeLabel(grade)}/${classroom}`;
 
 export const AdminInitialPasswordsPage = () => {
   const [grade, setGrade] = useState<number>();
@@ -117,14 +115,12 @@ export const AdminInitialPasswordsPage = () => {
       <div className="space-y-2">
         <h1 className="text-2xl font-bold">รหัสผ่านเริ่มต้น</h1>
         <p className="text-sm text-muted-foreground">
-          ระบบสุ่มรหัสผ่านให้นักเรียนรายคนและเก็บไว้เฉพาะแบบเข้ารหัส (hash) รหัสผ่านจริงมีอยู่ในไฟล์
-          Excel ที่ดาวน์โหลดตอนกดออกรหัสเท่านั้น ดาวน์โหลดซ้ำไม่ได้ ถ้าไฟล์หายต้องออกรหัสใหม่
-          นักเรียนต้องเปลี่ยนรหัสผ่านเมื่อเข้าสู่ระบบครั้งแรก
-          และนักเรียนที่เปลี่ยนรหัสเองแล้วจะไม่ถูกออกรหัสทับ
+          ระบบสุ่มรหัสผ่านให้นักเรียนรายคนและเก็บไว้เฉพาะแบบเข้ารหัส (hash) รหัสผ่านจริงมีอยู่ในไฟล์ Excel
+          ที่ดาวน์โหลดตอนกดออกรหัสเท่านั้น ดาวน์โหลดซ้ำไม่ได้ ถ้าไฟล์หายต้องออกรหัสใหม่
+          นักเรียนต้องเปลี่ยนรหัสผ่านเมื่อเข้าสู่ระบบครั้งแรก และนักเรียนที่เปลี่ยนรหัสเองแล้วจะไม่ถูกออกรหัสทับ
         </p>
         <p className={cn(alertVariants({ variant: 'warning' }), 'font-medium')}>
-          คำเตือน: การออกรหัสผ่านซ้ำให้นักเรียนที่เคยได้รหัสแล้ว
-          ทำให้รหัสผ่านเดิมที่พิมพ์แจกไปใช้ไม่ได้ทันที
+          คำเตือน: การออกรหัสผ่านซ้ำให้นักเรียนที่เคยได้รหัสแล้ว ทำให้รหัสผ่านเดิมที่พิมพ์แจกไปใช้ไม่ได้ทันที
           และนักเรียนที่เข้าสู่ระบบด้วยรหัสเดิมอยู่จะถูกออกจากระบบ
         </p>
       </div>
@@ -206,8 +202,7 @@ export const AdminInitialPasswordsPage = () => {
               </label>
               <p className="text-sm text-muted-foreground" aria-live="polite">
                 {scopeLabel(scope)}: จะออกรหัสผ่านให้ {formatCount(expected)} คน
-                {invalidates > 0 &&
-                  ` (ในนี้ ${formatCount(invalidates)} คนจะได้รหัสใหม่แทนรหัสเดิม)`}
+                {invalidates > 0 && ` (ในนี้ ${formatCount(invalidates)} คนจะได้รหัสใหม่แทนรหัสเดิม)`}
               </p>
               {!confirming && (
                 <Button type="submit" disabled={expected === 0 || mutation.isPending}>
@@ -228,8 +223,8 @@ export const AdminInitialPasswordsPage = () => {
               </p>
               {invalidates > 0 && (
                 <p className="text-sm font-medium">
-                  รหัสผ่านเดิมของนักเรียน {formatCount(invalidates)}{' '}
-                  คนที่พิมพ์แจกไปแล้วจะใช้ไม่ได้ทันที ต้องแจกรหัสจากไฟล์ใหม่นี้แทน
+                  รหัสผ่านเดิมของนักเรียน {formatCount(invalidates)} คนที่พิมพ์แจกไปแล้วจะใช้ไม่ได้ทันที
+                  ต้องแจกรหัสจากไฟล์ใหม่นี้แทน
                 </p>
               )}
               <p className="text-sm">
@@ -259,8 +254,8 @@ export const AdminInitialPasswordsPage = () => {
           {mutation.isSuccess && (
             <p className={alertVariants({ variant: 'success' })} role="status">
               ออกรหัสผ่านให้ {formatCount(mutation.data.issuedCount)} คนแล้ว ดาวน์โหลดไฟล์{' '}
-              {mutation.data.filename} แล้ว ไฟล์นี้ดาวน์โหลดซ้ำไม่ได้
-              ถ้าไม่พบไฟล์ในเครื่องต้องออกรหัสใหม่ (รหัสในไฟล์เดิมจะใช้ไม่ได้)
+              {mutation.data.filename} แล้ว ไฟล์นี้ดาวน์โหลดซ้ำไม่ได้ ถ้าไม่พบไฟล์ในเครื่องต้องออกรหัสใหม่
+              (รหัสในไฟล์เดิมจะใช้ไม่ได้)
             </p>
           )}
 

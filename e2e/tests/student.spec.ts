@@ -50,9 +50,7 @@ test('a full club is shown as full and offers its waitlist instead of a seat', a
   await expect(
     card.getByRole('button', { name: `เข้ารายชื่อรอ ${clubLabel(FULL_CLUB)}` }),
   ).toBeEnabled();
-  await expect(card.getByRole('button', { name: `ลงชุมนุม ${clubLabel(FULL_CLUB)}` })).toHaveCount(
-    0,
-  );
+  await expect(card.getByRole('button', { name: `ลงชุมนุม ${clubLabel(FULL_CLUB)}` })).toHaveCount(0);
 });
 
 test('the first login asks for a new password before anything else', async ({ page }) => {

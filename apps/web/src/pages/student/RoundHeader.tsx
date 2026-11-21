@@ -35,8 +35,7 @@ export const StudentLoadState = ({ error, isPending, onRetry }: LoadStateProps) 
   if (isProfileMissing(error)) {
     return (
       <p className={alertVariants({ variant: 'warning' })} role="alert">
-        บัญชีนี้ยังไม่มีข้อมูลชั้นเรียน จึงยังดูหรือลงชุมนุมไม่ได้
-        กรุณาติดต่อผู้ดูแลระบบหรือครูที่ดูแลการลงทะเบียน
+        บัญชีนี้ยังไม่มีข้อมูลชั้นเรียน จึงยังดูหรือลงชุมนุมไม่ได้ กรุณาติดต่อผู้ดูแลระบบหรือครูที่ดูแลการลงทะเบียน
       </p>
     );
   }

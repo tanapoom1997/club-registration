@@ -36,17 +36,12 @@ export const clubCellText = ({ eventType, club, fromClub }: RegistrationEvent): 
 // Who acted, in words. For a promotion the actor is whoever freed the seat (a student's cancel or
 // change, or an admin's edit), never the promoted student by virtue of being promoted.
 export const actorRoleText = ({ actor, student }: RegistrationEvent): string =>
-  actor.role === 'admin'
-    ? 'ผู้ดูแลระบบ'
-    : actor.id === student.id
-      ? 'นักเรียนคนนี้เอง'
-      : 'นักเรียนคนอื่น';
+  actor.role === 'admin' ? 'ผู้ดูแลระบบ' : actor.id === student.id ? 'นักเรียนคนนี้เอง' : 'นักเรียนคนอื่น';
 
 export const PROMOTE_ACTOR_NOTE = 'ผู้ที่ทำให้มีที่ว่าง ระบบให้ที่จากรายชื่อรออัตโนมัติ';
 
 const ERROR_MESSAGES: Readonly<Record<string, string>> = Object.freeze({
-  [ERROR_CODES.validationError]:
-    'ตัวกรองไม่ถูกต้อง ตรวจรหัสนักเรียน รอบ และชุมนุมอีกครั้ง แล้วลองใหม่',
+  [ERROR_CODES.validationError]: 'ตัวกรองไม่ถูกต้อง ตรวจรหัสนักเรียน รอบ และชุมนุมอีกครั้ง แล้วลองใหม่',
   [ERROR_CODES.forbidden]: 'บัญชีนี้ไม่มีสิทธิ์ดูประวัติการลงทะเบียน',
   [ERROR_CODES.unauthorized]: 'หมดเวลาการเข้าสู่ระบบ กรุณาเข้าสู่ระบบใหม่',
 });
@@ -55,5 +50,4 @@ export const eventsErrorMessage = (error: unknown): string =>
   (error instanceof ApiError ? ERROR_MESSAGES[error.code] : undefined) ??
   'โหลดประวัติการลงทะเบียนไม่สำเร็จ กรุณาลองใหม่อีกครั้ง';
 
-export const LOGIN_ID_FORMAT_ERROR =
-  'รหัสนักเรียนไม่ถูกต้อง ใช้ได้เฉพาะ a-z 0-9 . _ - ไม่เกิน 64 ตัว';
+export const LOGIN_ID_FORMAT_ERROR = 'รหัสนักเรียนไม่ถูกต้อง ใช้ได้เฉพาะ a-z 0-9 . _ - ไม่เกิน 64 ตัว';

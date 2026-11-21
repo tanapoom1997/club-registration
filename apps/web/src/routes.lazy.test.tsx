@@ -110,9 +110,7 @@ describe('lazily loaded pages', () => {
     const fetchMock = signedInAs(ADMIN);
     renderAt('/admin/events');
 
-    expect(
-      await screen.findByRole('heading', { level: 1, name: 'ประวัติการลงทะเบียน' }),
-    ).toBeTruthy();
+    expect(await screen.findByRole('heading', { level: 1, name: 'ประวัติการลงทะเบียน' })).toBeTruthy();
     expect(pages.eventsLoads).toBe(1);
     expect(fetchMock).toHaveBeenCalledWith('/api/admin/events', { method: 'GET' });
   });

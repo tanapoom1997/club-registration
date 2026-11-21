@@ -144,9 +144,9 @@ describe('student clubs page', () => {
     const held = screen.getByRole('heading', { name: 'ชุมนุมของฉัน' }).parentElement as HTMLElement;
     expect(held.textContent).toContain('C300 ชุมนุมวาดภาพสมมติ');
     expect(held.textContent).toContain('ลงเมื่อ 1 ธ.ค. 2569 08:05 น.');
-    expect(
-      within(held).getByRole('link', { name: 'ดูผลของฉันและยกเลิก' }).getAttribute('href'),
-    ).toBe('/student/my-registration');
+    expect(within(held).getByRole('link', { name: 'ดูผลของฉันและยกเลิก' }).getAttribute('href')).toBe(
+      '/student/my-registration',
+    );
     expect(within(cardOf(ART.name)).getByText('ชุมนุมของฉัน')).toBeTruthy();
     // The held-club card explains how to change, so no card shows a button that cannot work.
     expect(screen.queryByRole('button', { name: /^ลงชุมนุม / })).toBeNull();
@@ -224,16 +224,8 @@ describe('student clubs page', () => {
   });
 
   it.each([
-    [
-      409,
-      'club_full',
-      'ชุมนุมนี้เต็มแล้วหรือมีคนรอที่ว่างอยู่ เข้ารายชื่อรอของชุมนุมนี้ได้ หรือเลือกชุมนุมอื่น',
-    ],
-    [
-      409,
-      'already_registered',
-      'คุณลงชุมนุมอื่นในรอบนี้ไว้แล้ว ถ้าจะเปลี่ยน กด "ย้ายมาชุมนุมนี้" ที่ชุมนุมที่ยังมีที่ว่าง',
-    ],
+    [409, 'club_full', 'ชุมนุมนี้เต็มแล้วหรือมีคนรอที่ว่างอยู่ เข้ารายชื่อรอของชุมนุมนี้ได้ หรือเลือกชุมนุมอื่น'],
+    [409, 'already_registered', 'คุณลงชุมนุมอื่นในรอบนี้ไว้แล้ว ถ้าจะเปลี่ยน กด "ย้ายมาชุมนุมนี้" ที่ชุมนุมที่ยังมีที่ว่าง'],
     [409, 'round_not_open', 'ตอนนี้ไม่อยู่ในช่วงเปิดลงทะเบียน (ยังไม่เปิดหรือปิดไปแล้ว)'],
     [409, 'idempotency_key_reused', 'คำขอนี้ซ้ำกับคำขอก่อนหน้า กรุณากดใหม่อีกครั้ง'],
     [429, 'rate_limited', 'ส่งคำขอถี่เกินไป กรุณารอสักครู่แล้วลองใหม่'],
@@ -257,9 +249,7 @@ describe('student clubs page', () => {
 
     const dialog = confirmRegister(CHESS.clubCode, CHESS.name);
 
-    expect((await within(dialog).findByRole('alert')).textContent).toContain(
-      'กรุณาติดต่อผู้ดูแลระบบ',
-    );
+    expect((await within(dialog).findByRole('alert')).textContent).toContain('กรุณาติดต่อผู้ดูแลระบบ');
   });
 
   it('retries a request whose answer was lost with the same idempotency key', async () => {
@@ -394,8 +384,7 @@ describe('student clubs page', () => {
       expect(changeButton(CHESS.clubCode, CHESS.name).disabled).toBe(false);
       expect(joinButton(MUSIC.clubCode, MUSIC.name).disabled).toBe(false);
       expect(within(cardOf(ART.name)).queryByRole('button')).toBeNull();
-      const held = screen.getByRole('heading', { name: 'ชุมนุมของฉัน' })
-        .parentElement as HTMLElement;
+      const held = screen.getByRole('heading', { name: 'ชุมนุมของฉัน' }).parentElement as HTMLElement;
       expect(held.textContent).toContain('ย้ายมาชุมนุมนี้');
     });
 
@@ -431,9 +420,7 @@ describe('student clubs page', () => {
       expect(dialog.textContent).toContain(
         'ย้ายจากชุมนุม C300 ชุมนุมวาดภาพสมมติ ไปชุมนุม A100 ชุมนุมหมากรุกสมมติ?',
       );
-      expect(dialog.textContent).toContain(
-        'คุณจะออกจากชุมนุมเดิมก็ต่อเมื่อได้ที่ในชุมนุมใหม่แล้วเท่านั้น',
-      );
+      expect(dialog.textContent).toContain('คุณจะออกจากชุมนุมเดิมก็ต่อเมื่อได้ที่ในชุมนุมใหม่แล้วเท่านั้น');
       expect(dialog.textContent).toContain('ถ้าชุมนุมใหม่เต็มก่อน คุณยังอยู่ชุมนุมเดิม');
       expect(callsTo(fetchMock, 'PUT', REGISTER_PATH)).toHaveLength(0);
     });
@@ -451,8 +438,7 @@ describe('student clubs page', () => {
         clubId: CHESS.id,
         idempotencyKey: expect.stringMatching(UUID_PATTERN) as unknown,
       });
-      const held = screen.getByRole('heading', { name: 'ชุมนุมของฉัน' })
-        .parentElement as HTMLElement;
+      const held = screen.getByRole('heading', { name: 'ชุมนุมของฉัน' }).parentElement as HTMLElement;
       expect(held.textContent).toContain('A100 ชุมนุมหมากรุกสมมติ');
       await waitFor(() => expect(cardOf(CHESS.name).textContent).toContain('เหลือ 17 ที่'));
       expect(cardOf(ART.name).textContent).toContain('เหลือ 23 ที่');
@@ -487,8 +473,7 @@ describe('student clubs page', () => {
         'ย้ายไม่สำเร็จ เพราะชุมนุมนี้เต็มแล้วหรือมีคนรอที่ว่างอยู่ คุณยังอยู่ชุมนุมเดิม ถ้ายังอยากได้ชุมนุมนี้ เข้ารายชื่อรอได้',
       );
       expect(within(dialog).queryByRole('button', { name: 'ลองอีกครั้ง' })).toBeNull();
-      const held = screen.getByRole('heading', { name: 'ชุมนุมของฉัน' })
-        .parentElement as HTMLElement;
+      const held = screen.getByRole('heading', { name: 'ชุมนุมของฉัน' }).parentElement as HTMLElement;
       expect(held.textContent).toContain('C300 ชุมนุมวาดภาพสมมติ');
 
       fireEvent.click(within(dialog).getByRole('button', { name: 'เข้ารายชื่อรอชุมนุมนี้' }));
@@ -573,9 +558,7 @@ describe('student clubs page', () => {
       );
       fireEvent.click(within(dialog).getByRole('button', { name: 'ลองอีกครั้ง' }));
 
-      expect(
-        await screen.findByText('ย้ายมาชุมนุม A100 ชุมนุมหมากรุกสมมติ เรียบร้อยแล้ว'),
-      ).toBeTruthy();
+      expect(await screen.findByText('ย้ายมาชุมนุม A100 ชุมนุมหมากรุกสมมติ เรียบร้อยแล้ว')).toBeTruthy();
       const keys = keysOf(callsTo(fetchMock, 'PUT', REGISTER_PATH));
       expect(keys).toHaveLength(2);
       expect(keys[0]).toMatch(UUID_PATTERN);
@@ -645,9 +628,7 @@ describe('student clubs page', () => {
       confirmChange(CHESS.clubCode, CHESS.name);
 
       expect(await screen.findByText('ย้ายชุมนุมแล้ว และได้ที่จากรายชื่อรอต่อ')).toBeTruthy();
-      expect(
-        screen.getByText('ได้ที่ในชุมนุม B200 ชุมนุมดนตรีสมมติ จากรายชื่อรอแล้ว'),
-      ).toBeTruthy();
+      expect(screen.getByText('ได้ที่ในชุมนุม B200 ชุมนุมดนตรีสมมติ จากรายชื่อรอแล้ว')).toBeTruthy();
     });
   });
 });

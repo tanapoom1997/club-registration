@@ -112,9 +112,7 @@ describe('admin import page', () => {
         .getAllByRole('cell')
         .map((cell) => cell.textContent),
     ).toEqual(['120', '3', '7']);
-    expect(within(summary).getByRole('row', { name: /ครูที่ปรึกษา/ }).textContent).toContain(
-      '5 ชุมนุม',
-    );
+    expect(within(summary).getByRole('row', { name: /ครูที่ปรึกษา/ }).textContent).toContain('5 ชุมนุม');
     const errors = screen.getByRole('table', { name: 'รายการข้อผิดพลาด' });
     const errorRows = within(errors)
       .getAllByRole('row')

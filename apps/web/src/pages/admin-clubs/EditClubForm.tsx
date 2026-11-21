@@ -86,8 +86,7 @@ export const EditClubForm = ({ club, onSaved, onClose }: EditClubFormProps) => {
           {title}
         </CardTitle>
         <p className="text-sm text-muted-foreground">
-          รหัสชุมนุมเปลี่ยนไม่ได้ ลดจำนวนรับได้ไม่ต่ำกว่าจำนวนที่ลงแล้ว (ตอนนี้ลงแล้ว{' '}
-          {club.registered} คน)
+          รหัสชุมนุมเปลี่ยนไม่ได้ ลดจำนวนรับได้ไม่ต่ำกว่าจำนวนที่ลงแล้ว (ตอนนี้ลงแล้ว {club.registered} คน)
         </p>
       </CardHeader>
       <CardContent>

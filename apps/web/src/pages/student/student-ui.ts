@@ -80,8 +80,7 @@ export const clubOffer = (
 const COMMON_ERRORS: Readonly<Record<string, string>> = Object.freeze({
   [ERROR_CODES.idempotencyKeyReused]: 'คำขอนี้ซ้ำกับคำขอก่อนหน้า กรุณากดใหม่อีกครั้ง',
   [ERROR_CODES.rateLimited]: 'ส่งคำขอถี่เกินไป กรุณารอสักครู่แล้วลองใหม่',
-  [ERROR_CODES.studentProfileMissing]:
-    'บัญชีนี้ยังไม่มีข้อมูลชั้นเรียน กรุณาติดต่อผู้ดูแลระบบหรือครูที่ดูแลการลงทะเบียน',
+  [ERROR_CODES.studentProfileMissing]: 'บัญชีนี้ยังไม่มีข้อมูลชั้นเรียน กรุณาติดต่อผู้ดูแลระบบหรือครูที่ดูแลการลงทะเบียน',
   [ERROR_CODES.unauthorized]: 'หมดเวลาการเข้าสู่ระบบ กรุณาเข้าสู่ระบบใหม่',
 });
 
@@ -102,8 +101,7 @@ const WRITE_MESSAGES: Readonly<Record<StudentWriteKind, WriteMessages>> = Object
   register: {
     errors: {
       ...COMMON_ERRORS,
-      [ERROR_CODES.clubFull]:
-        'ชุมนุมนี้เต็มแล้วหรือมีคนรอที่ว่างอยู่ เข้ารายชื่อรอของชุมนุมนี้ได้ หรือเลือกชุมนุมอื่น',
+      [ERROR_CODES.clubFull]: 'ชุมนุมนี้เต็มแล้วหรือมีคนรอที่ว่างอยู่ เข้ารายชื่อรอของชุมนุมนี้ได้ หรือเลือกชุมนุมอื่น',
       [ERROR_CODES.alreadyRegistered]:
         'คุณลงชุมนุมอื่นในรอบนี้ไว้แล้ว ถ้าจะเปลี่ยน กด "ย้ายมาชุมนุมนี้" ที่ชุมนุมที่ยังมีที่ว่าง',
       [ERROR_CODES.roundNotOpen]: ROUND_NOT_OPEN,
@@ -189,8 +187,7 @@ export const promotedNotice = (registration: StudentRegistration): string =>
 export const writeSuccessNotice = (kind: StudentWriteKind, result: StudentWriteResult): string => {
   if ('waitlist' in result) {
     const { waitlist } = result;
-    if (kind === 'leave')
-      return waitlist ? 'ยังอยู่ในรายชื่อรอ กรุณาดูสถานะล่าสุด' : 'ออกจากรายชื่อรอแล้ว';
+    if (kind === 'leave') return waitlist ? 'ยังอยู่ในรายชื่อรอ กรุณาดูสถานะล่าสุด' : 'ออกจากรายชื่อรอแล้ว';
     return waitlist
       ? `เข้ารายชื่อรอชุมนุม ${clubName(waitlist.club)} แล้ว ลำดับที่ ${waitlist.position}`
       : 'ไม่ได้อยู่ในรายชื่อรอ กรุณาดูรายการล่าสุดแล้วลองใหม่';

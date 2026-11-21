@@ -55,8 +55,7 @@ export const removeMemberNote = (status: RoundStatus): string =>
 
 const COMMON_ERRORS: Readonly<Record<string, string>> = Object.freeze({
   // One code for a missing club and a missing student, so one message names both.
-  [ERROR_CODES.notFound]:
-    'ไม่พบนักเรียนรหัสนี้หรือชุมนุมนี้ ตรวจรหัสนักเรียนอีกครั้ง (ชุมนุมอาจถูกลบไปแล้ว)',
+  [ERROR_CODES.notFound]: 'ไม่พบนักเรียนรหัสนี้หรือชุมนุมนี้ ตรวจรหัสนักเรียนอีกครั้ง (ชุมนุมอาจถูกลบไปแล้ว)',
   [ERROR_CODES.validationError]: 'รหัสนักเรียนไม่ถูกต้อง ใช้ได้เฉพาะ a-z 0-9 . _ - ไม่เกิน 64 ตัว',
   [ERROR_CODES.idempotencyKeyReused]: 'คำขอนี้ซ้ำกับคำขอก่อนหน้า กรุณากดใหม่อีกครั้ง',
   [ERROR_CODES.rateLimited]: 'ส่งคำขอถี่เกินไป กรุณารอสักครู่แล้วลองใหม่',
@@ -77,8 +76,7 @@ const WRITE_MESSAGES: Readonly<Record<MemberWriteKind, WriteMessages>> = Object.
       ...COMMON_ERRORS,
       [ERROR_CODES.clubFull]:
         'ชุมนุมนี้เต็มแล้ว เพิ่มจำนวนรับก่อนด้วยปุ่ม "แก้ไข" ของชุมนุมนี้ แล้วลองใหม่ (ถ้านักเรียนถือชุมนุมอื่นอยู่ ยังอยู่ที่เดิม)',
-      [ERROR_CODES.studentNotInRoundGrade]:
-        'นักเรียนคนนี้ไม่ได้อยู่ชั้นของรอบนี้ เพิ่มได้เฉพาะนักเรียนชั้นเดียวกับรอบ',
+      [ERROR_CODES.studentNotInRoundGrade]: 'นักเรียนคนนี้ไม่ได้อยู่ชั้นของรอบนี้ เพิ่มได้เฉพาะนักเรียนชั้นเดียวกับรอบ',
     },
     unknownOutcome:
       'เชื่อมต่อระบบไม่สำเร็จ จึงยังไม่รู้ว่าบันทึกสำเร็จหรือไม่ กดเพิ่มอีกครั้งด้วยรหัสเดิมเพื่อส่งคำขอเดิม (ระบบจะไม่ทำซ้ำ)',
@@ -87,8 +85,7 @@ const WRITE_MESSAGES: Readonly<Record<MemberWriteKind, WriteMessages>> = Object.
   removeMember: {
     errors: {
       ...COMMON_ERRORS,
-      [ERROR_CODES.notRegistered]:
-        'นักเรียนคนนี้ไม่ได้อยู่ในชุมนุมนี้แล้ว (อาจถูกย้ายหรือนำออกไปแล้ว) ดูรายชื่อล่าสุด',
+      [ERROR_CODES.notRegistered]: 'นักเรียนคนนี้ไม่ได้อยู่ในชุมนุมนี้แล้ว (อาจถูกย้ายหรือนำออกไปแล้ว) ดูรายชื่อล่าสุด',
     },
     unknownOutcome:
       'เชื่อมต่อระบบไม่สำเร็จ จึงยังไม่รู้ว่านำออกสำเร็จหรือไม่ กด "ลองอีกครั้ง" เพื่อส่งคำขอเดิม (ระบบจะไม่ทำซ้ำ)',
