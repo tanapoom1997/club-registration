@@ -1,6 +1,6 @@
 import type { StudentClubRef } from '@club-registration/shared';
-import { WritePanel } from './WritePanel';
-import type { WriteState } from './WritePanel';
+import { WritePanel } from '@/components/WritePanel';
+import type { WriteState } from '@/components/WritePanel';
 
 // The confirmation of leaving the waitlist, the same on both student pages.
 export const LeaveWaitlistPanel = ({
