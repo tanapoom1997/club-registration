@@ -140,6 +140,7 @@ describe('student register and cancel', () => {
           registeredAt: rows[0]!.created_at.toISOString(),
           promotedFromWaitlist: false,
         },
+        adminChange: null,
       });
       expect(await storedSeats(pool, clubId)).toMatchObject({ registered: 1, rows: 1 });
       expect(await eventsOf(pool, studentId)).toEqual([
@@ -444,7 +445,7 @@ describe('student register and cancel', () => {
       const response = await cancel(studentId, key);
 
       expect(response.statusCode).toBe(200);
-      expect(response.json()).toEqual({ registration: null });
+      expect(response.json()).toEqual({ registration: null, adminChange: null });
       expect(await storedSeats(pool, clubId)).toMatchObject({ registered: 0, rows: 0 });
       expect((await eventsOf(pool, studentId))[1]).toEqual({
         event_type: 'cancel',

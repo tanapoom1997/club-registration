@@ -201,6 +201,7 @@ describe('student waitlist', () => {
           position: 1,
           joinedAt: rows[0]!.created_at.toISOString(),
         },
+        adminChange: null,
       });
       expect(await eventsOfType('waitlist_join')).toEqual([
         {
@@ -453,7 +454,7 @@ describe('student waitlist', () => {
       const response = await leave(studentId!, key);
 
       expect(response.statusCode).toBe(200);
-      expect(response.json()).toEqual({ waitlist: null });
+      expect(response.json()).toEqual({ waitlist: null, adminChange: null });
       expect(await queueOf(clubId)).toEqual([behind]);
       expect((await readRound(behind!)).waitlist?.position).toBe(1);
       expect(await eventsOfType('waitlist_leave')).toEqual([
@@ -545,7 +546,7 @@ describe('student waitlist', () => {
       const replay = await leave(studentId, key);
 
       expect(replay.statusCode).toBe(200);
-      expect(replay.json()).toEqual({ waitlist: null });
+      expect(replay.json()).toEqual({ waitlist: null, adminChange: null });
       expect(await eventsOfType('waitlist_leave')).toHaveLength(1);
     });
 

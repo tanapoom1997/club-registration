@@ -1,5 +1,6 @@
 import { ERROR_CODES } from '@club-registration/shared';
 import type {
+  StudentAdminChange,
   StudentClub,
   StudentClubsResponse,
   StudentRegistration,
@@ -44,6 +45,20 @@ type WaitlistRow = {
   position: number;
 };
 
+// The club an admin_assign moved the student from: all three set, or (a fresh seat, a removal, a
+// waitlist removal) all three null.
+type FromClubColumns =
+  | { from_club_id: number; from_club_code: string; from_club_name: string }
+  | { from_club_id: null; from_club_code: null; from_club_name: null };
+
+type AdminChangeRow = {
+  event_type: 'admin_assign' | 'admin_remove' | 'waitlist_leave';
+  created_at: Date;
+  club_id: number;
+  club_code: string;
+  club_name: string;
+} & FromClubColumns;
+
 type StudentClubRow = {
   id: number;
   club_code: string;
@@ -78,6 +93,30 @@ const toWaitlist = (row: WaitlistRow): StudentWaitlist => ({
   position: row.position,
   joinedAt: row.created_at.toISOString(),
 });
+
+const toAdminChange = (row: AdminChangeRow): StudentAdminChange => {
+  const club = { id: row.club_id, clubCode: row.club_code, name: row.club_name };
+  const at = row.created_at.toISOString();
+  switch (row.event_type) {
+    case 'admin_assign':
+      return row.from_club_id === null
+        ? { kind: 'assigned', club, at }
+        : {
+            kind: 'moved',
+            club,
+            fromClub: {
+              id: row.from_club_id,
+              clubCode: row.from_club_code,
+              name: row.from_club_name,
+            },
+            at,
+          };
+    case 'admin_remove':
+      return { kind: 'removed', club, at };
+    case 'waitlist_leave':
+      return { kind: 'waitlist_removed', club, at };
+  }
+};
 
 const toStudentClub = (row: StudentClubRow): StudentClub => ({
   id: row.id,
@@ -192,6 +231,42 @@ export const findWaitlist = async (
   return row ? toWaitlist(row) : null;
 };
 
+// What an admin last did to the student in the round (README Phase 4, P3), from the event log
+// like promotedFromWaitlist: the student's latest event in the round of any type, by id (one
+// transaction's events share created_at), and only then whether it is an admin's seat, move,
+// removal or waitlist removal. The order matters: picking the latest admin event instead would
+// keep the notice after the student's own register, cancel, change, join or leave, by which time
+// they know their state. A waitlist_promote is never one, whoever freed the seat (an admin's
+// remove or move promotes under the admin's id): promotedFromWaitlist tells it. A waitlist_leave
+// is the admin's only when someone other than the student wrote it (club-waitlist.ts); admin_*
+// events always have an admin actor, but the check costs nothing. The actor is compared in SQL
+// and never selected, so no admin id, name or login can reach the answer.
+export const findAdminChange = async (
+  db: Queryable,
+  roundId: number,
+  studentId: number,
+): Promise<StudentAdminChange | null> => {
+  const { rows } = await db.query<AdminChangeRow>(
+    `SELECT e.event_type, e.created_at,
+            c.id AS club_id, c.club_code, c.name AS club_name,
+            f.id AS from_club_id, f.club_code AS from_club_code, f.name AS from_club_name
+     FROM (
+       SELECT event_type, club_id, from_club_id, actor_id, student_id, created_at
+       FROM registration_events
+       WHERE round_id = $1 AND student_id = $2
+       ORDER BY id DESC
+       LIMIT 1
+     ) e
+     JOIN clubs c ON c.id = e.club_id
+     LEFT JOIN clubs f ON f.id = e.from_club_id
+     WHERE e.actor_id <> e.student_id
+       AND e.event_type IN ('admin_assign', 'admin_remove', 'waitlist_leave')`,
+    [roundId, studentId],
+  );
+  const row = rows[0];
+  return row ? toAdminChange(row) : null;
+};
+
 const listClubs = async (db: Queryable, roundId: number): Promise<StudentClub[]> => {
   const { rows } = await db.query<StudentClubRow>(
     `SELECT c.id, c.club_code, c.name, c.description, c.capacity, c.registered,
@@ -214,20 +289,22 @@ const readSelection = async (
 ): Promise<StudentRoundResponse> => {
   const grade = await findStudentGrade(db, studentId);
   const round = await selectStudentRound(db, grade, now);
-  if (!round) return { round: null, registration: null, waitlist: null };
+  if (!round) return { round: null, registration: null, waitlist: null, adminChange: null };
   return {
     round,
     registration: await findRegistration(db, round.id, studentId),
     waitlist: await findWaitlist(db, round.id, studentId),
+    adminChange: await findAdminChange(db, round.id, studentId),
   };
 };
 
 // Each read runs in one read-only snapshot, so the round, the student's registration, their
-// waitlist place and the club counts all describe the same moment, even while others write. The
-// round is picked, and its status decided, by the DB clock, as the writes and the queue's join
-// pick it (Q2): the web joins the queue when this says open, and the club list's gate below asks
-// for a ticket when it says open, so the three must never disagree about "open" at a window edge
-// (a web page told "open" by one and "not open" by the other would go round in circles).
+// waitlist place, what an admin last did and the club counts all describe the same moment, even
+// while others write. The round is picked, and its status decided, by the DB clock, as the writes
+// and the queue's join pick it (Q2): the web joins the queue when this says open, and the club
+// list's gate below asks for a ticket when it says open, so the three must never disagree about
+// "open" at a window edge (a web page told "open" by one and "not open" by the other would go
+// round in circles).
 export const readStudentRound = async (
   pool: pg.Pool,
   studentId: number,

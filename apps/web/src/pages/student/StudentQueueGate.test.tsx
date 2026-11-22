@@ -177,6 +177,7 @@ describe('clubs page behind the queue gate', () => {
               round: api.state.round,
               registration: null,
               waitlist: null,
+              adminChange: null,
               clubs: CLUBS,
             });
           },
@@ -218,6 +219,7 @@ describe('clubs page behind the queue gate', () => {
               round: api.state.round,
               registration: null,
               waitlist: null,
+              adminChange: null,
               clubs: CLUBS,
             });
           },

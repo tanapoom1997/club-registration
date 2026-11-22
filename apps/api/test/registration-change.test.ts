@@ -175,6 +175,7 @@ describe('student change of club', () => {
           registeredAt: (await registeredAtOf(studentId)).toISOString(),
           promotedFromWaitlist: false,
         },
+        adminChange: null,
       });
       expect(await heldClubs(studentId)).toEqual([toClub]);
       expect(await storedSeats(pool, fromClub)).toMatchObject({ registered: 0, rows: 0 });

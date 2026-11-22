@@ -292,7 +292,7 @@ describe('student waitlist', () => {
               return apiError(500, 'internal_error')();
             }
             api.state.waitlist = waitlistFor(MUSIC);
-            return Response.json({ waitlist: api.state.waitlist });
+            return Response.json({ waitlist: api.state.waitlist, adminChange: null });
           },
         },
       );
@@ -312,7 +312,10 @@ describe('student waitlist', () => {
     });
 
     it('says so when a replayed join finds the student no longer waiting', async () => {
-      mockStudentApi({}, { [`POST ${WAITLIST_PATH}`]: () => Response.json({ waitlist: null }) });
+      mockStudentApi(
+        {},
+        { [`POST ${WAITLIST_PATH}`]: () => Response.json({ waitlist: null, adminChange: null }) },
+      );
       await openClubsPage();
 
       confirmJoin(MUSIC.clubCode, MUSIC.name);
@@ -494,7 +497,7 @@ describe('student waitlist', () => {
               return networkFailure();
             }
             // The same key replays: the answer is the state now, not not_waitlisted.
-            return Response.json({ waitlist: null });
+            return Response.json({ waitlist: null, adminChange: null });
           },
         },
       );
@@ -647,7 +650,7 @@ describe('student waitlist', () => {
           [`POST ${WAITLIST_PATH}`]: () => {
             // The join went through, then a seat freed at once: the refetch shows the seat.
             api.state.registration = { ...registrationFor(MUSIC), promotedFromWaitlist: true };
-            return Response.json({ waitlist: waitlistFor(MUSIC) });
+            return Response.json({ waitlist: waitlistFor(MUSIC), adminChange: null });
           },
         },
       );
@@ -738,7 +741,7 @@ describe('student waitlist', () => {
           'POST /api/student/registration/cancel': () => {
             api.state.registration = promoted;
             api.state.waitlist = null;
-            return Response.json({ registration: promoted });
+            return Response.json({ registration: promoted, adminChange: null });
           },
         },
       );

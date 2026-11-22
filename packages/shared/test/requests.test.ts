@@ -16,9 +16,13 @@ import {
   joinWaitlistRequestSchema,
   leaveWaitlistRequestSchema,
   registerRequestSchema,
+  studentAdminChangeSchema,
   studentClubSchema,
+  studentClubsResponseSchema,
   studentQuerySchema,
+  studentRegistrationResponseSchema,
   studentRoundResponseSchema,
+  studentWaitlistResponseSchema,
   studentWaitlistSchema,
 } from '../src/student.js';
 
@@ -139,18 +143,23 @@ describe('student read responses', () => {
   });
 
   it('requires the waitlist, even as null', () => {
-    expect(studentRoundResponseSchema.safeParse({ round: null, registration: null }).success).toBe(
-      false,
-    );
     expect(
-      studentRoundResponseSchema.safeParse({ round: null, registration: null, waitlist: null })
+      studentRoundResponseSchema.safeParse({ round: null, registration: null, adminChange: null })
         .success,
+    ).toBe(false);
+    expect(
+      studentRoundResponseSchema.safeParse({
+        round: null,
+        registration: null,
+        waitlist: null,
+        adminChange: null,
+      }).success,
     ).toBe(true);
   });
 
   it('requires a registration to say whether it came from the waitlist', () => {
     const registration = { club: CLUB, registeredAt: '2026-12-01T01:05:00.000Z' };
-    const response = { round: null, waitlist: WAITLIST };
+    const response = { round: null, waitlist: WAITLIST, adminChange: null };
 
     expect(studentRoundResponseSchema.safeParse({ ...response, registration }).success).toBe(false);
     expect(
@@ -174,6 +183,88 @@ describe('student read responses', () => {
 
     expect(studentClubSchema.safeParse(club).success).toBe(false);
     expect(studentClubSchema.safeParse({ ...club, waitlistCount: 4 }).success).toBe(true);
+  });
+});
+
+// The notice of what an admin did (README Phase 4, P3). An api that does not send it must fail the
+// web app's parse rather than read as "no admin change".
+describe('studentAdminChangeSchema', () => {
+  const CLUB = { id: 3, clubCode: 'SMK03', name: 'ชุมนุมสมมติ' };
+  const FROM_CLUB = { id: 4, clubCode: 'SMK04', name: 'ชุมนุมสมมติ เดิม' };
+  const AT = '2026-12-01T02:15:00.000Z';
+  const EMPTY_ROUND = { round: null, registration: null, waitlist: null };
+
+  it.each(['assigned', 'removed', 'waitlist_removed'])('accepts %s with a club', (kind) => {
+    expect(studentAdminChangeSchema.safeParse({ kind, club: CLUB, at: AT }).success).toBe(true);
+  });
+
+  it('accepts a move with the club left', () => {
+    expect(
+      studentAdminChangeSchema.safeParse({ kind: 'moved', club: CLUB, fromClub: FROM_CLUB, at: AT })
+        .success,
+    ).toBe(true);
+  });
+
+  it('refuses a move that does not say which club was left', () => {
+    expect(studentAdminChangeSchema.safeParse({ kind: 'moved', club: CLUB, at: AT }).success).toBe(
+      false,
+    );
+  });
+
+  it('drops a club left from every other kind', () => {
+    const parsed = studentAdminChangeSchema.parse({
+      kind: 'assigned',
+      club: CLUB,
+      fromClub: FROM_CLUB,
+      at: AT,
+    });
+
+    expect(parsed).toEqual({ kind: 'assigned', club: CLUB, at: AT });
+  });
+
+  it.each([
+    ['an unknown kind', { kind: 'promoted', club: CLUB, at: AT }],
+    ['no club', { kind: 'removed', at: AT }],
+    ['no time', { kind: 'removed', club: CLUB }],
+    ['a time that is not ISO', { kind: 'removed', club: CLUB, at: '1 ธ.ค. 2569' }],
+  ])('refuses %s', (_case, change) => {
+    expect(studentAdminChangeSchema.safeParse(change).success).toBe(false);
+  });
+
+  // Whatever the admin record carries, a student never learns who made the change.
+  it('keeps no admin identity in what it parses', () => {
+    const parsed = studentAdminChangeSchema.parse({
+      kind: 'removed',
+      club: CLUB,
+      at: AT,
+      actorId: 9,
+      actor: { loginId: 'admin-fictional', fullName: 'ผู้ดูแลสมมติ' },
+    });
+
+    expect(Object.keys(parsed).sort()).toEqual(['at', 'club', 'kind']);
+  });
+
+  it('is required, even as null, by every student answer', () => {
+    const change = { kind: 'removed', club: CLUB, at: AT };
+
+    expect(studentRoundResponseSchema.safeParse(EMPTY_ROUND).success).toBe(false);
+    expect(
+      studentRoundResponseSchema.safeParse({ ...EMPTY_ROUND, adminChange: change }).success,
+    ).toBe(true);
+    expect(
+      studentClubsResponseSchema.safeParse({ ...EMPTY_ROUND, adminChange: null, clubs: [] })
+        .success,
+    ).toBe(true);
+    expect(studentClubsResponseSchema.safeParse({ ...EMPTY_ROUND, clubs: [] }).success).toBe(false);
+    expect(studentRegistrationResponseSchema.safeParse({ registration: null }).success).toBe(false);
+    expect(
+      studentRegistrationResponseSchema.safeParse({ registration: null, adminChange: null })
+        .success,
+    ).toBe(true);
+    expect(studentWaitlistResponseSchema.safeParse({ waitlist: null }).success).toBe(false);
+    expect(
+      studentWaitlistResponseSchema.safeParse({ waitlist: null, adminChange: change }).success,
+    ).toBe(true);
   });
 });
 

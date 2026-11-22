@@ -1,5 +1,8 @@
 import { ERROR_CODES } from '@club-registration/shared';
 import type {
+  AdminChangeKind,
+  RoundStatus,
+  StudentAdminChange,
   StudentClub,
   StudentClubsResponse,
   StudentRegistration,
@@ -21,6 +24,7 @@ import {
   registerForClub,
 } from '@/lib/api';
 import { refetchWhileOpen, untilNextStatusChange } from '@/lib/round-refetch';
+import { formatThaiDateTime } from '@/lib/thai-time';
 import { useSetSession } from '@/lib/session';
 
 const UNAUTHORIZED = 401;
@@ -69,7 +73,11 @@ export const isSeatFree = ({ remaining, waitlistCount }: StudentClub): boolean =
 // still sees the button they will get (disabled), as before; one holding a club sees none.
 export const clubOffer = (
   club: StudentClub,
-  { round, registration, waitlist }: Omit<StudentRoundResponse, 'round'> & { round: StudentRound },
+  {
+    round,
+    registration,
+    waitlist,
+  }: Pick<StudentRoundResponse, 'registration' | 'waitlist'> & { round: StudentRound },
 ): ClubOffer => {
   if (registration?.club.id === club.id || waitlist?.club.id === club.id) return 'none';
   if (registration && round.status !== 'open') return 'none';
@@ -188,6 +196,51 @@ const clubName = ({ clubCode, name }: { clubCode: string; name: string }) => `${
 // there after a reload too, and appears by itself when a poll brings the new seat.
 export const promotedNotice = (registration: StudentRegistration): string =>
   `ได้ที่ในชุมนุม ${clubName(registration.club)} จากรายชื่อรอแล้ว`;
+
+const AFTER_CLOSE = 'รอบนี้ปิดแล้ว ถ้ามีข้อสงสัยกรุณาติดต่อครูที่ดูแลการลงทะเบียน';
+
+// The notices of what an admin did to the student's seat or waitlist place (README Phase 4, P3).
+// Never who: the answer has no admin in it to name.
+const adminChangeSays = (change: StudentAdminChange): string => {
+  switch (change.kind) {
+    case 'assigned':
+      return `ผู้ดูแลระบบจัดให้คุณอยู่ชุมนุม ${clubName(change.club)}`;
+    case 'moved':
+      return `ผู้ดูแลระบบย้ายคุณจากชุมนุม ${clubName(change.fromClub)} ไปชุมนุม ${clubName(change.club)}`;
+    case 'removed':
+      return `ผู้ดูแลระบบนำคุณออกจากชุมนุม ${clubName(change.club)}`;
+    case 'waitlist_removed':
+      return `ผู้ดูแลระบบนำคุณออกจากรายชื่อรอของชุมนุม ${clubName(change.club)}`;
+  }
+};
+
+// After a removal, what the student can do now, by the round's status (admins fix closed rounds
+// too, PR 3a). A seat given needs nothing more.
+const ADMIN_CHANGE_NEXT: Readonly<Partial<Record<AdminChangeKind, Record<RoundStatus, string>>>> =
+  Object.freeze({
+    removed: {
+      open: 'ตอนนี้คุณยังไม่มีชุมนุมในรอบนี้ เลือกชุมนุมใหม่ได้ระหว่างที่รอบยังเปิดอยู่',
+      upcoming: 'ตอนนี้คุณยังไม่มีชุมนุมในรอบนี้ เลือกชุมนุมได้เมื่อรอบเปิด',
+      closed: AFTER_CLOSE,
+    },
+    waitlist_removed: {
+      open: 'ถ้ายังอยากได้ชุมนุมนี้ เข้ารายชื่อรอใหม่ได้ระหว่างที่รอบยังเปิดอยู่ (จะได้ลำดับท้ายคิว)',
+      upcoming: 'ถ้ายังอยากได้ชุมนุมนี้ เข้ารายชื่อรอใหม่ได้เมื่อรอบเปิด',
+      closed: AFTER_CLOSE,
+    },
+  });
+
+export const isAdminRemoval = ({ kind }: StudentAdminChange): boolean =>
+  kind === 'removed' || kind === 'waitlist_removed';
+
+// The whole notice as one sentence, so a screen reader reads it in one go: what, when (Thai
+// time) and, after a removal, what next. Only absolute values, so a poll that brings the same
+// answer leaves the text, and so the live region, untouched.
+export const adminChangeNotice = (change: StudentAdminChange, status: RoundStatus): string => {
+  const sentence = `${adminChangeSays(change)} เมื่อ ${formatThaiDateTime(change.at)} น.`;
+  const next = ADMIN_CHANGE_NEXT[change.kind];
+  return next ? `${sentence} ${next[status]}` : sentence;
+};
 
 // What a successful write says, from the answer rather than from the club the student picked: a
 // change or cancel can cascade (README Phase 2, "คำตอบหลัง promote") and a replayed key answers

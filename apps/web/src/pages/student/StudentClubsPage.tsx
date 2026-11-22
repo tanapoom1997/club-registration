@@ -10,6 +10,7 @@ import { formatThaiDateTime } from '@/lib/thai-time';
 import { cn } from '@/lib/utils';
 import { ClubCard } from './ClubCard';
 import type { ClubWrite } from './ClubCard';
+import { AdminChangeNotice } from './AdminChangeNotice';
 import { HeldClubCard } from './HeldClubCard';
 import { NoRound, RoundHeader, StudentLoadState } from './RoundHeader';
 import { PromotedNotice, WaitlistCard } from './WaitlistCard';
@@ -128,15 +129,17 @@ export const StudentClubsPage = () => {
 
   const headingRef = useRef<HTMLHeadingElement>(null);
   const promotedRef = useRef<HTMLParagraphElement>(null);
-  // A poll can remove the leave button or the join notice while it has focus.
-  const { element: leaveRef, ref: leaveButtonRef } = useFocusRescue<HTMLButtonElement>([
-    promotedRef,
-    headingRef,
-  ]);
-  const { element: noticeRef, ref: noticeElementRef } = useFocusRescue<HTMLParagraphElement>([
-    promotedRef,
-    headingRef,
-  ]);
+  const adminChangeRef = useRef<HTMLParagraphElement>(null);
+  // A poll can remove the leave button or the join notice while it has focus, and (an admin
+  // removed the seat) the link in the held club's card. The notice that explains why comes first:
+  // an admin's, else the promotion's.
+  const rescueTo = [adminChangeRef, promotedRef, headingRef];
+  const { element: leaveRef, ref: leaveButtonRef } = useFocusRescue<HTMLButtonElement>(rescueTo);
+  const { element: noticeRef, ref: noticeElementRef } =
+    useFocusRescue<HTMLParagraphElement>(rescueTo);
+  // On the line around the link: Link merges refs into one callback, which drops a callback ref's
+  // cleanup, and the cleanup is what tells the rescue that the link had focus.
+  const { ref: heldNoteRef } = useFocusRescue<HTMLParagraphElement>(rescueTo);
   const lastPanel = useRef<Target>(undefined);
   // A club card returns focus to its own button. After a write went through, that button (or the
   // waitlist card's) is gone, so focus goes to the notice saying what happened (or, when a join's
@@ -217,11 +220,13 @@ export const StudentClubsPage = () => {
                 </p>
               )}
           </div>
+          {/* Outside the queue gate: a student waiting for their turn reads the round only. */}
+          <AdminChangeNotice ref={adminChangeRef} adminChange={data.adminChange} round={round} />
           <PromotedNotice ref={promotedRef} registration={data.registration} />
           <FormError message={orphanError} />
           {data.registration && (
             <HeldClubCard registration={data.registration}>
-              <p className="text-sm">
+              <p ref={heldNoteRef} className="text-sm">
                 ลงได้ 1 ชุมนุมต่อรอบ
                 {/* The change buttons are on the club list, hidden while the student queues. */}
                 {round.status === 'open' &&

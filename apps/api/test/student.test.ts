@@ -176,6 +176,7 @@ describe('student read API', () => {
         },
         registration: null,
         waitlist: null,
+        adminChange: null,
       });
     });
 
@@ -240,7 +241,12 @@ describe('student read API', () => {
       const response = await get(ROUND_URL, token);
 
       expect(response.statusCode).toBe(200);
-      expect(response.json()).toEqual({ round: null, registration: null, waitlist: null });
+      expect(response.json()).toEqual({
+        round: null,
+        registration: null,
+        waitlist: null,
+        adminChange: null,
+      });
     });
 
     it("includes the student's registration in the selected round", async () => {
@@ -355,8 +361,8 @@ describe('student read API', () => {
         get(ROUND_URL, token),
       ]);
 
-      const { round, registration, waitlist, clubs } = clubsOf(clubsResponse);
-      expect({ round, registration, waitlist }).toEqual(roundOf(roundResponse));
+      const { round, registration, waitlist, adminChange, clubs } = clubsOf(clubsResponse);
+      expect({ round, registration, waitlist, adminChange }).toEqual(roundOf(roundResponse));
       expect(registration?.club.id).toBe(clubId);
       expect(clubs).toMatchObject([{ id: clubId, registered: 1, remaining: 29 }]);
     });
@@ -371,6 +377,7 @@ describe('student read API', () => {
         round: null,
         registration: null,
         waitlist: null,
+        adminChange: null,
         clubs: [],
       });
     });
