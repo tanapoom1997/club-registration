@@ -11,6 +11,7 @@ import type { AuthGuard } from '../auth/session.js';
 import { buildClassroomListPdf, buildClubListPdf } from '../export/name-list-pdf.js';
 import { buildClassroomListWorkbook, buildClubListWorkbook } from '../export/name-list-workbook.js';
 import { listRoundClassrooms, readClassroomLists, readClubLists } from '../services/name-lists.js';
+import type { QueueSettings } from '../services/queue.js';
 import type { ClassroomList, ClubList, ExportRound } from '../services/name-lists.js';
 
 type ListBuilder<T> = (
@@ -53,8 +54,17 @@ const attachmentName = (
 
 // Read-only: nothing here writes, so there is no idempotency_key and no registration_events row.
 // The files and the classroom list carry students' names, so logs get counts and scope only.
+// `settings` (the queue's) is for the round in the classroom list's answer (its queue counts).
 export const adminExportRoutes =
-  ({ pool, guard }: { pool: pg.Pool; guard: AuthGuard }): FastifyPluginAsyncZod =>
+  ({
+    pool,
+    guard,
+    settings,
+  }: {
+    pool: pg.Pool;
+    guard: AuthGuard;
+    settings: QueueSettings;
+  }): FastifyPluginAsyncZod =>
   // eslint-disable-next-line @typescript-eslint/require-await -- Fastify plugins must be async
   async (app) => {
     // preValidation, as for rounds: non-admins learn nothing about the schema from a 400.
@@ -69,7 +79,8 @@ export const adminExportRoutes =
           response: { 200: roundClassroomsResponseSchema },
         },
       },
-      async (request) => await listRoundClassrooms(pool, request.params.roundId, new Date()),
+      async (request) =>
+        await listRoundClassrooms(pool, request.params.roundId, { now: new Date(), settings }),
     );
 
     app.get(

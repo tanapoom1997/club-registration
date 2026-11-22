@@ -26,7 +26,8 @@ export type AdminAction = (typeof ADMIN_ACTIONS)[keyof typeof ADMIN_ACTIONS];
 
 // Ids, numbers, timestamps and field names only. No free text: a club's name and description
 // are written by admins and may name people, so a change to them is logged as the field name.
-type AuditValue = string | number | readonly string[] | readonly number[];
+// null is a value of its own (a round's maxActive null = no queue), logged as null, not dropped.
+type AuditValue = string | number | null | readonly string[] | readonly number[];
 
 export const logAdminChange = (
   request: FastifyRequest,

@@ -1,6 +1,7 @@
 import { MAX_ACTIVE_LIMIT } from '@club-registration/shared';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { QUEUE_SETTING_MESSAGES } from './round-ui';
 import type { WindowValues } from './round-ui';
 
 type RoundWindowFieldsProps = {
@@ -10,7 +11,7 @@ type RoundWindowFieldsProps = {
 };
 
 export const RoundWindowFields = ({ idPrefix, values, onChange }: RoundWindowFieldsProps) => {
-  const update = (field: keyof WindowValues) => (value: string) =>
+  const update = (field: 'opensAt' | 'closesAt' | 'maxActive') => (value: string) =>
     onChange({ ...values, [field]: value });
 
   return (
@@ -36,7 +37,7 @@ export const RoundWindowFields = ({ idPrefix, values, onChange }: RoundWindowFie
         />
       </div>
       <div className="space-y-1.5">
-        <Label htmlFor={`${idPrefix}-max-active`}>จำนวนคนเข้าเลือกพร้อมกันสูงสุด</Label>
+        <Label htmlFor={`${idPrefix}-max-active`}>{QUEUE_SETTING_MESSAGES.maxActiveLabel}</Label>
         <Input
           id={`${idPrefix}-max-active`}
           type="number"
@@ -44,9 +45,24 @@ export const RoundWindowFields = ({ idPrefix, values, onChange }: RoundWindowFie
           min={1}
           max={MAX_ACTIVE_LIMIT}
           value={values.maxActive}
+          // Disabled, not cleared: unticking "no queue" brings the typed number back.
+          disabled={values.noQueue}
           onChange={(event) => update('maxActive')(event.target.value)}
-          required
+          required={!values.noQueue}
         />
+        <label className="flex items-start gap-2 text-sm">
+          <input
+            type="checkbox"
+            className="mt-1"
+            checked={values.noQueue}
+            aria-describedby={`${idPrefix}-no-queue-help`}
+            onChange={(event) => onChange({ ...values, noQueue: event.target.checked })}
+          />
+          <span>{QUEUE_SETTING_MESSAGES.noQueueLabel}</span>
+        </label>
+        <p id={`${idPrefix}-no-queue-help`} className="text-sm text-muted-foreground">
+          {QUEUE_SETTING_MESSAGES.noQueueHelp}
+        </p>
       </div>
     </>
   );

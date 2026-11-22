@@ -8,16 +8,20 @@ import { dbIdBodySchema, roundSchema } from './rounds.js';
 export const studentQuerySchema = z.strictObject({});
 export type StudentQuery = z.infer<typeof studentQuerySchema>;
 
-// The admin round minus what only admins need: max_active is a queue setting and the totals are
-// summed over every club, which the club list already gives per club.
-export const studentRoundSchema = roundSchema.pick({
-  id: true,
-  term: true,
-  grade: true,
-  opensAt: true,
-  closesAt: true,
-  status: true,
-});
+// The admin round minus what only admins need: max_active is a queue setting, the queue counts are
+// the school's load, and the totals are summed over every club, which the club list already gives
+// per club. hasQueue is all a student learns of the queue setting: false = the round has no queue
+// (max_active NULL), so the page shows the list without queueing, and the queue answers queue_off.
+export const studentRoundSchema = roundSchema
+  .pick({
+    id: true,
+    term: true,
+    grade: true,
+    opensAt: true,
+    closesAt: true,
+    status: true,
+  })
+  .extend({ hasQueue: z.boolean() });
 export type StudentRound = z.infer<typeof studentRoundSchema>;
 
 // A club as a student's seat or waitlist entry names it.

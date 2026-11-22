@@ -88,9 +88,10 @@ export const StudentClubsPage = () => {
   const round = roundQuery.data?.round ?? null;
   const queue = useQueue(round);
   const turn = queueTurn(queue.view);
-  // The list only where the API gives it: a round that is not open (no queue), or the student's
-  // turn. Never while joining, waiting, or once the turn ended, which would only earn 403s.
-  const listAllowed = round !== null && (round.status !== 'open' || queue.view.kind === 'admitted');
+  // The list only where the API gives it: a round that is not open, or has no queue (Q4), where
+  // the queue is off, or the student's turn. Never while joining, waiting, or once the turn ended,
+  // which would only earn 403s.
+  const listAllowed = round !== null && showsClubs(queue.view);
   const clubsQuery = useQuery({
     queryKey: STUDENT_CLUBS_QUERY_KEY,
     queryFn: fetchStudentClubs,

@@ -61,8 +61,11 @@ import type { Promotion } from './waitlist-promote.js';
 // - a refusal leaves no event, like club_full, so the same key works once the student is back in
 //   their turn.
 //
-// The check is a plain read (hasAdmittedTicket in queue.ts), no queue lock, so a seat write keeps
-// holding its round lock only (round-lock.ts).
+// The check is a plain read (requireAdmittedTicket in queue.ts), no queue lock, so a seat write
+// keeps holding its round lock only (round-lock.ts). A round without a queue (max_active NULL, Q4)
+// lets every student through; the gate reads max_active in its own statement, after this
+// function's round lock, so an admin turning the queue on or off (under that same lock) is
+// ordered before or after the request as a whole, never in the middle of it.
 //
 // Clock: writes decide the window with the DB clock, statement_timestamp() of the writing
 // statement, which runs after the lock is held. A request that waited for the lock across

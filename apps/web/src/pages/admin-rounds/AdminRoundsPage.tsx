@@ -14,7 +14,14 @@ import { formatThaiDateTime } from '@/lib/thai-time';
 import { ConfirmPanel } from './ConfirmPanel';
 import { CreateRoundBatchForm, CreateRoundForm } from './CreateRoundForms';
 import { EditRoundForm } from './EditRoundForm';
-import { ROUNDS_QUERY_KEY, roundErrorMessage, useRoundMutation } from './round-ui';
+import {
+  QUEUE_SETTING_MESSAGES,
+  ROUNDS_POLL_INTERVAL_MS,
+  ROUNDS_QUERY_KEY,
+  roundErrorMessage,
+  roundsRefetchInterval,
+  useRoundMutation,
+} from './round-ui';
 
 const roundName = ({ term, grade }: Round) => `${term} ${gradeLabel(grade)}`;
 
@@ -36,6 +43,8 @@ const RoundsTable = ({ rounds, onEdit, onDelete }: RoundsTableProps) => (
         <TableHead className="text-right">ชุมนุม</TableHead>
         <TableHead className="text-right">ลงแล้ว / รับ</TableHead>
         <TableHead className="text-right">เข้าพร้อมกัน</TableHead>
+        <TableHead className="text-right">รอคิว</TableHead>
+        <TableHead className="text-right">ได้คิวแล้ว</TableHead>
         <TableHead>
           <span className="sr-only">จัดการ</span>
         </TableHead>
@@ -59,7 +68,12 @@ const RoundsTable = ({ rounds, onEdit, onDelete }: RoundsTableProps) => (
             <TableCell className="text-right whitespace-nowrap">
               {round.totalRegistered} / {round.totalCapacity}
             </TableCell>
-            <TableCell className="text-right">{round.maxActive}</TableCell>
+            <TableCell className="text-right whitespace-nowrap">
+              {round.maxActive ?? QUEUE_SETTING_MESSAGES.noQueueCell}
+            </TableCell>
+            {/* Live tickets now; a round without a queue may still have some left to expire. */}
+            <TableCell className="text-right">{round.queueWaiting}</TableCell>
+            <TableCell className="text-right">{round.queueAdmitted}</TableCell>
             <TableCell>
               <div className="flex justify-end gap-1">
                 <Button
@@ -100,6 +114,8 @@ export const AdminRoundsPage = () => {
   const roundsQuery = useQuery({
     queryKey: [...ROUNDS_QUERY_KEY, termFilter],
     queryFn: async () => await fetchRounds(termFilter === '' ? undefined : termFilter),
+    // The queue counts are live only while a round is open (round-ui.ts).
+    refetchInterval: (query) => roundsRefetchInterval(query.state.data),
   });
   const deleteMutation = useRoundMutation(async (round: Round) => await deleteRound(round.id));
 
@@ -133,6 +149,7 @@ export const AdminRoundsPage = () => {
         <h1 className="text-2xl font-bold">รอบลงทะเบียน</h1>
         <p className="text-sm text-muted-foreground">
           1 รอบต่อชั้นต่อภาคเรียน เวลาทั้งหมดเป็นเวลาประเทศไทย สถานะคำนวณจากเวลาของเซิร์ฟเวอร์
+          จำนวนรอคิวและได้คิวแล้วอัปเดตเองทุก {ROUNDS_POLL_INTERVAL_MS / 1000} วินาทีระหว่างที่มีรอบเปิดอยู่
         </p>
       </div>
 

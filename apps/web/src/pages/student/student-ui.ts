@@ -85,9 +85,11 @@ export const COMMON_ERRORS: Readonly<Record<string, string>> = Object.freeze({
 });
 
 const ROUND_NOT_OPEN = 'ตอนนี้ไม่อยู่ในช่วงเปิดลงทะเบียน (ยังไม่เปิดหรือปิดไปแล้ว)';
-// queue_required (Q2): the turn ended before the request reached the server. Shown only until the
-// page has read the ticket again and put the queue card back with its "join again" button.
-const QUEUE_REQUIRED = 'หมดเวลาคิวของคุณแล้ว จึงยังเลือกชุมนุมไม่ได้ กดเข้าคิวใหม่เพื่อเลือกต่อ';
+// queue_required (Q2): the turn ended before the request reached the server, or (Q4) an admin
+// turned the queue on while the student chose without one. Shown only until the page has read
+// the ticket or the round again and put the queue card back (with its "join again" button, or
+// joining by itself).
+const QUEUE_REQUIRED = 'ตอนนี้ต้องได้คิวก่อนจึงจะเลือกชุมนุมได้ (คิวของคุณหมดเวลา หรือรอบนี้เพิ่งเริ่มใช้คิว)';
 const CLUB_NOT_FOUND = 'ไม่พบชุมนุมนี้แล้ว รายการอาจเปลี่ยนไป กรุณาดูรายการล่าสุด';
 
 type WriteMessages = {

@@ -10,17 +10,25 @@ import type { Pool } from 'pg';
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { buildApp } from '../src/app.js';
 import { SESSION_COOKIE } from '../src/auth/session.js';
-import { DEFAULT_POOL_SETTINGS, createPool } from '../src/db.js';
-import { DEFAULT_QUEUE_SETTINGS } from '../src/services/queue.js';
+import { DEFAULT_POOL_SETTINGS, createPool, withTransaction } from '../src/db.js';
+import { AppError } from '../src/errors.js';
+import { DEFAULT_QUEUE_SETTINGS, requireAdmittedTicket } from '../src/services/queue.js';
+import type { QueueSettings } from '../src/services/queue.js';
+import { changeRegistration, registerForClub } from '../src/services/registrations.js';
+import type { AdmissionGate } from '../src/services/registrations.js';
+import { updateRound } from '../src/services/rounds.js';
+import { joinWaitlist } from '../src/services/waitlist.js';
 import { TEST_JWT_SECRET } from './support/app.js';
 import { createClub, uniqueCode } from './support/import-db.js';
 import {
   appConnectionUri,
+  endPoolFully,
   startMigratedPostgres,
   stopPostgres,
   truncateAsOwner,
 } from './support/postgres.js';
 import {
+  createAdminId,
   createOpenRound,
   createStudentId,
   createStudents,
@@ -51,6 +59,10 @@ const countBy = (responses: InjectResponse[]) =>
     const code = codeOf(response);
     return { ...counts, [code]: (counts[code] ?? 0) + 1 };
   }, {});
+
+// Tickets are admitted before each race and must outlast it: this file tests the round lock, not
+// ticket expiry, so a race slowed down by a busy CI machine must not idle them out.
+const QUEUE_SETTINGS: QueueSettings = { ...DEFAULT_QUEUE_SETTINGS, idleTimeoutSeconds: 3_600 };
 
 describe('registration under concurrency', () => {
   let container: StartedPostgreSqlContainer;
@@ -135,13 +147,7 @@ describe('registration under concurrency', () => {
   beforeEach(async () => {
     // A student writes to their grade's selected round, so each test starts with no rounds.
     await truncateAsOwner(container, ['rounds']);
-    // Tickets are admitted before each race and must outlast it: this file tests the round lock,
-    // not ticket expiry, so a race slowed down by a busy CI machine must not idle them out.
-    app = await buildApp({
-      pool,
-      jwtSecret: TEST_JWT_SECRET,
-      queue: { ...DEFAULT_QUEUE_SETTINGS, idleTimeoutSeconds: 3_600 },
-    });
+    app = await buildApp({ pool, jwtSecret: TEST_JWT_SECRET, queue: QUEUE_SETTINGS });
   });
 
   afterEach(async () => {
@@ -391,6 +397,126 @@ describe('registration under concurrency', () => {
       expect(rows[0]?.live).toBe(0);
     }, 60_000);
   });
+
+  // Q4 (README Phase 3 decision 6): an admin turns the queue off (max_active NULL) and on again
+  // while students register, change club and join a waitlist. Each request runs the student
+  // route's real gate, wrapped to record the max_active its own transaction sees at that moment
+  // (after the round lock, like the gate itself). The round edit writes max_active under the same
+  // round lock, so whatever a request saw there is the setting it was decided by: no queue = it
+  // went through to the seat rules, a queue = only a student in their turn did.
+  it('decides each seat request by the queue setting it ran under while an admin toggles it', async () => {
+    const roundId = await createOpenRound(pool);
+    const target = await createClub(pool, roundId, uniqueCode(), { capacity: 60 });
+    const held = await createClub(pool, roundId, uniqueCode(), { capacity: 50 });
+    const full = await createClub(pool, roundId, uniqueCode(), { capacity: 1 });
+    await seatStudent(pool, await createStudentId(pool), full);
+    const inTurn = await studentsInTurn(roundId, 40);
+    const outOfTurn = await createStudents(pool, 160);
+    const everyone = [...inTurn, ...outOfTurn];
+    // A quarter change from a club they hold, a quarter join the full club's waitlist, the rest
+    // register.
+    const kindOf = (index: number) =>
+      (['change', 'join', 'register', 'register'] as const)[index % 4]!;
+    for (const [index, studentId] of everyone.entries()) {
+      if (kindOf(index) === 'change') await seatStudent(pool, studentId, held);
+    }
+    const adminId = await createAdminId(pool);
+    const admitted = new Set(inTurn);
+
+    const runRequest = async (studentId: number, index: number) => {
+      let seen: number | null | undefined;
+      const realGate = requireAdmittedTicket(studentId, QUEUE_SETTINGS);
+      const gate: AdmissionGate = async (db, gatedRoundId) => {
+        const { rows } = await db.query<{ max_active: number | null }>(
+          'SELECT max_active FROM rounds WHERE id = $1',
+          [gatedRoundId],
+        );
+        seen = rows[0]?.max_active;
+        await realGate(db, gatedRoundId);
+      };
+      const kind = kindOf(index);
+      let code = 'ok';
+      try {
+        await withTransaction(pool, async (client) => {
+          const idempotencyKey = newKey();
+          if (kind === 'register') {
+            await registerForClub(client, { studentId, clubId: target, idempotencyKey }, gate);
+          } else if (kind === 'change') {
+            await changeRegistration(client, { studentId, clubId: target, idempotencyKey }, gate);
+          } else {
+            await joinWaitlist(client, { studentId, clubId: full, idempotencyKey }, gate);
+          }
+        });
+      } catch (error) {
+        if (!(error instanceof AppError)) throw error;
+        code = error.code;
+      }
+      return { studentId, kind, seen, code };
+    };
+
+    let racing = true;
+    const settingsSet: (number | null)[] = [];
+    // The admin's own connection, as another request would have: on the students' pool the edits
+    // would only get a client once the race had drained it.
+    const adminPool = createPool(appConnectionUri(container), { ...DEFAULT_POOL_SETTINGS, max: 1 });
+    const toggle = async () => {
+      // Alternates until every request has its answer, then leaves the queue on.
+      while (racing || settingsSet.at(-1) === null) {
+        const maxActive = settingsSet.at(-1) === null ? 500 : null;
+        await withTransaction(
+          adminPool,
+          async (client) =>
+            await updateRound(client, {
+              id: roundId,
+              changes: { maxActive },
+              actorId: adminId,
+              now: new Date(),
+              settings: QUEUE_SETTINGS,
+            }),
+        );
+        settingsSet.push(maxActive);
+      }
+    };
+    const toggling = toggle();
+    const results = await Promise.all(
+      [...everyone]
+        .map((studentId, index) => ({ studentId, index }))
+        .sort(() => Math.random() - 0.5)
+        .map(async ({ studentId, index }) => await runRequest(studentId, index)),
+    );
+    racing = false;
+    await toggling;
+    await endPoolFully(adminPool);
+
+    // Both settings were in force during the race, or the test proved nothing.
+    const seenSettings = new Set(results.map(({ seen }) => (seen === null ? 'off' : typeof seen)));
+    expect(seenSettings).toEqual(new Set(['off', 'number']));
+    for (const { studentId, kind, seen, code } of results) {
+      const passes = kind === 'join' ? ['ok'] : ['ok', 'club_full'];
+      if (seen === null || admitted.has(studentId)) expect(passes).toContain(code);
+      else expect(code).toBe('queue_required');
+    }
+    // Every ok, and nothing else, left its seat or entry behind.
+    const okFor = (kind: string) =>
+      results.filter((result) => result.kind === kind && result.code === 'ok');
+    const seatedInTarget = [...okFor('register'), ...okFor('change')].length;
+    expect(await storedSeats(pool, target)).toMatchObject({
+      registered: seatedInTarget,
+      rows: seatedInTarget,
+    });
+    for (const { studentId, kind, code } of results) {
+      const seat = await registrationOf(studentId);
+      if (kind === 'register') expect(seat).toEqual(code === 'ok' ? [target] : []);
+      if (kind === 'change') expect(seat).toEqual(code === 'ok' ? [target] : [held]);
+    }
+    const { rows } = await pool.query<{ student_id: number }>(
+      'SELECT student_id FROM waitlist_entries WHERE club_id = $1',
+      [full],
+    );
+    expect(new Set(rows.map(({ student_id: id }) => id))).toEqual(
+      new Set(okFor('join').map(({ studentId }) => studentId)),
+    );
+  }, 120_000);
 
   describe('changing club', () => {
     it('moves exactly as many students as there are free seats; the rest stay put', async () => {

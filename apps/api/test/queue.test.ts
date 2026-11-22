@@ -465,6 +465,124 @@ describe('student queue', () => {
     });
   });
 
+  // README Phase 3 decision 6 (Q4): max_active NULL = the round has no queue. The page then shows
+  // the list without queueing; join and heartbeat say so with queue_off, and tickets left from
+  // when the queue was on are not touched: they expire on their own.
+  describe('a round without a queue', () => {
+    const lastSeenOf = async (studentId: number) => (await storedRow(studentId)).last_seen_at;
+
+    it('answers a join with 409 queue_off and writes no ticket', async () => {
+      const roundId = await createOpenRound(pool);
+      await setMaxActive(pool, roundId, null);
+      const studentId = await createStudentId(pool);
+
+      const response = await join(studentId);
+
+      expect(response.statusCode).toBe(409);
+      expect(errorOf(response).code).toBe('queue_off');
+      expect(await ticketsOf(pool, studentId)).toEqual([]);
+      expect(logLines.join('\n')).toContain('"outcome":"queue_off"');
+    });
+
+    it('answers a join with queue_off even for a student whose ticket is still live', async () => {
+      const { roundId, students } = await queueOfStudents(1, 5);
+      await setMaxActive(pool, roundId, null);
+
+      const response = await join(students[0]!);
+
+      expect(errorOf(response).code).toBe('queue_off');
+      expect(await statusCounts(pool, roundId)).toEqual({ admitted: 1 });
+    });
+
+    it('answers a heartbeat with queue_off and leaves the ticket as it was', async () => {
+      const { roundId, students } = await queueOfStudents(1, 5);
+      const before = await lastSeenOf(students[0]!);
+      await setMaxActive(pool, roundId, null);
+
+      const response = await heartbeat(students[0]!);
+
+      expect(response.statusCode).toBe(409);
+      expect(errorOf(response).code).toBe('queue_off');
+      expect(await lastSeenOf(students[0]!)).toEqual(before);
+    });
+
+    it('still reads and releases a ticket left from when the queue was on', async () => {
+      const { roundId, students } = await queueOfStudents(1, 5);
+      await setMaxActive(pool, roundId, null);
+      const studentId = students[0]!;
+
+      const shown = await read(studentId);
+      const released = await done(studentId);
+      const again = await done(studentId);
+
+      expect(queueOf(shown)).toEqual({
+        round: expect.objectContaining({ id: roundId, hasQueue: false }) as unknown,
+        ticket: { status: 'admitted', admittedUntil: ANY_TIME },
+      });
+      expect(ticketOf(released)).toEqual({ status: 'done' });
+      expect(ticketOf(again)).toEqual({ status: 'done' });
+    });
+
+    it('says whether the round has a queue on every student read, and nothing more', async () => {
+      const roundId = await createOpenRound(pool);
+      const studentId = await createStudentId(pool);
+      await setMaxActive(pool, roundId, null);
+
+      const responses = [
+        await send('GET', '/api/student/round', studentId),
+        await send('GET', '/api/student/clubs', studentId),
+        await read(studentId),
+      ];
+      await setMaxActive(pool, roundId, 5);
+      const roundRead = await send('GET', '/api/student/round', studentId);
+
+      for (const response of responses) {
+        expect(response.statusCode).toBe(200);
+        const round = response.json<{ round: Record<string, unknown> }>().round;
+        expect(round).toMatchObject({ id: roundId, hasQueue: false });
+        expect(round).not.toHaveProperty('maxActive');
+        expect(round).not.toHaveProperty('queueWaiting');
+      }
+      expect(studentRoundResponseSchema.parse(roundRead.json()).round?.hasQueue).toBe(true);
+    });
+
+    it('resumes in queue order when the queue is turned back on', async () => {
+      const { roundId, students } = await queueOfStudents(3, 1);
+      const [first, second, third] = students;
+      await setMaxActive(pool, roundId, null);
+      await done(first!);
+      expect(errorOf(await heartbeat(second!)).code).toBe('queue_off');
+      expect(errorOf(await join(third!)).code).toBe('queue_off');
+
+      await setMaxActive(pool, roundId, 1);
+      const thirdBeat = await heartbeat(third!);
+
+      // The third's heartbeat fills the slot the first freed, with the one ahead of it.
+      expect(ticketOf(thirdBeat)).toEqual({ status: 'waiting', position: 1 });
+      expect(ticketOf(await read(second!))).toEqual({
+        status: 'admitted',
+        admittedUntil: ANY_TIME,
+      });
+      expect(await statusCounts(pool, roundId)).toEqual({ admitted: 1, done: 1, waiting: 1 });
+    });
+
+    it('lets tickets idle while the queue was off expire, and a new join queue at the back', async () => {
+      const { roundId, students } = await queueOfStudents(2, 1);
+      const [first, second] = students;
+      await setMaxActive(pool, roundId, null);
+      await rewindTickets(container, [second!], { lastSeenSeconds: IDLE + 1 });
+      await setMaxActive(pool, roundId, 1);
+      const newcomer = await createStudentId(pool);
+
+      const joined = await join(newcomer);
+
+      expect(ticketOf(joined)).toEqual({ status: 'waiting', position: 1 });
+      expect(errorOf(await heartbeat(second!)).code).toBe('not_in_queue');
+      expect(ticketOf(await join(second!))).toEqual({ status: 'waiting', position: 2 });
+      expect(ticketOf(await read(first!))).toEqual({ status: 'admitted', admittedUntil: ANY_TIME });
+    });
+  });
+
   describe('hasAdmittedTicket', () => {
     it('is true only for a live admitted ticket of that student in that round', async () => {
       const { roundId, students } = await queueOfStudents(3, 2);

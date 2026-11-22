@@ -1,4 +1,4 @@
-import { updateRoundRequestSchema } from '@club-registration/shared';
+import { DEFAULT_MAX_ACTIVE, updateRoundRequestSchema } from '@club-registration/shared';
 import type { Round, UpdateRoundRequest } from '@club-registration/shared';
 import { useState } from 'react';
 import type { FormEvent } from 'react';
@@ -10,13 +10,15 @@ import { isoToThaiInput } from '@/lib/thai-time';
 import { ConfirmPanel } from './ConfirmPanel';
 import { RoundWindowFields } from './RoundWindowFields';
 import { gradeLabel } from '@/lib/round-display';
-import { roundErrorMessage, useRoundMutation, windowFromValues } from './round-ui';
+import { queueEditNotes, roundErrorMessage, useRoundMutation, windowFromValues } from './round-ui';
 import type { WindowValues } from './round-ui';
 
 const valuesOf = (round: Round): WindowValues => ({
   opensAt: isoToThaiInput(round.opensAt),
   closesAt: isoToThaiInput(round.closesAt),
-  maxActive: String(round.maxActive),
+  // A round without a queue offers the default, should the admin turn the queue on.
+  maxActive: String(round.maxActive ?? DEFAULT_MAX_ACTIVE),
+  noQueue: round.maxActive === null,
 });
 
 type EditRoundFormProps = { round: Round; onDone: () => void };
@@ -55,6 +57,8 @@ export const EditRoundForm = ({ round, onDone }: EditRoundFormProps) => {
   };
 
   const title = `แก้ไขรอบ ${round.term} ${gradeLabel(round.grade)}`;
+  // From the live round (the list polls while it is open), so the admitted count is current.
+  const notes = queueEditNotes(round, values);
   const errorMessage =
     validationError ?? (mutation.isError ? roundErrorMessage(mutation.error) : undefined);
 
@@ -76,10 +80,18 @@ export const EditRoundForm = ({ round, onDone }: EditRoundFormProps) => {
           noValidate
         >
           <RoundWindowFields idPrefix="edit" values={values} onChange={setValues} />
+          {/* Mounted always, so a note that appears while the admin types is read out. */}
+          <div aria-live="polite" className="space-y-2">
+            {notes.map((note) => (
+              <p key={note} className="text-sm font-medium text-warning-foreground">
+                {note}
+              </p>
+            ))}
+          </div>
           <FormError message={errorMessage} />
           {pendingChange ? (
             <ConfirmPanel
-              message="รอบนี้เปิดให้ลงทะเบียนอยู่ การเปลี่ยนเวลาจะมีผลกับนักเรียนทันที ยืนยันบันทึกหรือไม่"
+              message="รอบนี้เปิดให้ลงทะเบียนอยู่ การแก้ไขจะมีผลกับนักเรียนทันที ยืนยันบันทึกหรือไม่"
               confirmLabel="ยืนยันบันทึก"
               cancelLabel="ยังไม่บันทึก"
               pending={mutation.isPending}

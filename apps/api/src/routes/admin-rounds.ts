@@ -13,6 +13,7 @@ import { requireAuthUser } from '../auth/session.js';
 import type { AuthGuard } from '../auth/session.js';
 import { withTransaction } from '../db.js';
 import { ADMIN_ACTIONS, logAdminChange, sentFields } from '../http/audit-log.js';
+import type { QueueSettings } from '../services/queue.js';
 import {
   createRound,
   createRoundBatch,
@@ -28,9 +29,20 @@ import {
 // (open or upcoming) also promotes waiters into its free seats in the same transaction
 // (updateRound): those are waitlist_promote events with this admin as actor and no key, and a
 // retry promotes nobody more, since the seats are already taken. Its log line names the
-// promotions by count and student id.
+// promotions by count and student id. maxActive null (a round without a queue) is logged as null,
+// so the line says the queue was turned off rather than leaving the field out. `settings` is the
+// queue's (QueueSettings from env), so the rounds' queue counts use the queue's own idea of a
+// live ticket.
 export const adminRoundRoutes =
-  ({ pool, guard }: { pool: pg.Pool; guard: AuthGuard }): FastifyPluginAsyncZod =>
+  ({
+    pool,
+    guard,
+    settings,
+  }: {
+    pool: pg.Pool;
+    guard: AuthGuard;
+    settings: QueueSettings;
+  }): FastifyPluginAsyncZod =>
   // eslint-disable-next-line @typescript-eslint/require-await -- Fastify plugins must be async
   async (app) => {
     // A hook on this encapsulated plugin covers every route below, so none can be left open.
@@ -43,14 +55,16 @@ export const adminRoundRoutes =
       {
         schema: { querystring: listRoundsQuerySchema, response: { 200: roundListResponseSchema } },
       },
-      async (request) => ({ rounds: await listRounds(pool, request.query, new Date()) }),
+      async (request) => ({
+        rounds: await listRounds(pool, request.query, { now: new Date(), settings }),
+      }),
     );
 
     app.post(
       '/admin/rounds',
       { schema: { body: createRoundRequestSchema, response: { 201: roundResponseSchema } } },
       async (request, reply) => {
-        const round = await createRound(pool, request.body, new Date());
+        const round = await createRound(pool, request.body, { now: new Date(), settings });
         const { id: roundId, term, grade, opensAt, closesAt, maxActive } = round;
         logAdminChange(request, ADMIN_ACTIONS.roundCreate, {
           roundId,
@@ -70,7 +84,7 @@ export const adminRoundRoutes =
         schema: { body: createRoundBatchRequestSchema, response: { 201: roundListResponseSchema } },
       },
       async (request, reply) => {
-        const rounds = await createRoundBatch(pool, request.body, new Date());
+        const rounds = await createRoundBatch(pool, request.body, { now: new Date(), settings });
         const { term, opensAt, closesAt, maxActive } = request.body;
         // The body may carry any offset (+07:00); the other round lines log the stored UTC form,
         // so one search finds a window whichever route set it.
@@ -104,6 +118,7 @@ export const adminRoundRoutes =
               changes: request.body,
               actorId,
               now: new Date(),
+              settings,
             }),
         );
         const { id: roundId, opensAt, closesAt, maxActive } = round;

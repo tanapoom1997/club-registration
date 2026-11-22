@@ -119,13 +119,13 @@ export const buildApp = async ({
   const guard = createAuthGuard(pool);
   await app.register(healthRoutes(pool), { prefix: '/api' });
   await app.register(authRoutes({ pool, guard }), { prefix: '/api' });
-  await app.register(adminRoundRoutes({ pool, guard }), { prefix: '/api' });
-  await app.register(adminClubRoutes({ pool, guard }), { prefix: '/api' });
+  await app.register(adminRoundRoutes({ pool, guard, settings: queue }), { prefix: '/api' });
+  await app.register(adminClubRoutes({ pool, guard, settings: queue }), { prefix: '/api' });
   await app.register(adminClubMemberRoutes({ pool, guard }), { prefix: '/api' });
   await app.register(adminEventRoutes({ pool, guard }), { prefix: '/api' });
   await app.register(adminImportRoutes({ pool, guard }), { prefix: '/api' });
   await app.register(adminStudentRoutes({ pool, guard }), { prefix: '/api' });
-  await app.register(adminExportRoutes({ pool, guard }), { prefix: '/api' });
+  await app.register(adminExportRoutes({ pool, guard, settings: queue }), { prefix: '/api' });
   await app.register(studentRoutes({ pool, guard, queue }), { prefix: '/api' });
   await app.register(studentQueueRoutes({ pool, guard, settings: queue }), { prefix: '/api' });
 

@@ -6,6 +6,7 @@ import type { Queryable } from '../db.js';
 import { AppError } from '../errors.js';
 import { compareClassrooms } from './classroom-order.js';
 import { ADVISOR_NAMES_JOIN } from './clubs.js';
+import type { QueueSettings } from './queue.js';
 import { findRound } from './rounds.js';
 
 // Name lists for teachers (docs/excel.md "Export รายชื่อ"). Each export reads everything in one read-only
@@ -223,10 +224,10 @@ type ClassroomCountRow = { classroom: string; student_count: number; registered_
 export const listRoundClassrooms = async (
   pool: pg.Pool,
   roundId: number,
-  now: Date,
+  at: { now: Date; settings: QueueSettings },
 ): Promise<RoundClassroomsResponse> =>
   await withReadOnlySnapshot(pool, async (client) => {
-    const round = await findRound(client, roundId, now);
+    const round = await findRound(client, roundId, at);
     if (!round) throw new AppError(ERROR_CODES.notFound, 'Round not found');
     const { rows } = await client.query<ClassroomCountRow>(
       `SELECT sp.classroom,

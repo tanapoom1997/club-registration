@@ -217,6 +217,53 @@ describe('queue gate on the student routes', () => {
     expect(await queueInvariantViolations(pool)).toEqual([]);
   });
 
+  // README Phase 3 decision 6 (Q4): a round without a queue (max_active NULL) gates nothing.
+  describe.each(GATED_ROUTES)('%s in an open round without a queue', (route) => {
+    it('goes through without any ticket', async () => {
+      const { roundId, studentId, send } = await stage(route);
+      await setMaxActive(pool, roundId, null);
+      const before = await footprint(roundId, studentId);
+
+      const response = await send();
+
+      expect(codeOf(response)).toBe('ok');
+      const after = await footprint(roundId, studentId);
+      if (route === 'clubs') {
+        expect(response.json()).toMatchObject({ round: { id: roundId, hasQueue: false } });
+        expect(after).toEqual(before);
+      } else {
+        expect(after.events).toBe(before.events + 1);
+      }
+    });
+
+    it('asks for a turn again once the queue is back on', async () => {
+      const { roundId, studentId, send } = await stage(route);
+      await setMaxActive(pool, roundId, null);
+      await setMaxActive(pool, roundId, 5);
+      const before = await footprint(roundId, studentId);
+
+      const response = await send();
+
+      expect(response.statusCode).toBe(403);
+      expect(codeOf(response)).toBe('queue_required');
+      expect(await footprint(roundId, studentId)).toEqual(before);
+    });
+  });
+
+  describe.each(GATED_WRITES)('%s in a closed round without a queue', (route) => {
+    it('still answers round_not_open', async () => {
+      const { roundId, studentId, send } = await stage(route);
+      await setMaxActive(pool, roundId, null);
+      await moveWindow(pool, roundId, { opensInSeconds: -7_200, closesInSeconds: -3_600 });
+      const before = await footprint(roundId, studentId);
+
+      const response = await send();
+
+      expect(codeOf(response)).toBe('round_not_open');
+      expect(await footprint(roundId, studentId)).toEqual(before);
+    });
+  });
+
   describe.each(GATED_ROUTES)('%s in an open round', (route) => {
     it.each(TICKETS_WITHOUT_TURN)(
       'answers 403 queue_required with %s, and changes nothing',

@@ -12,6 +12,7 @@ import type { AuthGuard } from '../auth/session.js';
 import { withTransaction } from '../db.js';
 import { ADMIN_ACTIONS, logAdminChange, sentFields } from '../http/audit-log.js';
 import { listRoundClubs, updateClub } from '../services/clubs.js';
+import type { QueueSettings } from '../services/queue.js';
 
 // Same convention as the round routes: a club edit takes no idempotency_key and writes no event of
 // its own (registration_events rows need a student). A retried PATCH sets the same values again.
@@ -22,8 +23,18 @@ import { listRoundClubs, updateClub } from '../services/clubs.js';
 // and nothing is left to promote. Responses carry advisors' contact details, so the only log line
 // is logAdminChange's, with ids, field names, the capacity and the promotions (count and student
 // ids): never a club's text, an advisor or a student's name.
+// `settings` (the queue's) is for the round in the list's answer, whose queue counts use the
+// queue's own idea of a live ticket.
 export const adminClubRoutes =
-  ({ pool, guard }: { pool: pg.Pool; guard: AuthGuard }): FastifyPluginAsyncZod =>
+  ({
+    pool,
+    guard,
+    settings,
+  }: {
+    pool: pg.Pool;
+    guard: AuthGuard;
+    settings: QueueSettings;
+  }): FastifyPluginAsyncZod =>
   // eslint-disable-next-line @typescript-eslint/require-await -- Fastify plugins must be async
   async (app) => {
     // preValidation, as for rounds: non-admins learn nothing about the schema from a 400.
@@ -34,7 +45,8 @@ export const adminClubRoutes =
       {
         schema: { params: roundClubsParamsSchema, response: { 200: roundClubsResponseSchema } },
       },
-      async (request) => await listRoundClubs(pool, request.params.roundId, new Date()),
+      async (request) =>
+        await listRoundClubs(pool, request.params.roundId, { now: new Date(), settings }),
     );
 
     app.patch(

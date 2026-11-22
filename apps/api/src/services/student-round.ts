@@ -25,6 +25,7 @@ type StudentRoundRow = {
   grade: number;
   opens_at: Date;
   closes_at: Date;
+  has_queue: boolean;
 };
 
 export type RegistrationRow = {
@@ -63,6 +64,7 @@ const toStudentRound = (row: StudentRoundRow, now: Date): StudentRound => ({
   opensAt: row.opens_at.toISOString(),
   closesAt: row.closes_at.toISOString(),
   status: roundStatusAt({ opensAt: row.opens_at, closesAt: row.closes_at }, now),
+  hasQueue: row.has_queue,
 });
 
 export const toRegistration = (row: RegistrationRow): StudentRegistration => ({
@@ -127,7 +129,7 @@ export const selectStudentRound = async (
   now: Date,
 ): Promise<StudentRound | undefined> => {
   const { rows } = await db.query<StudentRoundRow>(
-    `SELECT r.id, r.term, r.grade, r.opens_at, r.closes_at
+    `SELECT r.id, r.term, r.grade, r.opens_at, r.closes_at, r.max_active IS NOT NULL AS has_queue
      FROM rounds r
      WHERE r.grade = $1
      ORDER BY ${roundSelectionOrder('$2::timestamptz', 'r')}
@@ -238,7 +240,9 @@ export const readStudentRound = async (
 // The club list is what a queue turn is for (README Phase 3, decision 1): while the round is open
 // by that same DB clock, `gate` must pass (403 queue_required without a live admitted ticket).
 // An upcoming or closed round, or none at all, is listed to anyone, as before the queue: nothing
-// can be taken from it.
+// can be taken from it. So is a round without a queue (max_active NULL, Q4): hasQueue comes from
+// the same REPEATABLE READ snapshot as the gate's own read of max_active, so the answer's
+// hasQueue and whether the list was gated always agree, whatever an admin commits meanwhile.
 export const listStudentClubs = async (
   pool: pg.Pool,
   studentId: number,
@@ -246,7 +250,9 @@ export const listStudentClubs = async (
 ): Promise<StudentClubsResponse> =>
   await withReadOnlySnapshot(pool, async (client) => {
     const selection = await readSelection(client, studentId, await dbNow(client));
-    if (selection.round?.status === 'open') await gate(client, selection.round.id);
+    if (selection.round?.status === 'open' && selection.round.hasQueue) {
+      await gate(client, selection.round.id);
+    }
     const clubs = selection.round ? await listClubs(client, selection.round.id) : [];
     return { ...selection, clubs };
   });

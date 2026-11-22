@@ -34,6 +34,10 @@ export const maxActiveSchema = z
   .min(1, 'จำนวนคนเข้าพร้อมกันต้องมากกว่า 0')
   .max(MAX_ACTIVE_LIMIT, `จำนวนคนเข้าพร้อมกันต้องไม่เกิน ${MAX_ACTIVE_LIMIT}`);
 
+// null = the round has no queue (README Phase 3 decision 6): its students choose clubs without a
+// turn. Always sent on a create, so a round never loses its queue by a field left out.
+const roundMaxActiveSchema = maxActiveSchema.nullable();
+
 const CLOSES_AFTER_OPENS = { message: 'เวลาปิดต้องอยู่หลังเวลาเปิด', path: ['closesAt'] };
 
 type Window = { opensAt?: string | undefined; closesAt?: string | undefined };
@@ -60,7 +64,7 @@ export const createRoundRequestSchema = z
     grade: gradeSchema,
     opensAt: instantSchema,
     closesAt: instantSchema,
-    maxActive: maxActiveSchema,
+    maxActive: roundMaxActiveSchema,
   })
   .refine(closesAfterOpens, CLOSES_AFTER_OPENS);
 export type CreateRoundRequest = z.infer<typeof createRoundRequestSchema>;
@@ -71,18 +75,19 @@ export const createRoundBatchRequestSchema = z
     term: termSchema,
     opensAt: instantSchema,
     closesAt: instantSchema,
-    maxActive: maxActiveSchema,
+    maxActive: roundMaxActiveSchema,
   })
   .refine(closesAfterOpens, CLOSES_AFTER_OPENS);
 export type CreateRoundBatchRequest = z.infer<typeof createRoundBatchRequestSchema>;
 
 // Strict so a request trying to move a round to another term or grade fails instead of
 // half-succeeding. A window given only partly is checked against the stored half by the DB.
+// maxActive left out keeps the stored value; null turns the queue off (and counts as a change).
 export const updateRoundRequestSchema = z
   .strictObject({
     opensAt: instantSchema.optional(),
     closesAt: instantSchema.optional(),
-    maxActive: maxActiveSchema.optional(),
+    maxActive: roundMaxActiveSchema.optional(),
   })
   .refine(
     ({ opensAt, closesAt, maxActive }) =>
@@ -99,12 +104,18 @@ export const roundSchema = z.object({
   // Always UTC on the wire; the web app converts to Thai time for display.
   opensAt: z.iso.datetime(),
   closesAt: z.iso.datetime(),
-  maxActive: z.number().int(),
+  // null = no queue.
+  maxActive: z.number().int().nullable(),
   // Derived from server time when the response is built, never stored.
   status: roundStatusSchema,
   clubCount: z.number().int().nonnegative(),
   totalCapacity: z.number().int().nonnegative(),
   totalRegistered: z.number().int().nonnegative(),
+  // The round's live queue tickets now (DB clock, the queue's own definition of live): waiting,
+  // and let in to choose. Tickets left from before the queue was turned off still count until they
+  // expire.
+  queueWaiting: z.number().int().nonnegative(),
+  queueAdmitted: z.number().int().nonnegative(),
 });
 export type Round = z.infer<typeof roundSchema>;
 

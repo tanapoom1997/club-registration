@@ -12,6 +12,7 @@ const ROUND = {
   opensAt: '2026-12-01T01:00:00.000Z',
   closesAt: '2026-12-01T05:00:00.000Z',
   status: 'open',
+  hasQueue: true,
 } as const;
 
 // The student and their round come from the session (CLAUDE.md rule 5), and the place in the
@@ -65,12 +66,19 @@ describe('queue responses', () => {
     expect(studentQueueResponseSchema.safeParse({ round: ROUND }).success).toBe(false);
   });
 
-  it('carries no admin-only round field such as maxActive', () => {
+  it('carries no admin-only round field such as maxActive or the queue counts', () => {
     const parsed = studentQueueResponseSchema.parse({
-      round: { ...ROUND, maxActive: 150 },
+      round: { ...ROUND, maxActive: 150, queueWaiting: 40, queueAdmitted: 150 },
       ticket: { status: 'waiting', position: 3 },
     });
 
     expect(parsed.round).toEqual(ROUND);
+  });
+
+  // The one thing a student learns of the setting: whether the round queues at all.
+  it('refuses a round without hasQueue', () => {
+    const round = Object.fromEntries(Object.entries(ROUND).filter(([key]) => key !== 'hasQueue'));
+
+    expect(studentQueueResponseSchema.safeParse({ round, ticket: null }).success).toBe(false);
   });
 });
