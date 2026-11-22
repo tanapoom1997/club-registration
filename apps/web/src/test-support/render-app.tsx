@@ -1,5 +1,6 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { render } from '@testing-library/react';
+import { StrictMode } from 'react';
 import { createMemoryRouter, RouterProvider } from 'react-router';
 import { vi } from 'vitest';
 import { routes } from '@/routes';
@@ -24,14 +25,16 @@ export const mockApi = (handlers: Record<string, Handler>) => {
 export const unauthorized = () =>
   Response.json({ code: 'unauthorized', message: 'Authentication required' }, { status: 401 });
 
-// Mounts the real route tree, so tests exercise the same guards and layout as the app.
-export const renderAt = (path: string) => {
+// Mounts the real route tree, so tests exercise the same guards and layout as the app. strict
+// wraps it in StrictMode as main.tsx does, for what must hold when effects run twice.
+export const renderAt = (path: string, { strict = false } = {}) => {
   const router = createMemoryRouter(routes, { initialEntries: [path] });
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-  render(
+  const app = (
     <QueryClientProvider client={queryClient}>
       <RouterProvider router={router} />
-    </QueryClientProvider>,
+    </QueryClientProvider>
   );
+  render(strict ? <StrictMode>{app}</StrictMode> : app);
   return router;
 };

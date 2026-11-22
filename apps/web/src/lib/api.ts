@@ -16,6 +16,7 @@ import {
   roundResponseSchema,
   sessionResponseSchema,
   studentClubsResponseSchema,
+  studentQueueResponseSchema,
   studentRegistrationResponseSchema,
   studentRoundResponseSchema,
   studentWaitlistResponseSchema,
@@ -48,6 +49,7 @@ import type {
   RoundClubsResponse,
   SessionUser,
   StudentClubsResponse,
+  StudentQueueResponse,
   StudentRegistrationResponse,
   StudentRoundResponse,
   StudentWaitlistResponse,
@@ -376,3 +378,26 @@ export const leaveWaitlist = async (
   request: LeaveWaitlistRequest,
 ): Promise<StudentWaitlistResponse> =>
   await sendJson('/api/student/waitlist/leave', 'POST', studentWaitlistResponseSchema, request);
+
+// The queue in front of the round (README Phase 3). The bodies are the strict empty object the
+// API requires: a JSON body, never a form, so a cross-site page cannot send one. Join and done are
+// idempotent by design (no key): joining again answers the live ticket, done again answers done.
+const QUEUE_WRITE_BODY = Object.freeze({});
+
+export const joinQueue = async (): Promise<StudentQueueResponse> =>
+  await sendJson('/api/student/queue/join', 'POST', studentQueueResponseSchema, QUEUE_WRITE_BODY);
+
+export const queueHeartbeat = async (): Promise<StudentQueueResponse> =>
+  await sendJson(
+    '/api/student/queue/heartbeat',
+    'POST',
+    studentQueueResponseSchema,
+    QUEUE_WRITE_BODY,
+  );
+
+export const releaseQueue = async (): Promise<StudentQueueResponse> =>
+  await sendJson('/api/student/queue/done', 'POST', studentQueueResponseSchema, QUEUE_WRITE_BODY);
+
+// A read only: not counted as being present, so it never keeps a ticket alive.
+export const fetchQueue = async (): Promise<StudentQueueResponse> =>
+  await sendJson('/api/student/queue', 'GET', studentQueueResponseSchema);

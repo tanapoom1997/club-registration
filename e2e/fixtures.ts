@@ -87,3 +87,21 @@ export const ADMIN_WAITLIST_CLUB = { code: 'E2E08', name: 'ชุมนุมส
 // The event log page: a student registers here, then the admin finds the event by their code.
 export const EVENT_LOG_CLUB = { code: 'E2E09', name: 'ชุมนุมสมมติ ประวัติ', capacity: 2 };
 export const ADVISOR_NAME = 'ครูสมมติ ใจดี';
+
+// The queue scenario has a grade and round of its own whose queue lets in one student at a time
+// (max_active 1), so the tickets of the other scenarios' students never take its one place.
+export const QUEUE_GRADE = 5;
+export const QUEUE_MAX_ACTIVE = 1;
+export const QUEUE_STUDENTS = Object.freeze({
+  first: {
+    loginId: 'e2e-student-j',
+    password: 'e2e-student-j-fictional',
+    fullName: 'ด.ช.สมมติ เข้าคิวก่อน',
+  },
+  second: {
+    loginId: 'e2e-student-k',
+    password: 'e2e-student-k-fictional',
+    fullName: 'ด.ญ.สมมติ เข้าคิวทีหลัง',
+  },
+} satisfies Record<string, Account>);
+export const QUEUE_CLUB = { code: 'E2E10', name: 'ชุมนุมสมมติ ทีละคน', capacity: 5 };

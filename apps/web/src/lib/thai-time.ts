@@ -12,8 +12,18 @@ const displayFormat = new Intl.DateTimeFormat('th-TH', {
   timeStyle: 'short',
 });
 
+const timeFormat = new Intl.DateTimeFormat('th-TH', {
+  timeZone: THAI_TIME_ZONE,
+  hour: '2-digit',
+  minute: '2-digit',
+  hourCycle: 'h23',
+});
+
 // Thai date and time (Buddhist year), whatever timezone the viewer's computer is set to.
 export const formatThaiDateTime = (iso: string): string => displayFormat.format(new Date(iso));
+
+// Thai time of day only (HH:MM), for a deadline within the same day.
+export const formatThaiTime = (iso: string): string => timeFormat.format(new Date(iso));
 
 // A <input type="datetime-local"> value typed as Thai time → UTC ISO string for the API.
 // undefined for an empty or malformed value, which the form reports as a validation error.

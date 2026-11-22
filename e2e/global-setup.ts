@@ -24,6 +24,10 @@ import {
   GRADE,
   ONE_SEAT_CLUB,
   OPEN_CLUB,
+  QUEUE_CLUB,
+  QUEUE_GRADE,
+  QUEUE_MAX_ACTIVE,
+  QUEUE_STUDENTS,
   STUDENTS,
   TERM,
   WEB_PORT,
@@ -160,6 +164,24 @@ const seed = async (databaseUrl: string): Promise<void> => {
         ADVISOR_NAME,
       ]);
     }
+
+    const queueStudents = [QUEUE_STUDENTS.first, QUEUE_STUDENTS.second];
+    for (const [index, account] of queueStudents.entries()) {
+      const id = await insertUser(account, 'student', false);
+      await client.query(
+        'INSERT INTO student_profiles (user_id, grade, classroom, seat_no) VALUES ($1, $2, $3, $4)',
+        [id, QUEUE_GRADE, `${QUEUE_GRADE}/1`, index + 1],
+      );
+    }
+    const queueRound = await client.query<{ id: number }>(
+      `INSERT INTO rounds (term, grade, opens_at, closes_at, max_active)
+       VALUES ($1, $2, now() - interval '1 hour', now() + interval '7 days', $3) RETURNING id`,
+      [TERM, QUEUE_GRADE, QUEUE_MAX_ACTIVE],
+    );
+    await client.query(
+      'INSERT INTO clubs (round_id, club_code, name, capacity) VALUES ($1, $2, $3, $4)',
+      [queueRound.rows[0]?.id, QUEUE_CLUB.code, QUEUE_CLUB.name, QUEUE_CLUB.capacity],
+    );
     await client.query('COMMIT');
   } catch (error) {
     await client.query('ROLLBACK');

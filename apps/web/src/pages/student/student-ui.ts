@@ -77,7 +77,7 @@ export const clubOffer = (
   return registration ? 'change' : 'register';
 };
 
-const COMMON_ERRORS: Readonly<Record<string, string>> = Object.freeze({
+export const COMMON_ERRORS: Readonly<Record<string, string>> = Object.freeze({
   [ERROR_CODES.idempotencyKeyReused]: 'คำขอนี้ซ้ำกับคำขอก่อนหน้า กรุณากดใหม่อีกครั้ง',
   [ERROR_CODES.rateLimited]: 'ส่งคำขอถี่เกินไป กรุณารอสักครู่แล้วลองใหม่',
   [ERROR_CODES.studentProfileMissing]: 'บัญชีนี้ยังไม่มีข้อมูลชั้นเรียน กรุณาติดต่อผู้ดูแลระบบหรือครูที่ดูแลการลงทะเบียน',
