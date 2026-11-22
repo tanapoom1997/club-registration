@@ -32,11 +32,14 @@ const RoundSummary = ({ round }: { round: Round }) => {
       <span>
         {round.clubCount} ชุมนุม · ลงแล้ว {round.totalRegistered} / รับ {round.totalCapacity}
       </span>
-      <SeatBar
-        className="w-32"
-        capacity={round.totalCapacity}
-        remaining={round.totalCapacity - round.totalRegistered}
-      />
+      {/* No clubs yet means no seats: an empty round is not a full one. */}
+      {round.totalCapacity > 0 && (
+        <SeatBar
+          className="w-32"
+          capacity={round.totalCapacity}
+          remaining={round.totalCapacity - round.totalRegistered}
+        />
+      )}
       {round.status === 'open' && (
         <span className="text-muted-foreground">
           รอบนี้เปิดอยู่ ตัวเลขอัปเดตอัตโนมัติทุก {CLUBS_POLL_INTERVAL_MS / 1000} วินาที

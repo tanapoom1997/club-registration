@@ -4,6 +4,7 @@ import { useRef, useState } from 'react';
 import type { FormEvent } from 'react';
 import { ConfirmPanel } from '@/components/ConfirmPanel';
 import { FormError } from '@/components/FormError';
+import { SeatBar } from '@/components/SeatMeter';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -71,6 +72,14 @@ const RoundsTable = ({ rounds, onEdit, onDelete }: RoundsTableProps) => (
             <TableCell className="text-right">{round.clubCount}</TableCell>
             <TableCell className="text-right whitespace-nowrap">
               {round.totalRegistered} / {round.totalCapacity}
+              {/* No clubs yet means no seats: an empty round is not a full one. */}
+              {round.totalCapacity > 0 && (
+                <SeatBar
+                  className="mt-1.5 ml-auto w-20"
+                  capacity={round.totalCapacity}
+                  remaining={round.totalCapacity - round.totalRegistered}
+                />
+              )}
             </TableCell>
             <TableCell className="text-right whitespace-nowrap">
               {round.maxActive ?? QUEUE_SETTING_MESSAGES.noQueueCell}
@@ -175,19 +184,21 @@ export const AdminRoundsPage = () => {
         </p>
       </div>
 
-      <form className="flex flex-wrap items-end gap-2" onSubmit={handleFilter}>
-        <div className="space-y-1.5">
-          <Label htmlFor="term-filter">กรองตามภาคเรียน</Label>
+      {/* One row at every width: on a phone the button stays beside the field it applies. */}
+      <form className="max-w-sm space-y-1.5" onSubmit={handleFilter}>
+        <Label htmlFor="term-filter">กรองตามภาคเรียน</Label>
+        <div className="flex gap-2">
           <Input
             id="term-filter"
+            className="min-w-0 flex-1"
             placeholder="ทุกภาคเรียน"
             value={termInput}
             onChange={(event) => setTermInput(event.target.value)}
           />
+          <Button type="submit" variant="outline" className="shrink-0 sm:min-h-10">
+            แสดง
+          </Button>
         </div>
-        <Button type="submit" variant="outline">
-          แสดง
-        </Button>
       </form>
 
       {deleting && (
