@@ -105,3 +105,43 @@ export const QUEUE_STUDENTS = Object.freeze({
   },
 } satisfies Record<string, Account>);
 export const QUEUE_CLUB = { code: 'E2E10', name: 'ชุมนุมสมมติ ทีละคน', capacity: 5 };
+
+// The admin's queue controls (README Phase 3, Q5) get a grade and round of their own too: those
+// scenarios change the round's max_active and turn its queue off and on, which would let in or
+// hold back the students of the other queue scenario. It starts at max_active 1, and each
+// scenario resets it (and ends the tickets left from the one before) through the database.
+export const QUEUE_ADMIN_GRADE = 6;
+export const QUEUE_ADMIN_MAX_ACTIVE = 1;
+export const QUEUE_ADMIN_STUDENTS = Object.freeze({
+  firstIn: {
+    loginId: 'e2e-student-l',
+    password: 'e2e-student-l-fictional',
+    fullName: 'ด.ช.สมมติ ได้คิวก่อน',
+  },
+  raisedIn: {
+    loginId: 'e2e-student-m',
+    password: 'e2e-student-m-fictional',
+    fullName: 'ด.ญ.สมมติ ได้คิวเมื่อเพิ่มจำนวน',
+  },
+  holdsTurn: {
+    loginId: 'e2e-student-n',
+    password: 'e2e-student-n-fictional',
+    fullName: 'ด.ช.สมมติ ถือคิวไว้',
+  },
+  queueTurnedOff: {
+    loginId: 'e2e-student-o',
+    password: 'e2e-student-o-fictional',
+    fullName: 'ด.ญ.สมมติ คิวถูกปิด',
+  },
+  queueTurnedOn: {
+    loginId: 'e2e-student-p',
+    password: 'e2e-student-p-fictional',
+    fullName: 'ด.ช.สมมติ คิวถูกเปิด',
+  },
+  keepsTurn: {
+    loginId: 'e2e-student-q',
+    password: 'e2e-student-q-fictional',
+    fullName: 'ด.ญ.สมมติ ไปดูผลแล้วกลับมา',
+  },
+} satisfies Record<string, Account>);
+export const QUEUE_ADMIN_CLUB = { code: 'E2E11', name: 'ชุมนุมสมมติ คิวปรับได้', capacity: 5 };
