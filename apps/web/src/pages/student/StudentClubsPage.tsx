@@ -270,10 +270,12 @@ export const StudentClubsPage = () => {
             <HeldClubCard registration={data.registration}>
               <p ref={heldNoteRef} className="text-sm">
                 ลงได้ 1 ชุมนุมต่อรอบ
-                {/* The change buttons are on the club list, hidden while the student queues. */}
+                {/* The change buttons are on the club list, hidden while the student queues. Kept
+                    short: it sits above the list on a phone, and the change confirmation says that
+                    the old seat is only given up once the new one is taken. */}
                 {round.status === 'open' &&
                   showsClubs(queue.view) &&
-                  ' ถ้าจะเปลี่ยน กด "ย้ายมาชุมนุมนี้" ที่ชุมนุมที่ยังมีที่ว่าง (ได้ที่ใหม่ก่อนจึงออกจากที่เดิม) หรือเข้ารายชื่อรอของชุมนุมที่เต็ม'}{' '}
+                  ' ถ้าจะเปลี่ยน กด "ย้ายมาชุมนุมนี้" หรือ "เข้ารายชื่อรอ" ที่ชุมนุมที่ต้องการ'}{' '}
                 <Link
                   className="font-medium text-primary underline underline-offset-4"
                   to={MY_REGISTRATION_PATH}

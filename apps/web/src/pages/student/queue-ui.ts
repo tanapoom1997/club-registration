@@ -187,8 +187,19 @@ const messageFor = (
   return (error instanceof ApiError ? errors[error.code] : undefined) ?? fallback;
 };
 
-export const admittedHeadline = (admittedUntil: string): string =>
-  `ถึงคิวของคุณแล้ว เลือกชุมนุมได้ถึง ${formatThaiTime(admittedUntil)} น.`;
+// The admitted line in parts, so the clubs page can set the deadline apart on its own line and
+// keep "HH:MM น." together, while the text (what a screen reader hears) stays the same.
+export const admittedParts = (admittedUntil: string) =>
+  ({
+    lead: 'ถึงคิวของคุณแล้ว',
+    until: 'เลือกชุมนุมได้ถึง',
+    time: `${formatThaiTime(admittedUntil)} น.`,
+  }) as const;
+
+export const admittedHeadline = (admittedUntil: string): string => {
+  const { lead, until, time } = admittedParts(admittedUntil);
+  return `${lead} ${until} ${time}`;
+};
 
 // The line in the always-mounted live region. It depends on the state alone (never the position),
 // so it changes, and is announced, only on a transition.
