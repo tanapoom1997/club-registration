@@ -34,8 +34,10 @@ import {
   seatStudent,
   sessionCookie,
   storedSeats,
+  ungated,
   waitForAdvisoryLockWaiter,
 } from './support/registration.js';
+import { takeTurnFor } from './support/queue.js';
 
 type InjectResponse = Awaited<ReturnType<FastifyInstance['inject']>>;
 
@@ -61,14 +63,16 @@ describe('student register and cancel', () => {
     studentId: number,
     payload: NonNullable<InjectOptions['payload']>,
     headers: NonNullable<InjectOptions['headers']> = {},
-  ): Promise<InjectResponse> =>
-    await app.inject({
+  ): Promise<InjectResponse> => {
+    await takeTurnFor(pool, studentId, url);
+    return await app.inject({
       method: 'POST',
       url,
       cookies: { [SESSION_COOKIE]: sessionCookie(app, studentId) },
       payload,
       headers,
     });
+  };
 
   const register = async (studentId: number, clubId: number, idempotencyKey = newKey()) =>
     await post(REGISTER_URL, studentId, { clubId, idempotencyKey });
@@ -505,7 +509,7 @@ describe('student register and cancel', () => {
     const { clubId, studentId } = await openSetup();
 
     const results = await withTransaction(pool, async (client) => [
-      await registerForClub(client, { studentId, clubId, idempotencyKey: newKey() }),
+      await registerForClub(client, { studentId, clubId, idempotencyKey: newKey() }, ungated),
       await cancelRegistration(client, { studentId, idempotencyKey: newKey() }),
     ]);
 

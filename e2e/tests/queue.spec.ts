@@ -38,6 +38,13 @@ test('the second student waits for the one place until the first releases it', a
     await expect(queue.getByRole('status')).toHaveText('รอคิว');
     await expect(queue).toContainText('ลำดับที่ 1');
     await expect(page.getByRole('list', { name: CLUB_LIST })).toHaveCount(0);
+    // The page waits on the round read, not on a club list the API now refuses (Q2): no error.
+    await expect(page.getByRole('alert')).toHaveCount(0);
+    await expect(page.getByText('โหลดข้อมูลไม่สำเร็จ')).toHaveCount(0);
+    // The API itself keeps the list from a student out of turn, whatever the page does.
+    const outOfTurn = await page.request.get('/api/student/clubs');
+    expect(outOfTurn.status()).toBe(403);
+    expect(((await outOfTurn.json()) as { code: string }).code).toBe('queue_required');
 
     await first.getByRole('button', { name: 'เสร็จแล้ว ปล่อยคิว' }).click();
     await expect(firstQueue.getByRole('status')).toHaveText('ปล่อยคิวแล้ว');

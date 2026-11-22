@@ -12,6 +12,8 @@ import { NoRound, RoundHeader, StudentLoadState } from './RoundHeader';
 import { PromotedNotice, WaitlistCard } from './WaitlistCard';
 import { WritePanel } from '@/components/WritePanel';
 import { useFocusRescue } from './focus-rescue';
+import { QueueTurnNote } from './QueueTurnNote';
+import { useQueueKeepalive } from './queue-ui';
 import {
   STUDENT_ROUND_QUERY_KEY,
   retryRead,
@@ -61,6 +63,8 @@ export const MyRegistrationPage = () => {
   const round = data?.round;
   const registration = data?.registration;
   const waitlist = data?.waitlist;
+  // A student who came here from the clubs page (to cancel, say) keeps their place in the queue.
+  const turn = useQueueKeepalive(round);
   const panel = mutation.isSuccess ? undefined : target;
   const panelOpen = panel !== undefined;
 
@@ -115,6 +119,7 @@ export const MyRegistrationPage = () => {
       ) : (
         <>
           <RoundHeader round={round} />
+          <QueueTurnNote turn={turn} />
           <div role="status">
             {mutation.isSuccess && (
               <p

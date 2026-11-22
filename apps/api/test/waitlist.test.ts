@@ -36,7 +36,9 @@ import {
   seatStudent,
   sessionCookie,
   storedSeats,
+  ungated,
 } from './support/registration.js';
+import { takeTurnFor } from './support/queue.js';
 
 // The waitlist (README Phase 2): joining and leaving through the API, and the promote engine run
 // by a cancel or a change. Every value is made up.
@@ -78,14 +80,16 @@ describe('student waitlist', () => {
     studentId: number,
     payload?: NonNullable<InjectOptions['payload']>,
     headers: NonNullable<InjectOptions['headers']> = {},
-  ): Promise<InjectResponse> =>
-    await app.inject({
+  ): Promise<InjectResponse> => {
+    await takeTurnFor(pool, studentId, url);
+    return await app.inject({
       method,
       url,
       cookies: { [SESSION_COOKIE]: sessionCookie(app, studentId) },
       ...(payload === undefined ? {} : { payload }),
       headers,
     });
+  };
 
   const join = async (studentId: number, clubId: number, idempotencyKey = newKey()) =>
     await send('POST', WAITLIST_URL, studentId, { clubId, idempotencyKey });
@@ -422,11 +426,11 @@ describe('student waitlist', () => {
         await client.query('SELECT now()');
         expect((await join(late!, clubId)).statusCode).toBe(200);
 
-        const result = await joinWaitlist(client, {
-          studentId: early!,
-          clubId,
-          idempotencyKey: newKey(),
-        });
+        const result = await joinWaitlist(
+          client,
+          { studentId: early!, clubId, idempotencyKey: newKey() },
+          ungated,
+        );
         await client.query('COMMIT');
         committed = true;
 

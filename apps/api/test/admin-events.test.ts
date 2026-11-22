@@ -30,6 +30,7 @@ import {
   seatStudent,
   sessionCookie,
 } from './support/registration.js';
+import { takeTurnFor } from './support/queue.js';
 
 // The admin event log (README Phase 2, PR 3b) through the whole app against a real Postgres.
 // Every event is written through the API or the services, so the invariant check after each test
@@ -76,6 +77,7 @@ describe('admin event log', () => {
     url: string,
     payload: Record<string, unknown>,
   ) => {
+    await takeTurnFor(pool, studentId, url);
     const response = await app.inject({
       method,
       url,

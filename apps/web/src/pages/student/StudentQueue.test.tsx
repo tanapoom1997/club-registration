@@ -96,7 +96,7 @@ describe('student queue on the clubs page', () => {
 
     it('hides the club list while the join is on its way', async () => {
       let answer: (response: Response) => void = () => undefined;
-      mockStudentApi(
+      const { state } = mockStudentApi(
         {},
         {
           [`POST ${QUEUE_JOIN_PATH}`]: () =>
@@ -110,6 +110,7 @@ describe('student queue on the clubs page', () => {
 
       expect(queueStatus().textContent).toBe('กำลังเข้าคิว…');
       expect(clubList()).toBeNull();
+      state.ticket = ADMITTED;
       answer(Response.json({ round: roundFixture(), ticket: ADMITTED }));
       expect(await screen.findByRole('list', { name: CLUB_LIST })).toBeTruthy();
     });
@@ -161,6 +162,8 @@ describe('student queue on the clubs page', () => {
       await openPage();
 
       expect(await screen.findByText('รอบนี้ปิดรับลงทะเบียนแล้ว')).toBeTruthy();
+      // The list of a round that is not open comes without a ticket, after the round read.
+      await screen.findByRole('list', { name: CLUB_LIST });
       expect(screen.queryByRole('region', { name: 'คิวเลือกชุมนุม' })).toBeNull();
       expect(registerButton(CHESS).disabled).toBe(true);
       expect(callsTo(api.fetchMock, 'POST', QUEUE_JOIN_PATH)).toHaveLength(1);
@@ -182,15 +185,17 @@ describe('student queue on the clubs page', () => {
     it('does not retry a refused join by itself, and the retry button joins again', async () => {
       vi.useFakeTimers({ shouldAdvanceTime: true });
       let refuse = true;
-      const { fetchMock } = mockStudentApi(
+      const api = mockStudentApi(
         {},
         {
-          [`POST ${QUEUE_JOIN_PATH}`]: () =>
-            refuse
-              ? apiError(429, 'rate_limited')()
-              : Response.json({ round: roundFixture(), ticket: ADMITTED }),
+          [`POST ${QUEUE_JOIN_PATH}`]: () => {
+            if (refuse) return apiError(429, 'rate_limited')();
+            api.state.ticket = ADMITTED;
+            return Response.json({ round: roundFixture(), ticket: ADMITTED });
+          },
         },
       );
+      const { fetchMock } = api;
       await openPage();
       const retryButton = await screen.findByRole('button', { name: 'ลองเข้าคิวอีกครั้ง' });
       expect(queueStatus().textContent).toBe('ส่งคำขอถี่เกินไป กรุณารอสักครู่แล้วลองใหม่');
@@ -211,10 +216,11 @@ describe('student queue on the clubs page', () => {
       const beats = callsTo(fetchMock, 'POST', QUEUE_HEARTBEAT_PATH).length;
       expect(beats).toBeGreaterThan(0);
 
+      // The home page, which has nothing of the queue (the result page keeps the ticket alive:
+      // MyRegistrationPage.test.tsx).
       await act(async () => {
-        await router.navigate('/student/my-registration');
+        await router.navigate('/student');
       });
-      await screen.findByRole('heading', { name: 'ผลของฉัน' });
       await advance(60_000);
       expect(callsTo(fetchMock, 'POST', QUEUE_HEARTBEAT_PATH)).toHaveLength(beats);
 

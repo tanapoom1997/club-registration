@@ -34,6 +34,9 @@ export const ERROR_CODES = Object.freeze({
   notWaitlisted: 'not_waitlisted',
   studentNotInRoundGrade: 'student_not_in_round_grade',
   notInQueue: 'not_in_queue',
+  // A seat-taking request (or the club list) in an open round without a live admitted ticket:
+  // the web app goes back to the queue instead of treating it as a missing permission.
+  queueRequired: 'queue_required',
 } as const);
 
 export type ErrorCode = (typeof ERROR_CODES)[keyof typeof ERROR_CODES];

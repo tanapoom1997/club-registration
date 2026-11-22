@@ -25,6 +25,7 @@ import {
   stopPostgres,
   truncateAsOwner,
 } from './support/postgres.js';
+import { takeTurn } from './support/queue.js';
 
 type InjectResponse = Awaited<ReturnType<FastifyInstance['inject']>>;
 
@@ -285,8 +286,9 @@ describe('student read API', () => {
 
   describe('GET /api/student/clubs', () => {
     it('lists the round clubs by code with remaining seats and advisor names', async () => {
-      const { token } = await loginStudent();
+      const { user, token } = await loginStudent();
       const roundId = await openRound();
+      await takeTurn(pool, user.id);
       const second = await createClub(pool, roundId, 'B200', {
         name: 'ชุมนุมดนตรีสมมติ',
         capacity: 5,
@@ -327,8 +329,9 @@ describe('student read API', () => {
     });
 
     it('lists only the clubs of the selected round', async () => {
-      const { token } = await loginStudent();
+      const { user, token } = await loginStudent();
       const current = await openRound();
+      await takeTurn(pool, user.id);
       const clubId = await createClub(pool, current, uniqueCode());
       await createClub(pool, await closedRound(), uniqueCode());
       await createClub(pool, await openRound(2), uniqueCode());
@@ -343,6 +346,7 @@ describe('student read API', () => {
       const roundId = await openRound();
       const clubId = await createClub(pool, roundId, uniqueCode());
       await register(pool, roundId, user.id, clubId);
+      await takeTurn(pool, user.id);
 
       const [clubsResponse, roundResponse] = await Promise.all([
         get(CLUBS_URL, token),
@@ -370,8 +374,9 @@ describe('student read API', () => {
     });
 
     it("never sends advisors' phone, email or LINE ID", async () => {
-      const { token } = await loginStudent();
+      const { user, token } = await loginStudent();
       const roundId = await openRound();
+      await takeTurn(pool, user.id);
       await addAdvisor(await createClub(pool, roundId, uniqueCode()));
 
       const response = await get(CLUBS_URL, token);
@@ -452,6 +457,7 @@ describe('student read API', () => {
     });
     await addAdvisor(clubId);
     await register(pool, roundId, user.id, clubId);
+    await takeTurn(pool, user.id);
 
     await get(ROUND_URL, token);
     await get(CLUBS_URL, token);

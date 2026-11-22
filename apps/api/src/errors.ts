@@ -10,6 +10,7 @@ const HTTP_STATUS: Readonly<Record<ErrorCode, number>> = Object.freeze({
   [ERROR_CODES.forbidden]: 403,
   [ERROR_CODES.passwordChangeRequired]: 403,
   [ERROR_CODES.studentProfileMissing]: 403,
+  [ERROR_CODES.queueRequired]: 403,
   [ERROR_CODES.notFound]: 404,
   [ERROR_CODES.roundExists]: 409,
   [ERROR_CODES.roundNotEmpty]: 409,
@@ -72,6 +73,8 @@ const DEFAULT_MESSAGES: Readonly<Record<ErrorCode, string>> = Object.freeze({
   [ERROR_CODES.notWaitlisted]: 'You are not on a waitlist this round',
   [ERROR_CODES.studentNotInRoundGrade]: "The student is not in this round's grade",
   [ERROR_CODES.notInQueue]: 'You have no live queue ticket in this round; join the queue again',
+  [ERROR_CODES.queueRequired]:
+    'Choosing a club in an open round needs your turn in the queue; join the queue and wait for it',
   [ERROR_CODES.rateLimited]: 'Too many requests, try again later',
   [ERROR_CODES.internalError]: 'Internal server error',
 });

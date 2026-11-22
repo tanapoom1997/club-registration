@@ -83,8 +83,10 @@ import type { Queryable } from '../db.js';
 // lock that someone waiting for the queue lock holds, and no cycle can pass through it. The admin
 // round edit changes max_active without the queue lock: an admission reads it once, so what the
 // queue guarantees is that no admission lifts the admitted count above the max_active it read.
-// hasAdmittedTicket takes no lock at all, so a seat write may call it under its round lock (Q2).
-// Should a writer ever need both, it takes the queue lock last, after every round lock.
+// The queue gate of the seat writes (Q2: register, change and waitlist join of a student's own
+// request) reads the ticket with hasAdmittedTicket, which takes no lock at all, so those writes
+// hold their round lock only and stay out of the queue's lock order. Should a writer ever need
+// both, it takes the queue lock last, after every round lock.
 //
 // Key space: round locks are the one-bigint form, pg_advisory_xact_lock(round_id). The import
 // lock is the two-int4 form pg_advisory_xact_lock(1, 1), and queue locks are the two-int4 form

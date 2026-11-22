@@ -34,6 +34,7 @@ import {
   sessionCookie,
   storedSeats,
 } from './support/registration.js';
+import { takeTurnFor } from './support/queue.js';
 
 // An admin listing a club's members and seating, moving or removing students in their place
 // (README Phase 2, PR 3a), through the whole app against a real Postgres. Every value is made up.
@@ -95,13 +96,15 @@ describe('admin club members', () => {
       payload: { loginId, idempotencyKey },
     });
 
-  const asStudent = async (studentId: number, url: string, payload: Record<string, unknown>) =>
-    await app.inject({
+  const asStudent = async (studentId: number, url: string, payload: Record<string, unknown>) => {
+    await takeTurnFor(pool, studentId, url);
+    return await app.inject({
       method: 'POST',
       url,
       cookies: { [SESSION_COOKIE]: sessionCookie(app, studentId) },
       payload,
     });
+  };
   const register = async (studentId: number, clubId: number) =>
     await asStudent(studentId, '/api/student/registration', { clubId, idempotencyKey: newKey() });
   const cancel = async (studentId: number) =>

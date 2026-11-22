@@ -2,6 +2,7 @@ import { ERROR_CODES } from '@club-registration/shared';
 import type { QueueTicket, StudentQueueResponse, StudentRound } from '@club-registration/shared';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import type { Query, QueryFunctionContext } from '@tanstack/react-query';
+import { useEffect } from 'react';
 import {
   ApiError,
   fetchQueue,
@@ -15,6 +16,7 @@ import {
   COMMON_ERRORS,
   STUDENT_CLUBS_QUERY_KEY,
   STUDENT_QUERY_KEY,
+  STUDENT_ROUND_QUERY_KEY,
   retryRead,
   useLogoutOnExpiredSession,
 } from './student-ui';
@@ -27,7 +29,12 @@ export const HEARTBEAT_INTERVAL_MS = 4_000;
 // it with the rest. The round id is in the key so a ticket never carries over to another round.
 export const queueQueryKey = (roundId: number) =>
   Object.freeze([...STUDENT_QUERY_KEY, 'queue', roundId] as const);
-type QueueQueryKey = ReturnType<typeof queueQueryKey>;
+// The result page's own copy of the ticket (Q2: it keeps the ticket alive, never joins). Another
+// key, not one under queueQueryKey: the two queries' fetches differ (one may join), so they must
+// never share a cache entry, nor be hit together by an invalidation of either key.
+export const keepaliveQueryKey = (roundId: number) =>
+  Object.freeze([...STUDENT_QUERY_KEY, 'queue-keepalive', roundId] as const);
+type QueueQueryKey = ReturnType<typeof queueQueryKey> | ReturnType<typeof keepaliveQueryKey>;
 
 const isLive = (ticket: QueueTicket | null | undefined): boolean =>
   ticket?.status === 'waiting' || ticket?.status === 'admitted';
@@ -35,43 +42,69 @@ const isLive = (ticket: QueueTicket | null | undefined): boolean =>
 const isApiError = (error: unknown, code: string): boolean =>
   error instanceof ApiError && error.code === code;
 
+// The API's answer to the club list or a seat write without a live turn in an open round (Q2). Not
+// a missing permission and not a lost session: the page goes back to the queue.
+export const isQueueRequired = (error: unknown): boolean =>
+  isApiError(error, ERROR_CODES.queueRequired);
+
 // One query holds the ticket, and every fetch of it does the one call the ticket needs: no ticket
-// yet (this visit) → join, live → heartbeat, ended → a read. So whatever refetches it (the
-// interval, the tab becoming visible again, the invalidation after a write, React StrictMode
-// mounting twice) can never join a second time or rejoin after the ticket ended; joining again
-// is the student's own click. A POST in a query: the heartbeat writes, but the same heartbeat sent
-// twice changes nothing more, and polling is what queries are for.
-const syncQueue = async ({
-  client,
-  queryKey,
-}: QueryFunctionContext<QueueQueryKey>): Promise<StudentQueueResponse> => {
-  const current = client.getQueryData<StudentQueueResponse>(queryKey);
-  if (current === undefined) {
-    try {
-      return await joinQueue();
-    } catch (error) {
-      // The round closed (or moved) since the club list said open: refresh it, and the page
-      // falls back to the round's own status without the queue.
-      if (isApiError(error, ERROR_CODES.roundNotOpen)) {
-        await client.invalidateQueries({ queryKey: STUDENT_CLUBS_QUERY_KEY });
+// yet (this visit) → join (or, on a page that never joins, a read), live → heartbeat, ended → a
+// read. So whatever refetches it (the interval, the tab becoming visible again, the invalidation
+// after a write or a queue_required, React StrictMode mounting twice) can never join a second time
+// or rejoin after the ticket ended; joining again is the student's own click. A POST in a query:
+// the heartbeat writes, but the same heartbeat sent twice changes nothing more, and polling is
+// what queries are for.
+const queueSync =
+  ({ join }: { join: boolean }) =>
+  async ({
+    client,
+    queryKey,
+  }: QueryFunctionContext<QueueQueryKey>): Promise<StudentQueueResponse> => {
+    const current = client.getQueryData<StudentQueueResponse>(queryKey);
+    if (current === undefined && join) {
+      try {
+        return await joinQueue();
+      } catch (error) {
+        // The round closed (or moved) since the round read said open: refresh it, and the page
+        // falls back to the round's own status without the queue.
+        if (isApiError(error, ERROR_CODES.roundNotOpen)) {
+          await Promise.all([
+            client.invalidateQueries({ queryKey: STUDENT_ROUND_QUERY_KEY }),
+            client.invalidateQueries({ queryKey: STUDENT_CLUBS_QUERY_KEY }),
+          ]);
+        }
+        throw error;
       }
+    }
+    if (!isLive(current?.ticket)) return await fetchQueue();
+    try {
+      return await queueHeartbeat();
+    } catch (error) {
+      // The ticket ended (timed out, released in another tab): the read says which, without
+      // joining again.
+      if (isApiError(error, ERROR_CODES.notInQueue)) return await fetchQueue();
       throw error;
     }
-  }
-  if (!isLive(current.ticket)) return await fetchQueue();
-  try {
-    return await queueHeartbeat();
-  } catch (error) {
-    // The ticket ended (timed out, released in another tab): the read says which, without
-    // joining again.
-    if (isApiError(error, ERROR_CODES.notInQueue)) return await fetchQueue();
-    throw error;
-  }
-};
+  };
 
-const hasLiveTicket = (
-  query: Query<StudentQueueResponse, Error, StudentQueueResponse, QueueQueryKey>,
-) => isLive(query.state.data?.ticket);
+const syncQueue = queueSync({ join: true });
+const keepQueueAlive = queueSync({ join: false });
+
+type TicketQuery = Query<StudentQueueResponse, Error, StudentQueueResponse, QueueQueryKey>;
+
+const hasLiveTicket = (query: TicketQuery) => isLive(query.state.data?.ticket);
+
+// What both ticket queries share: heartbeats every 4 s while the ticket is live, kept going in a
+// hidden tab (whose timers the browser throttles, Chrome down to about once a minute, which is the
+// idle timeout) and sent at once on returning to the tab (TanStack's focus manager listens to
+// visibilitychange). Gone with the page: coming back is a new visit (gcTime 0).
+const TICKET_QUERY_OPTIONS = Object.freeze({
+  gcTime: 0,
+  retry: retryRead,
+  refetchInterval: (query: TicketQuery) => (hasLiveTicket(query) ? HEARTBEAT_INTERVAL_MS : false),
+  refetchIntervalInBackground: true,
+  refetchOnWindowFocus: hasLiveTicket,
+});
 
 export type QueueView =
   | { kind: 'off' }
@@ -107,6 +140,11 @@ export const QUEUE_MESSAGES = Object.freeze({
   doneHelp: 'ชุมนุมที่ลงไว้แล้วยังอยู่ ถ้าจะเลือกใหม่ กดเข้าคิวใหม่ (ต่อท้ายคิว)',
   releaseUnknown: 'เชื่อมต่อระบบไม่สำเร็จ จึงยังไม่รู้ว่าปล่อยคิวแล้วหรือไม่ กดอีกครั้งได้ (ปล่อยซ้ำไม่มีผลเสีย)',
   releaseFallback: 'ปล่อยคิวไม่สำเร็จ กรุณาลองใหม่อีกครั้ง',
+  // The result page (useQueueKeepalive): the place is kept while it is open, but the club list
+  // only shows on the clubs page.
+  keepaliveWaitingHelp: 'ที่ในคิวยังอยู่ระหว่างเปิดหน้านี้ไว้ เมื่อถึงคิว รายการชุมนุมจะแสดงที่หน้าเลือกชุมนุมเท่านั้น',
+  backToClubs: 'กลับไปหน้าเลือกชุมนุม',
+  toClubs: 'ไปเลือกชุมนุม',
 });
 
 const messageFor = (
@@ -187,24 +225,17 @@ export const showsClubs = (view: QueueView): boolean =>
 // The queue in front of an open round (README Phase 3, Q3). Only an open round is queued for: an
 // upcoming or closed one makes no queue call, and the page shows it as before. When an upcoming
 // round opens (the club list's own timer), the query is enabled and joins.
+// The round comes from GET /api/student/round (Q2: the club list answers 403 queue_required while
+// the student waits, so it cannot be what tells the page the round is open).
 export const useQueue = (round: StudentRound | null) => {
   const queryClient = useQueryClient();
   const open = round?.status === 'open';
   const queryKey = queueQueryKey(round?.id ?? 0);
   const query = useQuery({
+    ...TICKET_QUERY_OPTIONS,
     queryKey,
     queryFn: syncQueue,
     enabled: open,
-    // Gone as soon as the page is: coming back to the page is a new visit that joins again (a
-    // live ticket is answered as it is, so nobody loses their place by it).
-    gcTime: 0,
-    retry: retryRead,
-    refetchInterval: (current) => (hasLiveTicket(current) ? HEARTBEAT_INTERVAL_MS : false),
-    // Hidden tabs get their timers throttled (Chrome down to about once a minute), which is the
-    // idle timeout. The beats still run when they can, and returning to the tab sends one at
-    // once (TanStack's focus manager listens to visibilitychange).
-    refetchIntervalInBackground: true,
-    refetchOnWindowFocus: hasLiveTicket,
   });
   useLogoutOnExpiredSession(query.error);
 
@@ -247,3 +278,66 @@ export const useQueue = (round: StudentRound | null) => {
 };
 
 export type Queue = ReturnType<typeof useQueue>;
+
+// A queue_required answer (Q2) to the club list: the turn ended (or the round opened) since the
+// page last looked. The ticket query asks again, which, the ticket being over, ends in its
+// heartbeat's not_in_queue and a read that shows it expired, with the "join again" button. Never a
+// reset: a ticket query without data would join, and joining again is the student's own click.
+// The round is read again too, for when it opened by the API's clock before the page saw it.
+// Writes need nothing of their own here: every write's settlement invalidates all student queries
+// (and the list refetched by it may then answer queue_required too). cancelRefetch: false joins a
+// fetch already on its way instead of sending another, and a ticket already shown as ended needs
+// no new answer. When the page thinks the round is not open yet, the round read alone does it:
+// once it says open, the ticket query starts and joins, as for any round opening on screen.
+export const useBackToQueue = (error: unknown, roundId: number | undefined) => {
+  const queryClient = useQueryClient();
+  useEffect(() => {
+    if (!isQueueRequired(error) || roundId === undefined) return;
+    const queryKey = queueQueryKey(roundId);
+    const shown = queryClient.getQueryData<StudentQueueResponse>(queryKey);
+    // Only a ticket shown live: one with no answer yet is joining (or the queue is off), and
+    // asking that query again would join a second time.
+    if (shown !== undefined && isLive(shown.ticket)) {
+      void queryClient.invalidateQueries({ queryKey, exact: true }, { cancelRefetch: false });
+    }
+    void queryClient.invalidateQueries(
+      { queryKey: STUDENT_ROUND_QUERY_KEY, exact: true },
+      { cancelRefetch: false },
+    );
+  }, [error, queryClient, roundId]);
+};
+
+// The ticket as the result page shows it: only while it is live.
+export type QueueTurn =
+  | { kind: 'none' }
+  | { kind: 'waiting'; position: number }
+  | { kind: 'admitted'; admittedUntil: string };
+
+// Keeps the student's ticket alive from the result page (README Phase 3, Q2): a student who went
+// there to cancel, or to leave a waitlist, keeps their place in the queue. It never joins: on
+// mount it reads the ticket, and only a live one gets heartbeats, until it ends (not_in_queue →
+// a read), the round is not open any more (by the page's round or the queue's own answer), or the
+// page goes. No ticket, or one that ended, shows nothing.
+export const useQueueKeepalive = (round: StudentRound | null | undefined): QueueTurn => {
+  const open = round?.status === 'open';
+  const query = useQuery({
+    ...TICKET_QUERY_OPTIONS,
+    queryKey: keepaliveQueryKey(round?.id ?? 0),
+    queryFn: keepQueueAlive,
+    enabled: open,
+    refetchInterval: (current: TicketQuery) =>
+      hasLiveTicket(current) && current.state.data?.round?.status === 'open'
+        ? HEARTBEAT_INTERVAL_MS
+        : false,
+  });
+  useLogoutOnExpiredSession(query.error);
+  const ticket = open ? query.data?.ticket : undefined;
+  switch (ticket?.status) {
+    case 'waiting':
+      return { kind: 'waiting', position: ticket.position };
+    case 'admitted':
+      return { kind: 'admitted', admittedUntil: ticket.admittedUntil };
+    default:
+      return { kind: 'none' };
+  }
+};

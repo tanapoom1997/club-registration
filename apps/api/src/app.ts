@@ -126,7 +126,7 @@ export const buildApp = async ({
   await app.register(adminImportRoutes({ pool, guard }), { prefix: '/api' });
   await app.register(adminStudentRoutes({ pool, guard }), { prefix: '/api' });
   await app.register(adminExportRoutes({ pool, guard }), { prefix: '/api' });
-  await app.register(studentRoutes({ pool, guard }), { prefix: '/api' });
+  await app.register(studentRoutes({ pool, guard, queue }), { prefix: '/api' });
   await app.register(studentQueueRoutes({ pool, guard, settings: queue }), { prefix: '/api' });
 
   return app;

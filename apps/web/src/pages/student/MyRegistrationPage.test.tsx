@@ -1,9 +1,13 @@
-import { cleanup, fireEvent, screen, waitFor, within } from '@testing-library/react';
+import { act, cleanup, fireEvent, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { renderAt } from '@/test-support/render-app';
 import {
+  ADMITTED,
   CANCEL_PATH,
   CLUBS,
+  QUEUE_HEARTBEAT_PATH,
+  QUEUE_JOIN_PATH,
+  QUEUE_PATH,
   ROUND_PATH,
   UUID_PATTERN,
   apiError,
@@ -13,7 +17,9 @@ import {
   networkFailure,
   registrationFor,
   roundFixture,
+  waitingAt,
 } from '@/test-support/student-api';
+import { HEARTBEAT_INTERVAL_MS } from './queue-ui';
 
 const ART = CLUBS[2]!;
 const HELD = registrationFor(ART);
@@ -227,5 +233,133 @@ describe('student my-registration page', () => {
     renderAt('/student/my-registration');
 
     expect((await screen.findByRole('alert')).textContent).toContain('กรุณาติดต่อผู้ดูแลระบบ');
+  });
+
+  // README Phase 3, Q2: the result page keeps a live ticket alive, so a student who came here to
+  // cancel keeps their place, but it never joins the queue itself.
+  describe('queue ticket', () => {
+    const TURN = 'คิวเลือกชุมนุม';
+    const queueRegion = () => screen.queryByRole('region', { name: TURN });
+    const queueCalls = (fetchMock: ReturnType<typeof mockStudentApi>['fetchMock']) =>
+      fetchMock.mock.calls.filter(([path]) => path.startsWith(QUEUE_PATH));
+    const beat = async () => {
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(HEARTBEAT_INTERVAL_MS);
+      });
+    };
+
+    it('reads a waiting ticket, then keeps it alive with heartbeats, never joining', async () => {
+      vi.useFakeTimers({ shouldAdvanceTime: true });
+      const { fetchMock } = mockStudentApi({ registration: HELD, ticket: waitingAt(2) });
+      await openPage();
+
+      const region = await screen.findByRole('region', { name: TURN });
+      expect(callsTo(fetchMock, 'GET', QUEUE_PATH)).toHaveLength(1);
+      expect(within(region).getByRole('status').textContent).toBe('รอคิว');
+      expect(region.textContent).toContain('ลำดับที่ 2');
+      const link = within(region).getByRole('link', { name: 'กลับไปหน้าเลือกชุมนุม' });
+      expect(link.getAttribute('href')).toBe('/student/clubs');
+      await beat();
+      await beat();
+
+      expect(callsTo(fetchMock, 'POST', QUEUE_HEARTBEAT_PATH)).toHaveLength(2);
+      expect(callsTo(fetchMock, 'POST', QUEUE_JOIN_PATH)).toHaveLength(0);
+    });
+
+    it('keeps the place out of the status line, which only says the state', async () => {
+      vi.useFakeTimers({ shouldAdvanceTime: true });
+      const { state } = mockStudentApi({ ticket: waitingAt(5) });
+      await openPage();
+      const region = await screen.findByRole('region', { name: TURN });
+
+      state.ticket = waitingAt(4);
+      await beat();
+
+      await waitFor(() => expect(region.textContent).toContain('ลำดับที่ 4'));
+      expect(within(region).getByRole('status').textContent).toBe('รอคิว');
+    });
+
+    it("shows the student's turn with its end time and a link to choose", async () => {
+      mockStudentApi({ ticket: ADMITTED });
+      await openPage();
+
+      const region = await screen.findByRole('region', { name: TURN });
+      expect(within(region).getByRole('status').textContent).toBe(
+        'ถึงคิวของคุณแล้ว เลือกชุมนุมได้ถึง 08:15 น.',
+      );
+      const link = within(region).getByRole('link', { name: 'ไปเลือกชุมนุม' });
+      expect(link.getAttribute('href')).toBe('/student/clubs');
+    });
+
+    it('stops and shows nothing once the ticket ends', async () => {
+      vi.useFakeTimers({ shouldAdvanceTime: true });
+      const { fetchMock, state } = mockStudentApi({ ticket: ADMITTED });
+      await openPage();
+      await screen.findByRole('region', { name: TURN });
+
+      state.ticket = { status: 'expired' };
+      await beat();
+
+      await waitFor(() => expect(queueRegion()).toBeNull());
+      const beats = callsTo(fetchMock, 'POST', QUEUE_HEARTBEAT_PATH).length;
+      expect(callsTo(fetchMock, 'GET', QUEUE_PATH)).toHaveLength(2);
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(60_000);
+      });
+      expect(callsTo(fetchMock, 'POST', QUEUE_HEARTBEAT_PATH)).toHaveLength(beats);
+      expect(callsTo(fetchMock, 'POST', QUEUE_JOIN_PATH)).toHaveLength(0);
+    });
+
+    it('shows nothing and sends no heartbeat without a ticket', async () => {
+      vi.useFakeTimers({ shouldAdvanceTime: true });
+      const { fetchMock } = mockStudentApi({ registration: HELD });
+      await openPage();
+      await waitFor(() => expect(callsTo(fetchMock, 'GET', QUEUE_PATH)).toHaveLength(1));
+
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(60_000);
+      });
+
+      expect(queueRegion()).toBeNull();
+      expect(screen.queryByText(/ลำดับที่/)).toBeNull();
+      expect(queueCalls(fetchMock)).toHaveLength(1);
+    });
+
+    it.each(['upcoming', 'closed'] as const)(
+      'makes no queue call while the round is %s',
+      async (status) => {
+        vi.useFakeTimers({ shouldAdvanceTime: true });
+        const { fetchMock } = mockStudentApi({
+          round: roundFixture({ status }),
+          ticket: ADMITTED,
+        });
+        await openPage();
+
+        await act(async () => {
+          await vi.advanceTimersByTimeAsync(30_000);
+        });
+
+        expect(queueCalls(fetchMock)).toEqual([]);
+        expect(queueRegion()).toBeNull();
+      },
+    );
+
+    it('stops the heartbeats when the student leaves the page', async () => {
+      vi.useFakeTimers({ shouldAdvanceTime: true });
+      const { fetchMock } = mockStudentApi({ ticket: ADMITTED });
+      const router = await openPage();
+      await screen.findByRole('region', { name: TURN });
+      await beat();
+      const beats = callsTo(fetchMock, 'POST', QUEUE_HEARTBEAT_PATH).length;
+
+      await act(async () => {
+        await router.navigate('/student');
+      });
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(60_000);
+      });
+
+      expect(callsTo(fetchMock, 'POST', QUEUE_HEARTBEAT_PATH)).toHaveLength(beats);
+    });
   });
 });

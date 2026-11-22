@@ -1,7 +1,7 @@
 import { ERROR_CODES } from '@club-registration/shared';
 import type { StudentRegistration } from '@club-registration/shared';
 import type pg from 'pg';
-import { isPgError, PG_ERROR_CODES } from '../db.js';
+import { dbNow, isPgError, PG_ERROR_CODES } from '../db.js';
 import { AppError } from '../errors.js';
 import { lockRound, lockRoundOfClub } from './round-lock.js';
 import { moveRegistration, releaseSeat } from './seats.js';
@@ -43,12 +43,34 @@ import type { Promotion } from './waitlist-promote.js';
 //    same transaction, after its own event, and answers with the student's registration as it is
 //    after the promotions: a cascade can promote the student who made the request.
 //
+// The queue gate (README Phase 3, Q2): register, change and the waitlist join take a seat or a
+// place in line, so in an open round the student's own request needs a live admitted queue
+// ticket. The caller passes the check in (AdmissionGate) rather than this module asking the
+// queue itself, because only the student routes are gated: an admin's assign, an import and a
+// promotion seat students who hold no ticket, and none of them calls these functions anyway.
+// The gate runs right where round_not_open would be thrown, once the writing statement has said
+// the round is open by its own clock, so:
+//
+// - a replayed key is answered before it (CLAUDE.md rule 7: a write that went through keeps its
+//   answer after the ticket ended), and so are the answers that write nothing (already_held,
+//   already_waiting) and 404;
+// - outside the window the answer stays round_not_open, ticket or not;
+// - no boundary slips through: "open" is the verdict of the very statement that took the seat, so
+//   a request at opens_at cannot be judged closed by the gate and open by the write. A refusal
+//   throws, and the rollback undoes that statement's insert or seat;
+// - a refusal leaves no event, like club_full, so the same key works once the student is back in
+//   their turn.
+//
+// The check is a plain read (hasAdmittedTicket in queue.ts), no queue lock, so a seat write keeps
+// holding its round lock only (round-lock.ts).
+//
 // Clock: writes decide the window with the DB clock, statement_timestamp() of the writing
 // statement, which runs after the lock is held. A request that waited for the lock across
 // closes_at is therefore refused, and every app process (or a skewed app host) agrees on one
-// clock. The reads in student-round.ts show a status computed from the app clock; on the
-// single-host deployment both read the same system clock, so they differ only by the moments
-// between a read and a write, and the write is the one that counts (README Phase 1 item 4).
+// clock. The reads in student-round.ts pick the round and its status by the DB clock too (since
+// Q2, so the club list's queue gate and the queue's join agree on "open"); they differ from a
+// write only by the moments between the two, and the write is the one that counts (README Phase
+// 1 item 4).
 
 // The table's UNIQUE (actor_id, idempotency_key) from the initial migration.
 export const EVENT_KEY_UNIQUE = 'registration_events_actor_id_idempotency_key_key';
@@ -84,6 +106,10 @@ export type RegistrationResult = {
   // Students the request's freed seat promoted off a waitlist, in order (ids only, for the log).
   promotions: Promotion[];
 };
+
+// Throws (queue_required) when the student may not take a seat in the round now. Called under the
+// round lock, inside the request's transaction, only once the round is known to be open.
+export type AdmissionGate = (db: pg.PoolClient, roundId: number) => Promise<void>;
 
 // The event types a student's own request writes, always with its idempotency key.
 export type StudentEventType =
@@ -256,9 +282,14 @@ const takeSeat = async (
 
 export type RegisterInput = { studentId: number; clubId: number; idempotencyKey: string };
 
+// The order of answers, each decided under the round lock: 404 unknown club → replay (200) / 409
+// idempotency_key_reused → 403 student_profile_missing → 404 club the student is not shown → 200
+// already_held → 409 round_not_open → 403 queue_required (the gate) → 409 already_registered → 409
+// club_full.
 export const registerForClub = async (
   db: pg.PoolClient,
   { studentId, clubId, idempotencyKey }: RegisterInput,
+  gate: AdmissionGate,
 ): Promise<RegistrationResult> => {
   const roundId = await lockRoundOfClub(db, clubId);
   if (roundId === undefined) throw new AppError(ERROR_CODES.notFound, 'Club not found');
@@ -270,21 +301,22 @@ export const registerForClub = async (
   const attempt = await attemptSeat(db, studentId, clubId);
   if (!attempt) throw new AppError(ERROR_CODES.notFound, 'Club not found');
 
+  // Nothing inserted: the window is closed, or the student already holds a seat in the round.
+  const held = attempt.created_at === null ? await findRegistration(db, roundId, studentId) : null;
+  // The same club again (a retry with a new key): the README's idempotent same-club case. It
+  // writes nothing, so it is answered even outside the window.
+  if (held?.club.id === clubId) {
+    return {
+      outcome: REGISTRATION_OUTCOMES.alreadyHeld,
+      roundId,
+      clubId,
+      registration: held,
+      promotions: [],
+    };
+  }
+  if (!attempt.is_open) throw new AppError(ERROR_CODES.roundNotOpen);
+  await gate(db, roundId);
   if (attempt.created_at === null) {
-    // Nothing inserted: the window is closed, or the student already holds a seat in the round.
-    const held = await findRegistration(db, roundId, studentId);
-    // The same club again (a retry with a new key): the README's idempotent same-club case. It
-    // writes nothing, so it is answered even outside the window.
-    if (held?.club.id === clubId) {
-      return {
-        outcome: REGISTRATION_OUTCOMES.alreadyHeld,
-        roundId,
-        clubId,
-        registration: held,
-        promotions: [],
-      };
-    }
-    if (!attempt.is_open) throw new AppError(ERROR_CODES.roundNotOpen);
     if (held) throw new AppError(ERROR_CODES.alreadyRegistered);
     // Under the round lock the insert can only skip a row that is there to be read.
     throw new Error('Registration insert skipped without a conflicting row');
@@ -309,13 +341,6 @@ export const registerForClub = async (
     }),
     promotions: [],
   };
-};
-
-export const dbNow = async (db: pg.PoolClient): Promise<Date> => {
-  const { rows } = await db.query<{ now: Date }>('SELECT statement_timestamp() AS now');
-  const row = rows[0];
-  if (!row) throw new Error('statement_timestamp() returned no row');
-  return row.now;
 };
 
 type CancelAttempt = { is_open: boolean; club_id: number | null };
@@ -396,8 +421,8 @@ export const cancelRegistration = async (
 //
 //   404 unknown club → replay (200) / 409 idempotency_key_reused → 403 student_profile_missing
 //   → 404 club the student is not shown → 200 already_held (the club they hold; written nothing,
-//   so answered even outside the window, like register) → 409 round_not_open → 409
-//   not_registered → 409 club_full.
+//   so answered even outside the window, like register) → 409 round_not_open → 403
+//   queue_required (the gate) → 409 not_registered → 409 club_full.
 //
 // round_not_open before not_registered and club_full matches register (round_not_open before
 // already_registered and club_full) and cancel (round_not_open before not_registered): outside
@@ -458,6 +483,7 @@ export type ChangeInput = { studentId: number; clubId: number; idempotencyKey: s
 export const changeRegistration = async (
   db: pg.PoolClient,
   { studentId, clubId, idempotencyKey }: ChangeInput,
+  gate: AdmissionGate,
 ): Promise<RegistrationResult> => {
   const roundId = await lockRoundOfClub(db, clubId);
   if (roundId === undefined) throw new AppError(ERROR_CODES.notFound, 'Club not found');
@@ -479,6 +505,8 @@ export const changeRegistration = async (
     };
   }
   if (!attempt.is_open) throw new AppError(ERROR_CODES.roundNotOpen);
+  // The statement may have taken the new seat already; a refusal rolls it back.
+  await gate(db, roundId);
   if (attempt.from_club_id === null) throw new AppError(ERROR_CODES.notRegistered);
   if (!attempt.seated) throw new AppError(ERROR_CODES.clubFull);
 

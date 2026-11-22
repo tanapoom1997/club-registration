@@ -34,6 +34,14 @@ export const pingDatabase = async (pool: pg.Pool): Promise<void> => {
 
 export type Queryable = pg.Pool | pg.PoolClient;
 
+// The DB clock (statement_timestamp()), which every window decision uses.
+export const dbNow = async (db: Queryable): Promise<Date> => {
+  const { rows } = await db.query<{ now: Date }>('SELECT statement_timestamp() AS now');
+  const row = rows[0];
+  if (!row) throw new Error('statement_timestamp() returned no row');
+  return row.now;
+};
+
 export const PG_ERROR_CODES = Object.freeze({
   foreignKeyViolation: '23503',
   uniqueViolation: '23505',
