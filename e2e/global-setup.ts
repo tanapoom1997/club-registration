@@ -24,6 +24,10 @@ import {
   GRADE,
   ONE_SEAT_CLUB,
   OPEN_CLUB,
+  QUEUE_ADMIN_CLUB,
+  QUEUE_ADMIN_GRADE,
+  QUEUE_ADMIN_MAX_ACTIVE,
+  QUEUE_ADMIN_STUDENTS,
   QUEUE_CLUB,
   QUEUE_GRADE,
   QUEUE_MAX_ACTIVE,
@@ -181,6 +185,30 @@ const seed = async (databaseUrl: string): Promise<void> => {
     await client.query(
       'INSERT INTO clubs (round_id, club_code, name, capacity) VALUES ($1, $2, $3, $4)',
       [queueRound.rows[0]?.id, QUEUE_CLUB.code, QUEUE_CLUB.name, QUEUE_CLUB.capacity],
+    );
+
+    for (const [index, account] of Object.values(QUEUE_ADMIN_STUDENTS).entries()) {
+      const id = await insertUser(account, 'student', false);
+      await client.query(
+        'INSERT INTO student_profiles (user_id, grade, classroom, seat_no) VALUES ($1, $2, $3, $4)',
+        [id, QUEUE_ADMIN_GRADE, `${QUEUE_ADMIN_GRADE}/1`, index + 1],
+      );
+    }
+    // Closes a day after the others: the admin's edit form sends the window back cut to the
+    // minute, and /admin/clubs picks the open round that closes first, which must stay grade 4's.
+    const queueAdminRound = await client.query<{ id: number }>(
+      `INSERT INTO rounds (term, grade, opens_at, closes_at, max_active)
+       VALUES ($1, $2, now() - interval '1 hour', now() + interval '8 days', $3) RETURNING id`,
+      [TERM, QUEUE_ADMIN_GRADE, QUEUE_ADMIN_MAX_ACTIVE],
+    );
+    await client.query(
+      'INSERT INTO clubs (round_id, club_code, name, capacity) VALUES ($1, $2, $3, $4)',
+      [
+        queueAdminRound.rows[0]?.id,
+        QUEUE_ADMIN_CLUB.code,
+        QUEUE_ADMIN_CLUB.name,
+        QUEUE_ADMIN_CLUB.capacity,
+      ],
     );
     await client.query('COMMIT');
   } catch (error) {
