@@ -263,10 +263,15 @@ export const AdminEventsPage = () => {
         <p className="text-muted-foreground">ไม่มีเหตุการณ์ตามตัวกรองนี้</p>
       ) : (
         <div className="space-y-3">
-          <p id={EVENTS_TABLE_HELP_ID} className="max-w-prose text-sm text-muted-foreground">
-            ห้องและเลขที่เป็นค่าปัจจุบันของนักเรียน ไม่ใช่ ณ เวลาที่เกิดเหตุการณ์ (อาจต่างไปถ้านำเข้าข้อมูลนักเรียนใหม่)
-            ผู้ทำของ "ได้ที่จากรายชื่อรอ" คือผู้ที่ทำให้มีที่ว่าง (นักเรียนที่ยกเลิกหรือย้าย หรือผู้ดูแล) ระบบให้ที่เอง
-          </p>
+          <ul
+            id={EVENTS_TABLE_HELP_ID}
+            className="max-w-prose list-disc space-y-1 rounded-xl bg-muted py-3 pr-3 pl-8 text-sm text-muted-foreground"
+          >
+            <li>
+              ห้องและเลขที่เป็นค่าปัจจุบันของนักเรียน ไม่ใช่ ณ เวลาที่เกิดเหตุการณ์ (อาจต่างไปถ้านำเข้าข้อมูลนักเรียนใหม่)
+            </li>
+            <li>ผู้ทำของ "ได้ที่จากรายชื่อรอ" คือผู้ที่ทำให้มีที่ว่าง (นักเรียนที่ยกเลิกหรือย้าย หรือผู้ดูแล) ระบบให้ที่เอง</li>
+          </ul>
           <EventsTable events={events} onPickStudent={pickStudent} />
           {eventsQuery.isFetchNextPageError && (
             <p className="text-sm text-destructive" role="alert">

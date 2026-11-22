@@ -1,5 +1,6 @@
 import { ERROR_CODES } from '@club-registration/shared';
 import type { ClubRef, EventType, RegistrationEvent } from '@club-registration/shared';
+import type { BadgeVariant } from '@/components/ui/badge';
 import { ApiError } from '@/lib/api';
 import { gradeLabel } from '@/lib/round-display';
 
@@ -16,6 +17,19 @@ export const EVENT_TYPE_LABELS: Readonly<Record<EventType, string>> = Object.fre
   waitlist_join: 'เข้ารายชื่อรอ',
   waitlist_leave: 'ออกจากรายชื่อรอ',
   waitlist_promote: 'ได้ที่จากรายชื่อรอ',
+});
+
+// What an event did to the student's seat, as a colour beside the words: a seat gained (green),
+// lost (red), moved (the brand colour), a place in a queue taken (amber) or given up (grey).
+export const EVENT_TYPE_TONES: Readonly<Record<EventType, BadgeVariant>> = Object.freeze({
+  register: 'success',
+  cancel: 'danger',
+  change: 'info',
+  admin_assign: 'success',
+  admin_remove: 'danger',
+  waitlist_join: 'warning',
+  waitlist_leave: 'neutral',
+  waitlist_promote: 'success',
 });
 
 export const clubLabel = ({ clubCode, name }: ClubRef): string => `${clubCode} ${name}`;
