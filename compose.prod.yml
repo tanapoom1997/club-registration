@@ -173,6 +173,8 @@ services:
       DB_CONNECTION_TIMEOUT_MS: ${DB_CONNECTION_TIMEOUT_MS:-}
       DB_STATEMENT_TIMEOUT_MS: ${DB_STATEMENT_TIMEOUT_MS:-}
       DB_IDLE_IN_TRANSACTION_TIMEOUT_MS: ${DB_IDLE_IN_TRANSACTION_TIMEOUT_MS:-}
+      QUEUE_IDLE_TIMEOUT_SECONDS: ${QUEUE_IDLE_TIMEOUT_SECONDS:-}
+      QUEUE_ADMISSION_TTL_SECONDS: ${QUEUE_ADMISSION_TTL_SECONDS:-}
       # V8 old space well under the container limit (see the budget above), so a heavy request
       # ends in a JavaScript heap error the log can show, not a silent kill by the kernel.
       NODE_OPTIONS: --max-old-space-size=320

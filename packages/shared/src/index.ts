@@ -228,3 +228,5 @@ export type {
   StudentWaitlist,
   StudentWaitlistResponse,
 } from './student.js';
+export { queueTicketSchema, queueWriteRequestSchema, studentQueueResponseSchema } from './queue.js';
+export type { QueueTicket, QueueWriteRequest, StudentQueueResponse } from './queue.js';

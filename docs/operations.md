@@ -235,6 +235,8 @@ aws iam put-role-policy --role-name <ชื่อ role ของ EC2> --policy-n
 | `DB_CONNECTION_TIMEOUT_MS` | api, create-admin, seed-dev | รอ connection ว่างจาก pool นานสุด default `5000` เกิน = request นั้นได้ 500 |
 | `DB_STATEMENT_TIMEOUT_MS` | api, create-admin, seed-dev | `statement_timeout` ต่อ statement default `10000` |
 | `DB_IDLE_IN_TRANSACTION_TIMEOUT_MS` | api, create-admin, seed-dev | `idle_in_transaction_session_timeout` default `10000` |
+| `QUEUE_IDLE_TIMEOUT_SECONDS` | api | ticket คิว (รอหรือ admitted) ที่ไม่ได้ heartbeat นานเกินนี้หมดอายุ ที่ไปถึงคนถัดไป default `60` (15–3600) หน้าเว็บ poll ทุก 3–5 วินาที (README Phase 3) |
+| `QUEUE_ADMISSION_TTL_SECONDS` | api | นักเรียนที่ admitted แล้วเลือกชุมนุมได้นานสุดเท่านี้ (heartbeat ก็ไม่ต่อ) default `600` (60–7200) |
 | `SITE_ADDRESS` | web | site address ของ Caddy default `:80` (HTTP ไม่มี TLS) ตั้งเป็น domain แล้ว Caddy ขอและต่ออายุใบรับรองเอง ค่าจริงอยู่ใน env file ห้าม commit (`compose.prod.yml` บังคับให้ตั้ง) |
 | `API_UPSTREAM` | web | `host:port` ของ api default `api:3000` |
 | `POSTGRES_USER`, `POSTGRES_DB`, `POSTGRES_PASSWORD` | postgres (compose) | สร้าง DB ครั้งแรกเท่านั้น (เปลี่ยนทีหลังไม่มีผลกับ volume ที่มีอยู่) password สร้างด้วย `openssl rand -hex 24` |
@@ -246,6 +248,7 @@ aws iam put-role-policy --role-name <ชื่อ role ของ EC2> --policy-n
 | `PROD_ENV_FILE` | `backup.sh`, `restore.sh` | env file ที่ใช้ default `deploy/production.env` (ตั้งใน environment ของ shell ไม่ใช่ในไฟล์) |
 
 - `DB_*` ทั้ง 4 ตัว (O2) เป็นจำนวนเต็มบวก timeout ไม่เกิน 600000 (ไม่ยอม `0` ซึ่ง `pg` แปลว่าไม่จำกัด) ค่าว่างหรือไม่ตั้ง = default ซึ่งเท่ากับค่าเดิมก่อนตั้งได้ ค่าผิด = ไม่ start และบอกแค่ชื่อตัวแปร ตรวจด้วย Zod ใน `apps/api/src/config.ts` (`migrate` ไม่ใช้ pool จึงไม่สนตัวแปรเหล่านี้) **ค่า default ยังเป็นค่าประเมิน** ตัดสินด้วย load test (O5)
+- `QUEUE_*` ทั้ง 2 ตัว (Phase 3 Q1) เป็นวินาที จำนวนเต็มในช่วงที่ระบุ ค่าว่างหรือไม่ตั้ง = default ค่าผิด = ไม่ start และบอกแค่ชื่อตัวแปร (Zod ใน `apps/api/src/config.ts`) **ค่า default เป็นค่าประเมิน** ปรับหลัง load test บน EC2 (O5) พร้อม `max_active` ของรอบ
 - `GOMEMLIMIT` (web) และ `NODE_OPTIONS` (api) ตั้งไว้ใน `compose.prod.yml` ให้ตรงกับ memory limit ไม่ได้อยู่ใน env file
 - `BACKUP_*` อยู่ใน env file เดียวกันแต่ compose ไม่อ่าน script อ่านเป็นข้อมูล (ไม่ `source` ไฟล์) ค่าใน environment ของ shell ชนะค่าในไฟล์ ตัวแปร `AWS_*` (`AWS_REGION`, `AWS_ENDPOINT_URL` ฯลฯ) ส่งผ่านถึง AWS CLI ตรงๆ และ `COMPOSE_PROJECT_NAME` ใช้เลือก stack อื่นได้ (smoke test ใช้)
 

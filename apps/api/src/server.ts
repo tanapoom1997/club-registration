@@ -1,5 +1,5 @@
 import { buildApp } from './app.js';
-import { loadConfig, poolSettingsFrom } from './config.js';
+import { loadConfig, poolSettingsFrom, queueSettingsFrom } from './config.js';
 import { waitForLeastPrivilege } from './db-role.js';
 import { createPool } from './db.js';
 
@@ -10,6 +10,7 @@ const app = await buildApp({
   jwtSecret: config.JWT_SECRET,
   logger: { level: config.NODE_ENV === 'production' ? 'info' : 'debug' },
   trustProxy: config.TRUST_PROXY,
+  queue: queueSettingsFrom(config),
 });
 
 // Without a listener, an idle client losing its connection would crash the process.
