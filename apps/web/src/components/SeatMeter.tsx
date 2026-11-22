@@ -15,6 +15,23 @@ const COUNT: Readonly<Record<SeatLevel, string>> = Object.freeze({
   full: 'text-muted-foreground',
 });
 
+type SeatBarProps = { capacity: number; remaining: number; className?: string | undefined };
+
+// How full a club is, as a bar. Decorative: every place that shows it also says the numbers. The
+// fill width is set from script (CSSOM), which the page CSP allows, unlike a style attribute in
+// the HTML.
+export const SeatBar = ({ capacity, remaining, className }: SeatBarProps) => (
+  <div aria-hidden="true" className={cn('h-1.5 overflow-hidden rounded-full bg-muted', className)}>
+    <div
+      className={cn(
+        'h-full rounded-full transition-[width] duration-500 motion-reduce:transition-none',
+        FILL[seatLevel(capacity, remaining)],
+      )}
+      style={{ width: `${takenPercent(capacity, remaining)}%` }}
+    />
+  </div>
+);
+
 type SeatMeterProps = {
   capacity: number;
   remaining: number;
@@ -23,8 +40,7 @@ type SeatMeterProps = {
 };
 
 // Seats left as words first ("เหลือ 2 ที่", "ใกล้เต็ม", "เต็ม"), so the bar's colour is never the
-// only signal; the bar is decorative and hidden from screen readers. The fill width is set from
-// script (CSSOM), which the page CSP allows, unlike a style attribute in the HTML.
+// only signal.
 export const SeatMeter = ({ capacity, remaining, waitlistCount, className }: SeatMeterProps) => {
   const level = seatLevel(capacity, remaining);
   return (
@@ -42,15 +58,7 @@ export const SeatMeter = ({ capacity, remaining, waitlistCount, className }: Sea
         )}
         <p className="text-xs text-muted-foreground">รับ {capacity} คน</p>
       </div>
-      <div aria-hidden="true" className="h-1.5 overflow-hidden rounded-full bg-muted">
-        <div
-          className={cn(
-            'h-full rounded-full transition-[width] duration-500 motion-reduce:transition-none',
-            FILL[level],
-          )}
-          style={{ width: `${takenPercent(capacity, remaining)}%` }}
-        />
-      </div>
+      <SeatBar capacity={capacity} remaining={remaining} />
       {waitlistCount > 0 && (
         <p className="text-xs text-warning-foreground">มีคนรอ {waitlistCount} คน</p>
       )}

@@ -263,11 +263,10 @@ const openTable = async () => await screen.findByRole('table', { name: 'รา�
 const rowOf = (table: HTMLElement, text: string) =>
   within(table).getByText(text).closest('tr') as HTMLElement;
 
-const clubCells = (clubCode: string) =>
-  within(rowOf(screen.getByRole('table', { name: 'รายการชุมนุม' }), clubCode))
-    .getAllByRole('cell')
-    .map((cell) => cell.textContent)
-    .slice(3, 6);
+// The table's seats column: "registered / capacity", then what is left.
+const clubSeats = (clubCode: string) =>
+  within(rowOf(screen.getByRole('table', { name: 'รายการชุมนุม' }), clubCode)).getAllByRole('cell')[3]
+    ?.textContent;
 
 const panelOf = (club: ClubBase) =>
   screen.getByRole('region', { name: `รายชื่อชุมนุม ${club.clubCode} ${club.name}` });
@@ -469,7 +468,7 @@ describe('admin club members panel', () => {
     const { fetchMock } = mockMembersApi();
     renderAt('/admin/clubs');
     const panel = await openMembers(CHESS);
-    expect(clubCells('A100')).toEqual(['3', '2', '1']);
+    expect(clubSeats('A100')).toBe('2 / 3เหลือ 1');
 
     assign(panel, '  DEMO1005 ');
 
@@ -482,7 +481,7 @@ describe('admin club members panel', () => {
       idempotencyKey: expect.stringMatching(UUID_PATTERN) as unknown,
     });
     expect(await within(membersTable(panel, CHESS)).findByText('demo1005')).toBeTruthy();
-    await waitFor(() => expect(clubCells('A100')).toEqual(['3', '3', 'เต็ม']));
+    await waitFor(() => expect(clubSeats('A100')).toBe('3 / 3เต็ม'));
     expect(within(panel).getByText('รับ 3 · ลงแล้ว 3 · เหลือ 0')).toBeTruthy();
   });
 
@@ -490,15 +489,15 @@ describe('admin club members panel', () => {
     mockMembersApi();
     renderAt('/admin/clubs');
     const panel = await openMembers(CHESS);
-    expect(clubCells('B200')).toEqual(['2', '2', 'เต็ม']);
+    expect(clubSeats('B200')).toBe('2 / 2เต็ม');
 
     assign(panel, S4.loginId);
 
     expect(await notice(panel)).toBe(
       `บันทึกแล้ว: demo1004 ${S4.fullName} อยู่ในชุมนุม A100 ชุมนุมหมากรุกสมมติ`,
     );
-    await waitFor(() => expect(clubCells('B200')).toEqual(['2', '1', '1']));
-    expect(clubCells('A100')).toEqual(['3', '3', 'เต็ม']);
+    await waitFor(() => expect(clubSeats('B200')).toBe('1 / 2เหลือ 1'));
+    expect(clubSeats('A100')).toBe('3 / 3เต็ม');
   });
 
   it('says the student is not in the club when a cascade carried them on to the club they waited for', async () => {
@@ -620,7 +619,7 @@ describe('admin club members panel', () => {
       loginId: 'demo1004',
       idempotencyKey: expect.stringMatching(UUID_PATTERN) as unknown,
     });
-    await waitFor(() => expect(clubCells('B200')).toEqual(['2', '1', '1']));
+    await waitFor(() => expect(clubSeats('B200')).toBe('1 / 2เหลือ 1'));
   });
 
   it('says the seat stays empty when removing in a closed round, and still allows every write', async () => {
@@ -751,7 +750,7 @@ describe('admin club members panel', () => {
     expect(within(rowOf(waiters, S5.loginId)).getAllByRole('cell')[0]?.textContent).toBe('1');
     expect(within(panel).getByRole('heading', { name: 'รายชื่อรอ (1 คน)' })).toBeTruthy();
     expect(callsTo(fetchMock, 'POST', unwaitPath(MUSIC.id))).toHaveLength(1);
-    expect(clubCells('B200')).toEqual(['2', '2', 'เต็ม']);
+    expect(clubSeats('B200')).toBe('2 / 2เต็ม');
   });
 
   it.each([

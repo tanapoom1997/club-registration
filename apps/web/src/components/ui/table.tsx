@@ -12,6 +12,8 @@ import { ScrollFades } from './scroll-fades';
 // While it overflows it is a labelled, focusable region (the WAI pattern for a scrolling table),
 // so arrow keys can scroll it where the browser does not make scrollers focusable itself
 // (Safari); a table that fits stays out of the tab order and the landmarks.
+// It is also a size container, so a row that spans the table (an inline confirmation) can be as
+// wide as what is on screen (100cqw) rather than the whole table.
 export const Table = ({ className, ...props }: ComponentProps<'table'>) => {
   const scrollRef = useRef<HTMLDivElement>(null);
   const edges = useScrollEdges(scrollRef);
@@ -24,7 +26,7 @@ export const Table = ({ className, ...props }: ComponentProps<'table'>) => {
         role={overflows ? 'region' : undefined}
         aria-label={overflows ? props['aria-label'] : undefined}
         tabIndex={overflows ? 0 : undefined}
-        className="relative overflow-x-auto focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-ring"
+        className="@container relative overflow-x-auto focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-ring"
       >
         <table className={cn('w-full min-w-2xl text-left text-sm', className)} {...props} />
       </div>

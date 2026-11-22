@@ -2,6 +2,7 @@ import type { AdminClub, Round } from '@club-registration/shared';
 import { skipToken, useQuery } from '@tanstack/react-query';
 import { useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router';
+import { SeatBar } from '@/components/SeatMeter';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
@@ -31,6 +32,11 @@ const RoundSummary = ({ round }: { round: Round }) => {
       <span>
         {round.clubCount} ชุมนุม · ลงแล้ว {round.totalRegistered} / รับ {round.totalCapacity}
       </span>
+      <SeatBar
+        className="w-32"
+        capacity={round.totalCapacity}
+        remaining={round.totalCapacity - round.totalRegistered}
+      />
       {round.status === 'open' && (
         <span className="text-muted-foreground">
           รอบนี้เปิดอยู่ ตัวเลขอัปเดตอัตโนมัติทุก {CLUBS_POLL_INTERVAL_MS / 1000} วินาที
