@@ -37,6 +37,9 @@ export const ERROR_CODES = Object.freeze({
   // A seat-taking request (or the club list) in an open round without a live admitted ticket:
   // the web app goes back to the queue instead of treating it as a missing permission.
   queueRequired: 'queue_required',
+  // Join or heartbeat in a round that has no queue (max_active NULL): the web app reads the round
+  // again and shows the list without queueing.
+  queueOff: 'queue_off',
 } as const);
 
 export type ErrorCode = (typeof ERROR_CODES)[keyof typeof ERROR_CODES];

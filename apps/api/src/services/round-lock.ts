@@ -84,8 +84,10 @@ import type { Queryable } from '../db.js';
 // round edit changes max_active without the queue lock: an admission reads it once, so what the
 // queue guarantees is that no admission lifts the admitted count above the max_active it read.
 // The queue gate of the seat writes (Q2: register, change and waitlist join of a student's own
-// request) reads the ticket with hasAdmittedTicket, which takes no lock at all, so those writes
-// hold their round lock only and stay out of the queue's lock order. Should a writer ever need
+// request) reads the ticket and max_active (Q4: NULL = no queue, no ticket needed) with a plain
+// read that takes no lock at all, so those writes hold their round lock only and stay out of the
+// queue's lock order. It is the round lock they already hold, which the round edit's UPDATE of
+// max_active also needs, that orders a gate read and an admin turning the queue on or off. Should a writer ever need
 // both, it takes the queue lock last, after every round lock.
 //
 // Key space: round locks are the one-bigint form, pg_advisory_xact_lock(round_id). The import

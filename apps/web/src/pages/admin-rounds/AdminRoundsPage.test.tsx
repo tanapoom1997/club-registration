@@ -1,7 +1,8 @@
 import type { Round, SessionUser } from '@club-registration/shared';
-import { cleanup, fireEvent, screen, waitFor, within } from '@testing-library/react';
+import { act, cleanup, fireEvent, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { mockApi, renderAt } from '@/test-support/render-app';
+import { ROUNDS_POLL_INTERVAL_MS } from './round-ui';
 
 const ADMIN: SessionUser = {
   id: 9,
@@ -23,6 +24,8 @@ const roundFixture = (overrides: Partial<Round> = {}): Round => ({
   clubCount: 0,
   totalCapacity: 0,
   totalRegistered: 0,
+  queueWaiting: 0,
+  queueAdmitted: 0,
   ...overrides,
 });
 
@@ -83,10 +86,167 @@ const openEditor = async (round: Round) => {
   return screen.getByRole('form', { name: `แก้ไขรอบ ${round.term} ม.${round.grade}` });
 };
 
+const rowOf = async (round: Round) =>
+  (await screen.findByRole('button', { name: `แก้ไขรอบ ${round.term} ม.${round.grade}` })).closest(
+    'tr',
+  ) as HTMLElement;
+
+const listCalls = (fetchMock: ReturnType<typeof mockApi>) =>
+  fetchMock.mock.calls.filter(
+    ([input, init]) => input === '/api/admin/rounds' && (init?.method ?? 'GET') === 'GET',
+  );
+
+const NO_QUEUE = 'ไม่มีคิว';
+const LOWERED = /ระบบไม่เอาใครที่ได้คิวแล้วออก/;
+const TURNING_OFF = /รอบนี้จะไม่มีคิว/;
+const TURNING_ON = /รอบนี้จะมีคิว/;
+
 describe('admin rounds page', () => {
   afterEach(() => {
     cleanup();
+    vi.useRealTimers();
     vi.unstubAllGlobals();
+  });
+
+  // README Phase 3, Q4: the queue setting and the live counts of each round.
+  describe('the queue', () => {
+    it('shows a round without a queue and the waiting and admitted counts', async () => {
+      const queued = roundFixture({ status: 'open', queueWaiting: 37, queueAdmitted: 150 });
+      const unqueued = roundFixture({ id: 2, grade: 2, maxActive: null, queueAdmitted: 4 });
+      mockRoundsApi([queued, unqueued]);
+      renderAt('/admin/rounds');
+
+      const cells = (row: HTMLElement) =>
+        within(row)
+          .getAllByRole('cell')
+          .map(({ textContent }) => textContent);
+      // Columns: ..., at once, waiting, admitted, actions.
+      expect(cells(await rowOf(queued)).slice(7, 10)).toEqual(['150', '37', '150']);
+      expect(cells(await rowOf(unqueued)).slice(7, 10)).toEqual([NO_QUEUE, '0', '4']);
+    });
+
+    it('refreshes the counts every 10 seconds while a round is open', async () => {
+      vi.useFakeTimers({ shouldAdvanceTime: true });
+      const round = roundFixture({ status: 'open' });
+      const fetchMock = mockRoundsApi([round]);
+      renderAt('/admin/rounds');
+      await rowOf(round);
+      const before = listCalls(fetchMock).length;
+
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(ROUNDS_POLL_INTERVAL_MS);
+      });
+
+      await waitFor(() => expect(listCalls(fetchMock)).toHaveLength(before + 1));
+    });
+
+    it('does not poll when no round is open', async () => {
+      vi.useFakeTimers({ shouldAdvanceTime: true });
+      const upcoming = roundFixture();
+      const closed = roundFixture({ id: 2, grade: 2, status: 'closed' });
+      const fetchMock = mockRoundsApi([upcoming, closed]);
+      renderAt('/admin/rounds');
+      await rowOf(upcoming);
+      const before = listCalls(fetchMock).length;
+
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(6 * ROUNDS_POLL_INTERVAL_MS);
+      });
+
+      expect(listCalls(fetchMock)).toHaveLength(before);
+    });
+
+    it.each([
+      ['สร้างรอบ', 'POST /api/admin/rounds'],
+      ['สร้างครบทุกชั้น', 'POST /api/admin/rounds/batch'],
+    ])('creates a round without a queue from the "%s" form', async (formName, route) => {
+      const fetchMock = mockRoundsApi([], {
+        'POST /api/admin/rounds/batch': () => Response.json({ rounds: [] }, { status: 201 }),
+      });
+      renderAt('/admin/rounds');
+      await screen.findByText('ยังไม่มีรอบลงทะเบียน');
+      const form = screen.getByRole('form', { name: formName });
+      fireEvent.change(within(form).getByLabelText('ภาคเรียน'), { target: { value: '2569/2' } });
+      fillTimes(form, '2027-05-10T08:30', '2027-05-10T15:00');
+
+      fireEvent.click(within(form).getByRole('checkbox', { name: NO_QUEUE }));
+      fireEvent.click(within(form).getByRole('button', { name: /^สร้าง/ }));
+
+      const number = within(form).getByLabelText<HTMLInputElement>('จำนวนคนเข้าเลือกพร้อมกันสูงสุด');
+      expect(number.disabled).toBe(true);
+      const [method, path] = route.split(' ') as [string, string];
+      await waitFor(() => expect(fetchCalls(fetchMock, method, path)).toHaveLength(1));
+      expect(bodyOf(fetchCalls(fetchMock, method, path)[0]![1])).toMatchObject({ maxActive: null });
+    });
+
+    it('turns the queue of an upcoming round off and back on with the number typed', async () => {
+      const round = roundFixture({ maxActive: 120 });
+      const fetchMock = mockRoundsApi([round]);
+      renderAt('/admin/rounds');
+      let form = await openEditor(round);
+      fireEvent.click(within(form).getByRole('checkbox', { name: NO_QUEUE }));
+      fireEvent.click(within(form).getByRole('button', { name: 'บันทึกการแก้ไข' }));
+      expect((await rowOf(round)).textContent).toContain(NO_QUEUE);
+
+      form = await openEditor(round);
+      const checkbox = within(form).getByRole<HTMLInputElement>('checkbox', { name: NO_QUEUE });
+      expect(checkbox.checked).toBe(true);
+      fireEvent.click(checkbox);
+      fireEvent.change(within(form).getByLabelText('จำนวนคนเข้าเลือกพร้อมกันสูงสุด'), {
+        target: { value: '80' },
+      });
+      fireEvent.click(within(form).getByRole('button', { name: 'บันทึกการแก้ไข' }));
+
+      await waitFor(() =>
+        expect(fetchCalls(fetchMock, 'PATCH', '/api/admin/rounds/1')).toHaveLength(2),
+      );
+      const bodies = fetchCalls(fetchMock, 'PATCH', '/api/admin/rounds/1').map(([, init]) =>
+        bodyOf(init),
+      );
+      expect(bodies).toMatchObject([{ maxActive: null }, { maxActive: 80 }]);
+      // No note for a round that is not open: no student is choosing yet.
+      expect(screen.queryByText(TURNING_ON)).toBeNull();
+    });
+
+    it('warns, without blocking, when the new number is below the students let in', async () => {
+      const round = roundFixture({ status: 'open', maxActive: 150, queueAdmitted: 120 });
+      const fetchMock = mockRoundsApi([round]);
+      renderAt('/admin/rounds');
+      const form = await openEditor(round);
+      const number = within(form).getByLabelText('จำนวนคนเข้าเลือกพร้อมกันสูงสุด');
+
+      fireEvent.change(number, { target: { value: '130' } });
+      expect(within(form).queryByText(LOWERED)).toBeNull();
+      fireEvent.change(number, { target: { value: '100' } });
+
+      expect(within(form).getByText(LOWERED).textContent).toContain('120 คน');
+      fireEvent.click(within(form).getByRole('button', { name: 'บันทึกการแก้ไข' }));
+      fireEvent.click(within(form).getByRole('button', { name: 'ยืนยันบันทึก' }));
+      await waitFor(() =>
+        expect(fetchCalls(fetchMock, 'PATCH', '/api/admin/rounds/1')).toHaveLength(1),
+      );
+      expect(bodyOf(fetchCalls(fetchMock, 'PATCH', '/api/admin/rounds/1')[0]![1])).toMatchObject({
+        maxActive: 100,
+      });
+    });
+
+    it('says what students will see when the queue of an open round goes off or on', async () => {
+      const queued = roundFixture({ status: 'open' });
+      const unqueued = roundFixture({ id: 2, grade: 2, status: 'open', maxActive: null });
+      mockRoundsApi([queued, unqueued]);
+      renderAt('/admin/rounds');
+
+      let form = await openEditor(queued);
+      expect(within(form).queryByText(TURNING_OFF)).toBeNull();
+      fireEvent.click(within(form).getByRole('checkbox', { name: NO_QUEUE }));
+      expect(within(form).getByText(TURNING_OFF)).toBeTruthy();
+      fireEvent.click(within(form).getByRole('button', { name: 'ปิด' }));
+
+      form = await openEditor(unqueued);
+      expect(within(form).queryByText(TURNING_ON)).toBeNull();
+      fireEvent.click(within(form).getByRole('checkbox', { name: NO_QUEUE }));
+      expect(within(form).getByText(TURNING_ON)).toBeTruthy();
+    });
   });
 
   it('creates a round from Thai time and lists it in Thai time', async () => {
@@ -255,7 +415,7 @@ describe('admin rounds page', () => {
     fireEvent.click(screen.getByRole('button', { name: 'ยืนยันลบ' }));
 
     expect((await screen.findByRole('alert')).textContent).toBe(
-      'ลบไม่ได้ เพราะรอบนี้มีชุมนุมหรือข้อมูลการลงทะเบียนแล้ว',
+      'ลบไม่ได้ เพราะรอบนี้มีชุมนุม ข้อมูลการลงทะเบียน หรือมีนักเรียนเข้าคิวแล้ว',
     );
     expect(screen.queryByRole('alertdialog')).toBeNull();
     expect(screen.getByRole('button', { name: 'แก้ไขรอบ 2569/1 ม.1' })).toBeTruthy();

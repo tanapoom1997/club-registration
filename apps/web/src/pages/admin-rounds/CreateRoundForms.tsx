@@ -22,6 +22,7 @@ const EMPTY_WINDOW: WindowValues = Object.freeze({
   opensAt: '',
   closesAt: '',
   maxActive: String(DEFAULT_MAX_ACTIVE),
+  noQueue: false,
 });
 
 const TermField = ({

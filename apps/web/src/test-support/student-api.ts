@@ -45,6 +45,7 @@ export const roundFixture = (overrides: Partial<StudentRound> = {}): StudentRoun
   opensAt: '2026-12-01T01:00:00.000Z',
   closesAt: '2026-12-01T09:00:00.000Z',
   status: 'open',
+  hasQueue: true,
   ...overrides,
 });
 
@@ -130,11 +131,14 @@ const isLiveTicket = (ticket: QueueTicket | null) =>
   ticket?.status === 'waiting' || ticket?.status === 'admitted';
 
 // The API's queue gate (Q2), enforced here too so a page that asked for the list or a seat out of
-// turn fails in its tests as it would against the real API: in an open round, the club list and
-// the seat-taking writes need an admitted ticket.
+// turn fails in its tests as it would against the real API: in an open round with a queue, the
+// club list and the seat-taking writes need an admitted ticket. A round without a queue
+// (hasQueue false, Q4) gates nothing.
 const outOfTurn = (state: StudentState) =>
-  state.round?.status === 'open' && state.ticket?.status !== 'admitted';
+  state.round?.status === 'open' && state.round.hasQueue && state.ticket?.status !== 'admitted';
 const queueRequired = apiError(403, 'queue_required');
+const queueOff = apiError(409, 'queue_off');
+const noQueue = (state: StudentState) => state.round?.hasQueue === false;
 
 const withSeatChange = (clubs: StudentClub[], clubId: number, change: number) =>
   clubs.map((club) =>
@@ -245,16 +249,21 @@ export const mockStudentApi = (
       return Response.json({ registration: null });
     },
     // The queue as the API keeps it: a join answers the live ticket or makes the next one (only
-    // while the round is open), a heartbeat needs a live ticket, done ends it.
+    // while the round is open), a heartbeat needs a live ticket, done ends it. In a round without
+    // a queue, join and heartbeat answer queue_off and leave the ticket as it is; done and the
+    // read still work.
     [`POST ${QUEUE_JOIN_PATH}`]: () => {
+      if (noQueue(state)) return queueOff();
       if (!isLiveTicket(state.ticket)) {
         if (state.round?.status !== 'open') return apiError(409, 'round_not_open')();
         state.ticket = state.joinTicket;
       }
       return queueAnswer();
     },
-    [`POST ${QUEUE_HEARTBEAT_PATH}`]: () =>
-      isLiveTicket(state.ticket) ? queueAnswer() : apiError(409, 'not_in_queue')(),
+    [`POST ${QUEUE_HEARTBEAT_PATH}`]: () => {
+      if (noQueue(state)) return queueOff();
+      return isLiveTicket(state.ticket) ? queueAnswer() : apiError(409, 'not_in_queue')();
+    },
     [`POST ${QUEUE_DONE_PATH}`]: () => {
       if (isLiveTicket(state.ticket)) state.ticket = { status: 'done' };
       return queueAnswer();

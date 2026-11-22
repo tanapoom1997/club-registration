@@ -9,6 +9,7 @@ import type pg from 'pg';
 import { isPgError, PG_ERROR_CODES, withReadOnlySnapshot } from '../db.js';
 import { AppError } from '../errors.js';
 import { lockRoundOfClub } from './round-lock.js';
+import type { QueueSettings } from './queue.js';
 import { findRound } from './rounds.js';
 import { promoteWaitlist } from './waitlist-promote.js';
 import type { Promotion } from './waitlist-promote.js';
@@ -90,10 +91,10 @@ const selectWithAdvisors = (source: string, filter = '') => `
 export const listRoundClubs = async (
   pool: pg.Pool,
   roundId: number,
-  now: Date,
+  at: { now: Date; settings: QueueSettings },
 ): Promise<RoundClubsResponse> =>
   await withReadOnlySnapshot(pool, async (client) => {
-    const round = await findRound(client, roundId, now);
+    const round = await findRound(client, roundId, at);
     if (!round) throw new AppError(ERROR_CODES.notFound, 'Round not found');
     const { rows } = await client.query<ClubRow>(
       selectWithAdvisors('clubs', 'WHERE c.round_id = $1'),

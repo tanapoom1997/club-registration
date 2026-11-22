@@ -34,7 +34,8 @@ export const statusCounts = async (pool: Pool, roundId: number) => {
   return Object.fromEntries(rows.map(({ status, tickets }) => [status, tickets]));
 };
 
-export const setMaxActive = async (pool: Pool, roundId: number, maxActive: number) => {
+// null = the round has no queue (Q4).
+export const setMaxActive = async (pool: Pool, roundId: number, maxActive: number | null) => {
   await pool.query('UPDATE rounds SET max_active = $2 WHERE id = $1', [roundId, maxActive]);
 };
 
@@ -42,7 +43,8 @@ export const setMaxActive = async (pool: Pool, roundId: number, maxActive: numbe
 // are shown, through the real service, so the seat writes' queue gate (Q2) lets them through. The
 // round (open now) gets room for all of them first, so the admission order and max_active stay
 // as the queue's invariants expect. Throws if anyone was not let in, so a test never silently
-// starts with a waiting ticket.
+// starts with a waiting ticket. A round without a queue (max_active NULL) is left without one
+// (GREATEST would skip the NULL and turn the queue on), so the join throws queue_off.
 export const admitStudents = async (
   pool: Pool,
   roundId: number,
@@ -53,7 +55,7 @@ export const admitStudents = async (
     `UPDATE rounds SET max_active = GREATEST(max_active, $2::int + (
        SELECT count(*)::int FROM queue_tickets WHERE round_id = $1 AND status = 'admitted'
      ))
-     WHERE id = $1`,
+     WHERE id = $1 AND max_active IS NOT NULL`,
     [roundId, studentIds.length],
   );
   for (const studentId of studentIds) {
@@ -70,7 +72,8 @@ export const admitStudents = async (
 // Admitted tickets written straight to the table, for a round the queue cannot be joined in now:
 // students let in before an admin closed it, still on the page when it reopens. Same columns a
 // real admission writes (status, admitted_at, last_seen_at by the DB clock), with room made in
-// max_active as admitStudents does, so the queue's invariants hold.
+// max_active as admitStudents does, so the queue's invariants hold. In a round without a queue the
+// setting is left NULL: these are then tickets left from before an admin turned the queue off.
 export const admitDirectly = async (
   pool: Pool,
   roundId: number,
@@ -80,7 +83,7 @@ export const admitDirectly = async (
     `UPDATE rounds SET max_active = GREATEST(max_active, $2::int + (
        SELECT count(*)::int FROM queue_tickets WHERE round_id = $1 AND status = 'admitted'
      ))
-     WHERE id = $1`,
+     WHERE id = $1 AND max_active IS NOT NULL`,
     [roundId, studentIds.length],
   );
   await pool.query(
@@ -96,7 +99,8 @@ export const admitDirectly = async (
 // are shown (README Phase 3, Q3), through the real service. For the tests of what a seat write
 // does once the student may choose (Q2's gate itself is tested apart, without this). A round that
 // is not open has no queue, and the request under test then answers for itself (round_not_open,
-// already_held, student_profile_missing), as it would on the page; a ticket left waiting throws,
+// already_held, student_profile_missing), as it would on the page; nor has a round without a queue
+// (queue_off, Q4), whose seat writes need no turn; a ticket left waiting throws,
 // so a test never silently writes without its turn (raise max_active, or use admitStudents).
 export const takeTurn = async (
   pool: Pool,
@@ -114,7 +118,9 @@ export const takeTurn = async (
   } catch (error) {
     const noQueue =
       error instanceof AppError &&
-      (error.code === ERROR_CODES.roundNotOpen || error.code === ERROR_CODES.studentProfileMissing);
+      (error.code === ERROR_CODES.roundNotOpen ||
+        error.code === ERROR_CODES.studentProfileMissing ||
+        error.code === ERROR_CODES.queueOff);
     if (!noQueue) throw error;
   }
 };
@@ -164,7 +170,9 @@ export const rewindTickets = async (
 // Each query returns the rows that break one invariant; all must be empty. Rounds in
 // `lowered` are left out of the max_active check: an admin may lower max_active under the
 // admitted count on purpose, and nobody is kicked out (the check there is that nobody more is
-// admitted, which those tests assert themselves).
+// admitted, which those tests assert themselves). So are rounds without a queue (max_active NULL,
+// Q4): there is no limit to stay under, and the tickets admitted before the queue went off simply
+// expire. Every other check holds for them too.
 const invariants = (lowered: readonly number[]): Readonly<Record<string, [string, unknown[]]>> =>
   Object.freeze({
     'one live ticket per student and round': [
@@ -182,7 +190,7 @@ const invariants = (lowered: readonly number[]): Readonly<Record<string, [string
     'admitted tickets never above max_active': [
       `SELECT r.id, r.max_active, count(t.id)::int AS admitted
        FROM rounds r JOIN queue_tickets t ON t.round_id = r.id AND t.status = 'admitted'
-       WHERE r.id <> ALL ($1::int[])
+       WHERE r.id <> ALL ($1::int[]) AND r.max_active IS NOT NULL
        GROUP BY r.id, r.max_active HAVING count(t.id) > r.max_active`,
       [lowered],
     ],

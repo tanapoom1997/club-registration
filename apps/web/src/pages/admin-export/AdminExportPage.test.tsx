@@ -29,6 +29,8 @@ const ROUND: Round = {
   clubCount: 2,
   totalCapacity: 50,
   totalRegistered: 32,
+  queueWaiting: 0,
+  queueAdmitted: 0,
 };
 
 // Every name below is made up.

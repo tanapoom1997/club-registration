@@ -83,10 +83,11 @@ export type QueueResult = {
 
 // "Live by the DB clock": waiting or admitted, seen within the idle timeout, and (admitted) within
 // the admission TTL. The one definition of a ticket that still counts, used by the expiry, the
-// read, the position and hasAdmittedTicket alike, so a ticket past its time reads as expired even
-// where no write has marked it so yet. `alias`, `idle` and `ttl` are always constants of this
-// module (a table alias and parameter placeholders), never input.
-const liveTicket = (alias: string, idle: string, ttl: string): string => `
+// read, the position, hasAdmittedTicket and the admin's queue counts (rounds.ts) alike, so a
+// ticket past its time reads as expired even where no write has marked it so yet. `alias`,
+// `idle` and `ttl` are always constants of the calling module (a table alias and parameter
+// placeholders), never input.
+export const liveTicket = (alias: string, idle: string, ttl: string): string => `
   ${alias}.status IN ('waiting', 'admitted')
   AND ${alias}.last_seen_at >= statement_timestamp() - ${idle}::int * interval '1 second'
   AND (
@@ -149,7 +150,10 @@ const insertTicket = async (
 // below 0, so a max_active an admin lowered under the admitted count admits nobody and kicks
 // nobody out) and the next waiting tickets in queue order, admitted together. The expiry ran just
 // before under the same lock, so every admitted ticket counted here is live. A closed or upcoming
-// round has no slots: nobody is admitted to a round that cannot be written to. SKIP LOCKED never
+// round has no slots: nobody is admitted to a round that cannot be written to. Neither has a round
+// without a queue (max_active NULL, Q4: the COALESCE makes it 0), so a ticket left waiting when
+// an admin turned the queue off stays where it is until it expires, and once the queue is on
+// again the waiting tickets that are still live are admitted in their old order. SKIP LOCKED never
 // skips anything while every writer of queue_tickets holds the queue lock; it is there so that a
 // future statement locking a ticket row without the lock delays nobody's admission (the
 // admission only ever takes the front of the queue, and the lock keeps that order).
@@ -266,16 +270,30 @@ const answer = async (
 
 export type QueueInput = { studentId: number; settings: QueueSettings };
 
-// Order: 403 student_profile_missing → 409 round_not_open (the grade has no round) → lock →
-// expiry → a live ticket already: 200 with it, its heartbeat taken (answered even outside the
-// window, like a repeated register: nothing new is written) → 409 round_not_open (upcoming or
-// closed) → a new ticket at the back → admission, so a short queue admits at once.
+// A round without a queue (max_active NULL, README Phase 3 decision 6): join and heartbeat answer
+// 409 queue_off, and the page reads the round again and shows the list. Decided from the round
+// as it was selected, before the queue lock: the round edit takes no queue lock (round-lock.ts),
+// so no lock here could order the two anyway, and none is needed. A join that saw the queue on
+// just before an admin turned it off adds one waiting ticket, which the admission gives no slot
+// (max_active NULL = 0 slots, in its own statement) and which simply expires; the student's next
+// heartbeat answers queue_off. A GET and a done still work as before: they only read, or end a
+// ticket that may be left from when the queue was on.
+const assertHasQueue = (round: StudentRound): void => {
+  if (!round.hasQueue) throw new AppError(ERROR_CODES.queueOff);
+};
+
+// Order: 403 student_profile_missing → 409 round_not_open (the grade has no round) → 409
+// queue_off (the round has no queue) → lock → expiry → a live ticket already: 200 with it, its
+// heartbeat taken (answered even outside the window, like a repeated register: nothing new is
+// written) → 409 round_not_open (upcoming or closed) → a new ticket at the back → admission, so a
+// short queue admits at once.
 export const joinQueue = async (
   db: pg.PoolClient,
   { studentId, settings }: QueueInput,
 ): Promise<QueueResult> => {
   const round = await selectRound(db, studentId);
   if (!round) throw new AppError(ERROR_CODES.roundNotOpen);
+  assertHasQueue(round);
   await lockQueue(db, round.id);
 
   const expired = await expireStaleTickets(db, round.id, settings);
@@ -296,17 +314,18 @@ export const joinQueue = async (
   };
 };
 
-// Order: 403 student_profile_missing → 409 not_in_queue (no round) → lock → expiry → 409
-// not_in_queue (no live ticket: never joined, released, or expired, this request's expiry
-// included; the rollback undoes that expiry too, which the next write redoes) → heartbeat →
-// admission. No window check: outside the window the admission finds no slots, and the ticket
-// simply runs out.
+// Order: 403 student_profile_missing → 409 not_in_queue (no round) → 409 queue_off (the round has
+// no queue, live ticket or not: it is left to expire) → lock → expiry → 409 not_in_queue (no live
+// ticket: never joined, released, or expired, this request's expiry included; the rollback undoes
+// that expiry too, which the next write redoes) → heartbeat → admission. No window check: outside
+// the window the admission finds no slots, and the ticket simply runs out.
 export const heartbeatQueue = async (
   db: pg.PoolClient,
   { studentId, settings }: QueueInput,
 ): Promise<QueueResult> => {
   const round = await selectRound(db, studentId);
   if (!round) throw new AppError(ERROR_CODES.notInQueue);
+  assertHasQueue(round);
   await lockQueue(db, round.id);
 
   const expired = await expireStaleTickets(db, round.id, settings);
@@ -385,12 +404,29 @@ export const hasAdmittedTicket = async (
 
 // The gate of a student's own seat-taking request and of their club list (README Phase 3, Q2): in
 // an open round, no live admitted ticket = 403 queue_required. The callers decide when the round
-// is open (registrations.ts, student-round.ts); this only asks the queue. Built by the student
-// routes, the only callers that are gated.
+// is open (registrations.ts, student-round.ts); this asks the queue. Built by the student routes,
+// the only callers that are gated.
+//
+// A round without a queue (max_active NULL, Q4) lets everyone through. One statement reads both,
+// with a plain read and no lock (rule 3: a seat write holds its round lock only). It is race-free
+// against the admin turning the queue on or off because every caller holds what orders it with
+// that edit: register, change and the waitlist join call it after their round lock, and the round
+// edit writes max_active under the same round lock (rounds.ts), so this READ COMMITTED statement
+// sees the setting the edit committed before the lock was granted, and no edit can commit until
+// the write does; the club list calls it in its REPEATABLE READ snapshot, the one its answer's
+// hasQueue was read in.
 export const requireAdmittedTicket =
   (studentId: number, settings: QueueSettings): AdmissionGate =>
   async (db, roundId) => {
-    if (!(await hasAdmittedTicket(db, { roundId, studentId }, settings))) {
-      throw new AppError(ERROR_CODES.queueRequired);
-    }
+    const { rows } = await db.query<{ allowed: boolean }>(
+      `SELECT r.max_active IS NULL OR EXISTS (
+         SELECT 1 FROM queue_tickets t
+         WHERE t.round_id = r.id AND t.student_id = $2 AND t.status = 'admitted'
+           AND ${liveTicket('t', '$3', '$4')}
+       ) AS allowed
+       FROM rounds r
+       WHERE r.id = $1`,
+      [roundId, studentId, settings.idleTimeoutSeconds, settings.admissionTtlSeconds],
+    );
+    if (rows[0]?.allowed !== true) throw new AppError(ERROR_CODES.queueRequired);
   };

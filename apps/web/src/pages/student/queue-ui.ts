@@ -1,7 +1,7 @@
 import { ERROR_CODES } from '@club-registration/shared';
 import type { QueueTicket, StudentQueueResponse, StudentRound } from '@club-registration/shared';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import type { Query, QueryFunctionContext } from '@tanstack/react-query';
+import type { Query, QueryClient, QueryFunctionContext } from '@tanstack/react-query';
 import { useEffect } from 'react';
 import {
   ApiError,
@@ -47,6 +47,24 @@ const isApiError = (error: unknown, code: string): boolean =>
 export const isQueueRequired = (error: unknown): boolean =>
   isApiError(error, ERROR_CODES.queueRequired);
 
+// Join or heartbeat in a round an admin turned the queue off for (Q4). Not a lost connection
+// either: the round read again says hasQueue false, and the page shows the list.
+const isQueueOff = (error: unknown): boolean => isApiError(error, ERROR_CODES.queueOff);
+
+// The round's queue is a property of the round read: a round that is open but has no queue
+// (max_active NULL) makes no queue call at all, as an upcoming or closed one.
+const isQueued = (round: StudentRound | null | undefined): boolean =>
+  round?.status === 'open' && round.hasQueue;
+
+// The queue was turned off (queue_off): read the round again, whose hasQueue false switches the
+// page to the list; awaited, so the page has moved on by the time the error lands.
+const refreshRound = async (client: QueryClient): Promise<void> => {
+  await Promise.all([
+    client.invalidateQueries({ queryKey: STUDENT_ROUND_QUERY_KEY }),
+    client.invalidateQueries({ queryKey: STUDENT_CLUBS_QUERY_KEY }),
+  ]);
+};
+
 // One query holds the ticket, and every fetch of it does the one call the ticket needs: no ticket
 // yet (this visit) → join (or, on a page that never joins, a read), live → heartbeat, ended → a
 // read. So whatever refetches it (the interval, the tab becoming visible again, the invalidation
@@ -65,13 +83,10 @@ const queueSync =
       try {
         return await joinQueue();
       } catch (error) {
-        // The round closed (or moved) since the round read said open: refresh it, and the page
-        // falls back to the round's own status without the queue.
-        if (isApiError(error, ERROR_CODES.roundNotOpen)) {
-          await Promise.all([
-            client.invalidateQueries({ queryKey: STUDENT_ROUND_QUERY_KEY }),
-            client.invalidateQueries({ queryKey: STUDENT_CLUBS_QUERY_KEY }),
-          ]);
+        // The round closed (or moved), or its queue was turned off, since the round read said
+        // otherwise: refresh it, and the page falls back to the round without the queue.
+        if (isApiError(error, ERROR_CODES.roundNotOpen) || isQueueOff(error)) {
+          await refreshRound(client);
         }
         throw error;
       }
@@ -83,6 +98,8 @@ const queueSync =
       // The ticket ended (timed out, released in another tab): the read says which, without
       // joining again.
       if (isApiError(error, ERROR_CODES.notInQueue)) return await fetchQueue();
+      // The queue was turned off: the ticket is left to expire, and the page shows the list.
+      if (isQueueOff(error)) await refreshRound(client);
       throw error;
     }
   };
@@ -118,6 +135,7 @@ export type QueueView =
 const JOIN_ERRORS: Readonly<Record<string, string>> = Object.freeze({
   ...COMMON_ERRORS,
   [ERROR_CODES.roundNotOpen]: 'เข้าคิวไม่ได้ เพราะตอนนี้ไม่อยู่ในช่วงเปิดลงทะเบียน กำลังโหลดข้อมูลรอบล่าสุด',
+  [ERROR_CODES.queueOff]: 'รอบนี้ไม่ใช้คิวแล้ว เลือกชุมนุมได้เลย กำลังโหลดข้อมูลรอบล่าสุด',
 });
 
 const RELEASE_ERRORS: Readonly<Record<string, string>> = COMMON_ERRORS;
@@ -222,22 +240,36 @@ export const isInTurn = (view: QueueView, openedIn: string | undefined): boolean
 export const showsClubs = (view: QueueView): boolean =>
   view.kind === 'off' || view.kind === 'admitted';
 
-// The queue in front of an open round (README Phase 3, Q3). Only an open round is queued for: an
-// upcoming or closed one makes no queue call, and the page shows it as before. When an upcoming
-// round opens (the club list's own timer), the query is enabled and joins.
+// The queue in front of an open round (README Phase 3, Q3). Only an open round with a queue is
+// queued for: an upcoming or closed one, or one without a queue (hasQueue false, Q4), makes no
+// queue call, and the page shows it as before the queue. When an upcoming round opens (the club
+// list's own timer), or an admin turns the queue on mid-round (the round read says hasQueue
+// true), the query is enabled and joins, once.
 // The round comes from GET /api/student/round (Q2: the club list answers 403 queue_required while
 // the student waits, so it cannot be what tells the page the round is open).
 export const useQueue = (round: StudentRound | null) => {
   const queryClient = useQueryClient();
-  const open = round?.status === 'open';
-  const queryKey = queueQueryKey(round?.id ?? 0);
+  const queued = isQueued(round);
+  const queueOff = round?.status === 'open' && !round.hasQueue;
+  const roundId = round?.id ?? 0;
+  const queryKey = queueQueryKey(roundId);
   const query = useQuery({
     ...TICKET_QUERY_OPTIONS,
     queryKey,
     queryFn: syncQueue,
-    enabled: open,
+    enabled: queued,
   });
   useLogoutOnExpiredSession(query.error);
+  // A disabled query keeps its data while the page observes it (gcTime 0 only drops it once
+  // nobody does). So once the queue is off, the ticket shown before is dropped: should the queue
+  // come back on while the page is open, the query has no ticket and joins (the API answers the
+  // old ticket if it is still live) instead of heartbeating one that ran out meanwhile and showing
+  // "expired". Disabled at this point, so the reset fetches nothing.
+  useEffect(() => {
+    if (queueOff) {
+      void queryClient.resetQueries({ queryKey: queueQueryKey(roundId), exact: true });
+    }
+  }, [queryClient, queueOff, roundId]);
 
   const release = useMutation({
     mutationFn: releaseQueue,
@@ -252,11 +284,12 @@ export const useQueue = (round: StudentRound | null) => {
   });
   useLogoutOnExpiredSession(release.error);
 
-  const view = viewOf(open, query.data, query.error);
+  const view = viewOf(queued, query.data, query.error);
   return {
     view,
-    // A heartbeat failed after the ticket was shown; the interval keeps trying.
-    connectionLost: query.isRefetchError && isLive(query.data?.ticket),
+    // A heartbeat failed after the ticket was shown; the interval keeps trying. A queue_off is no
+    // lost connection: the round read it caused switches the page to the list.
+    connectionLost: query.isRefetchError && isLive(query.data?.ticket) && !isQueueOff(query.error),
     // To the back of the queue: the ticket is dropped, and the refetch with none joins.
     rejoin: () => {
       release.reset();
@@ -288,7 +321,12 @@ export type Queue = ReturnType<typeof useQueue>;
 // (and the list refetched by it may then answer queue_required too). cancelRefetch: false joins a
 // fetch already on its way instead of sending another, and a ticket already shown as ended needs
 // no new answer. When the page thinks the round is not open yet, the round read alone does it:
-// once it says open, the ticket query starts and joins, as for any round opening on screen.
+// once it says open, the ticket query starts and joins, as for any round opening on screen. The
+// same goes for a queue an admin turned on mid-round (Q4): the page showed the list without a
+// queue, so the ticket query has no data (useQueue drops it while the queue is off) and is not
+// asked here; the round read says hasQueue true, and the ticket query joins once. A list that
+// keeps answering queue_required while the round read still says no queue asks for one round read
+// per answer, at the list's own poll interval: no loop.
 export const useBackToQueue = (error: unknown, roundId: number | undefined) => {
   const queryClient = useQueryClient();
   useEffect(() => {
@@ -319,19 +357,19 @@ export type QueueTurn =
 // a read), the round is not open any more (by the page's round or the queue's own answer), or the
 // page goes. No ticket, or one that ended, shows nothing.
 export const useQueueKeepalive = (round: StudentRound | null | undefined): QueueTurn => {
-  const open = round?.status === 'open';
+  const queued = isQueued(round);
   const query = useQuery({
     ...TICKET_QUERY_OPTIONS,
     queryKey: keepaliveQueryKey(round?.id ?? 0),
     queryFn: keepQueueAlive,
-    enabled: open,
+    // Not for a round without a queue (Q4); a heartbeat answered queue_off reads the round again,
+    // and its hasQueue false stops this.
+    enabled: queued,
     refetchInterval: (current: TicketQuery) =>
-      hasLiveTicket(current) && current.state.data?.round?.status === 'open'
-        ? HEARTBEAT_INTERVAL_MS
-        : false,
+      hasLiveTicket(current) && isQueued(current.state.data?.round) ? HEARTBEAT_INTERVAL_MS : false,
   });
   useLogoutOnExpiredSession(query.error);
-  const ticket = open ? query.data?.ticket : undefined;
+  const ticket = queued ? query.data?.ticket : undefined;
   switch (ticket?.status) {
     case 'waiting':
       return { kind: 'waiting', position: ticket.position };

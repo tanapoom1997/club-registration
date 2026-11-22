@@ -171,6 +171,8 @@ describe('student read API', () => {
           opensAt: stored.opens_at.toISOString(),
           closesAt: stored.closes_at.toISOString(),
           status: 'open',
+          // Whether the round queues at all; never max_active itself or the queue counts.
+          hasQueue: true,
         },
         registration: null,
         waitlist: null,

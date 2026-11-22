@@ -107,8 +107,23 @@ describe('createRoundRequestSchema', () => {
     expect(result.success).toBe(true);
   });
 
-  it.each([0, MAX_ACTIVE_LIMIT + 1, 1.5])('refuses maxActive %j', (maxActive) => {
+  it.each([0, MAX_ACTIVE_LIMIT + 1, 1.5, '150'])('refuses maxActive %j', (maxActive) => {
     expect(createRoundRequestSchema.safeParse({ ...validRound, maxActive }).success).toBe(false);
+  });
+
+  // README Phase 3 decision 6: null = a round without a queue.
+  it('accepts maxActive null as a round without a queue', () => {
+    const result = createRoundRequestSchema.safeParse({ ...validRound, maxActive: null });
+
+    expect(result.data?.maxActive).toBeNull();
+  });
+
+  // Left out would silently give the round the column default; the admin must choose.
+  it('refuses a round without maxActive', () => {
+    const round: Partial<typeof validRound> = { ...validRound };
+    delete round.maxActive;
+
+    expect(createRoundRequestSchema.safeParse(round).success).toBe(false);
   });
 
   it('refuses a field the request does not define', () => {
@@ -134,11 +149,42 @@ describe('createRoundBatchRequestSchema', () => {
 
     expect(createRoundBatchRequestSchema.safeParse(batch).success).toBe(true);
   });
+
+  it('accepts maxActive null and refuses it left out', () => {
+    const batch = {
+      term: validRound.term,
+      opensAt: validRound.opensAt,
+      closesAt: validRound.closesAt,
+    };
+
+    expect(createRoundBatchRequestSchema.safeParse({ ...batch, maxActive: null }).data).toEqual({
+      ...batch,
+      maxActive: null,
+    });
+    expect(createRoundBatchRequestSchema.safeParse(batch).success).toBe(false);
+  });
 });
 
 describe('updateRoundRequestSchema', () => {
   it('refuses an empty change', () => {
     expect(updateRoundRequestSchema.safeParse({}).success).toBe(false);
+  });
+
+  // Turning the queue off is a change on its own, and must stay apart from "not given".
+  it('accepts maxActive null alone and keeps it null', () => {
+    expect(updateRoundRequestSchema.safeParse({ maxActive: null }).data).toEqual({
+      maxActive: null,
+    });
+  });
+
+  it('leaves maxActive out when it is not given', () => {
+    const result = updateRoundRequestSchema.safeParse({ closesAt: '2099-12-02T16:00:00+07:00' });
+
+    expect(result.data).not.toHaveProperty('maxActive');
+  });
+
+  it.each([0, MAX_ACTIVE_LIMIT + 1, 1.5, '10'])('refuses maxActive %j', (maxActive) => {
+    expect(updateRoundRequestSchema.safeParse({ maxActive }).success).toBe(false);
   });
 
   // Moving a round to another term or grade must fail, not half-succeed.

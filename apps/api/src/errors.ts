@@ -33,6 +33,7 @@ const HTTP_STATUS: Readonly<Record<ErrorCode, number>> = Object.freeze({
   [ERROR_CODES.notWaitlisted]: 409,
   [ERROR_CODES.studentNotInRoundGrade]: 409,
   [ERROR_CODES.notInQueue]: 409,
+  [ERROR_CODES.queueOff]: 409,
   [ERROR_CODES.rateLimited]: 429,
   [ERROR_CODES.internalError]: 500,
 });
@@ -49,7 +50,7 @@ const DEFAULT_MESSAGES: Readonly<Record<ErrorCode, string>> = Object.freeze({
     'This student account has no grade or classroom yet; ask an admin to import it',
   [ERROR_CODES.notFound]: 'Not found',
   [ERROR_CODES.roundExists]: 'A round for this term and grade already exists',
-  [ERROR_CODES.roundNotEmpty]: 'Round still has clubs or other data attached',
+  [ERROR_CODES.roundNotEmpty]: 'Round still has clubs, registration data or queue tickets attached',
   [ERROR_CODES.fileTooLarge]: 'File is larger than the import limit',
   [ERROR_CODES.unsupportedFile]: 'Only .xlsx files are accepted',
   [ERROR_CODES.invalidWorkbook]: 'The file could not be read as an Excel workbook',
@@ -75,6 +76,7 @@ const DEFAULT_MESSAGES: Readonly<Record<ErrorCode, string>> = Object.freeze({
   [ERROR_CODES.notInQueue]: 'You have no live queue ticket in this round; join the queue again',
   [ERROR_CODES.queueRequired]:
     'Choosing a club in an open round needs your turn in the queue; join the queue and wait for it',
+  [ERROR_CODES.queueOff]: 'This round has no queue; choose clubs without queueing',
   [ERROR_CODES.rateLimited]: 'Too many requests, try again later',
   [ERROR_CODES.internalError]: 'Internal server error',
 });
