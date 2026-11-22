@@ -50,6 +50,25 @@ test('a full club is shown as full and offers its waitlist instead of a seat', a
   await expect(card.getByRole('button', { name: `ลงชุมนุม ${clubLabel(FULL_CLUB)}` })).toHaveCount(0);
 });
 
+// U3: a round can have 30+ clubs, and the student's turn is limited. Read only: no seat changes.
+test('a student finds a club by name and hides the full ones under "ยังรับ"', async ({ page }) => {
+  await logIn(page, STUDENTS.browses, STUDENT_LANDING);
+  const list = page.getByRole('list', { name: 'รายการชุมนุม' });
+  const search = page.getByRole('search', { name: 'ค้นหาชุมนุม' });
+  await expect(list.getByRole('article', { name: FULL_CLUB.name, exact: true })).toBeVisible();
+
+  // Part of OPEN_CLUB's name, typed with a space in it.
+  await search.getByRole('searchbox', { name: 'ค้นหาชุมนุม' }).fill('ดน ตรี');
+  await expect(list.getByRole('article')).toHaveCount(1);
+  await expect(list.getByRole('article', { name: OPEN_CLUB.name, exact: true })).toBeVisible();
+
+  await search.getByRole('searchbox', { name: 'ค้นหาชุมนุม' }).fill('');
+  await search.getByText('ยังรับ', { exact: true }).click();
+  await expect(search.getByRole('radio', { name: 'ยังรับ' })).toBeChecked();
+  await expect(list.getByRole('article', { name: FULL_CLUB.name, exact: true })).toHaveCount(0);
+  await expect(list.getByRole('article').first()).toBeVisible();
+});
+
 test('the first login asks for a new password before anything else', async ({ page }) => {
   const student = STUDENTS.firstLogin;
   const newPassword = 'e2e-student-b-chosen';

@@ -8,6 +8,7 @@ import { Button } from '@/components/ui/button';
 import { fetchStudentClubs, fetchStudentRound } from '@/lib/api';
 import { formatThaiDateTime } from '@/lib/thai-time';
 import { cn } from '@/lib/utils';
+import { useWakeLock } from '@/lib/wake-lock';
 import { ClubCard } from './ClubCard';
 import type { ClubWrite } from './ClubCard';
 import { AdminChangeNotice } from './AdminChangeNotice';
@@ -16,6 +17,15 @@ import { NoRound, RoundHeader, StudentLoadState } from './RoundHeader';
 import { PromotedNotice, WaitlistCard } from './WaitlistCard';
 import { LeaveWaitlistPanel } from './LeaveWaitlistPanel';
 import { QueueGate } from './QueueGate';
+import { ClubFilterBar } from './ClubFilterBar';
+import {
+  CLUB_FILTER_MESSAGES,
+  NO_FILTER,
+  filterClubs,
+  filterSummary,
+  isFiltering,
+} from './club-filter';
+import type { ClubFilter } from './club-filter';
 import { useFocusRescue } from './focus-rescue';
 import {
   isInTurn,
@@ -89,6 +99,9 @@ export const StudentClubsPage = () => {
   const round = roundQuery.data?.round ?? null;
   const queue = useQueue(round);
   const turn = queueTurn(queue.view);
+  // A live ticket stops being one after about a minute without a heartbeat, which a phone whose
+  // screen went off no longer sends (U1).
+  useWakeLock(queue.view.kind === 'waiting' || queue.view.kind === 'admitted');
   // The list only where the API gives it: a round that is not open, or has no queue (Q4), where
   // the queue is off, or the student's turn. Never while joining, waiting, or once the turn ended,
   // which would only earn 403s.
@@ -127,6 +140,28 @@ export const StudentClubsPage = () => {
   const panelOpen = panelTarget !== undefined;
   const succeeded = mutation.isSuccess;
 
+  const [filter, setFilter] = useState<ClubFilter>(NO_FILTER);
+  const [announcement, setAnnouncement] = useState('');
+  const keepId =
+    panelTarget !== undefined && panelTarget.kind !== 'leave' ? panelTarget.clubId : undefined;
+  const shownClubs = clubs && filterClubs(clubs, filter, keepId);
+  const filtering = isFiltering(filter);
+  // Announced from here, when the student changes the filter, and never from a poll's counts.
+  const changeFilter = (next: ClubFilter) => {
+    setFilter(next);
+    if (clubs) {
+      setAnnouncement(filterSummary(next, filterClubs(clubs, next, keepId).length, clubs.length));
+    }
+  };
+  const searchRef = useRef<HTMLInputElement>(null);
+  const summaryRef = useRef<HTMLParagraphElement>(null);
+  const listHeadingRef = useRef<HTMLHeadingElement>(null);
+  // The clear button goes with the empty list it sits in: the search field takes focus instead.
+  const clearFilter = () => {
+    changeFilter(NO_FILTER);
+    searchRef.current?.focus();
+  };
+
   const headingRef = useRef<HTMLHeadingElement>(null);
   const promotedRef = useRef<HTMLParagraphElement>(null);
   const adminChangeRef = useRef<HTMLParagraphElement>(null);
@@ -140,6 +175,13 @@ export const StudentClubsPage = () => {
   // On the line around the link: Link merges refs into one callback, which drops a callback ref's
   // cleanup, and the cleanup is what tells the rescue that the link had focus.
   const { ref: heldNoteRef } = useFocusRescue<HTMLParagraphElement>(rescueTo);
+  // On every item of the club list: a poll can take the focused club out of the filtered list
+  // (filled under "ยังรับ"), or out of the round. Focus goes to the line saying how many show.
+  const { ref: clubItemRef } = useFocusRescue<HTMLLIElement>([
+    summaryRef,
+    listHeadingRef,
+    headingRef,
+  ]);
   const lastPanel = useRef<Target>(undefined);
   // A club card returns focus to its own button. After a write went through, that button (or the
   // waitlist card's) is gone, so focus goes to the notice saying what happened (or, when a join's
@@ -284,13 +326,48 @@ export const StudentClubsPage = () => {
                 onRetry={() => void clubsQuery.refetch()}
               />
             ) : (
-              <h2 className="text-lg font-semibold">รายการชุมนุม ({clubs.length})</h2>
+              <h2
+                ref={listHeadingRef}
+                tabIndex={-1}
+                className="text-lg font-semibold focus:outline-none"
+              >
+                รายการชุมนุม ({clubs.length})
+              </h2>
             )}
             {clubs?.length === 0 && <p className="text-muted-foreground">รอบนี้ยังไม่มีชุมนุม</p>}
             {clubs !== undefined && clubs.length > 0 && (
+              <ClubFilterBar
+                filter={filter}
+                onChange={changeFilter}
+                announcement={announcement}
+                searchRef={searchRef}
+              />
+            )}
+            {/* Not a live region: a poll changes these numbers (the filter's own changes are
+                announced above). Kept in its own slot so the list below never moves in the tree. */}
+            {shownClubs !== undefined && clubs !== undefined && clubs.length > 0 && filtering && (
+              <div className="flex flex-wrap items-center gap-3">
+                <p
+                  ref={summaryRef}
+                  tabIndex={-1}
+                  className={cn(
+                    'text-sm focus:outline-none',
+                    shownClubs.length === 0 ? 'font-medium' : 'text-muted-foreground',
+                  )}
+                >
+                  {filterSummary(filter, shownClubs.length, clubs.length)}
+                </p>
+                {shownClubs.length === 0 && (
+                  <Button variant="outline" onClick={clearFilter}>
+                    {CLUB_FILTER_MESSAGES.clear}
+                  </Button>
+                )}
+              </div>
+            )}
+            {shownClubs !== undefined && clubs !== undefined && clubs.length > 0 && (
               <ul aria-label="รายการชุมนุม" className="grid gap-3 md:grid-cols-2">
-                {clubs.map((club) => (
-                  <li key={club.id}>
+                {shownClubs.map((club) => (
+                  <li key={club.id} ref={clubItemRef}>
                     <ClubCard
                       club={club}
                       registration={data.registration}
