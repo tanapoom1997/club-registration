@@ -73,10 +73,25 @@ import type { Queryable } from '../db.js';
 //   those users rows, a student's own password change, locks only its row and waits for nothing
 //   else. So the issuance waits only for transactions that wait for nothing it holds.
 //
+// The queue lock (lockQueue, README Phase 3) stands outside this order. A queue write (join,
+// heartbeat, done in queue.ts) takes exactly one queue lock, of its round, holding nothing, and no
+// other advisory lock after it. It writes only queue_tickets rows, which no other writer touches,
+// and reaches rounds and student_profiles rows only through a plain read (the grade, max_active,
+// the window) and the foreign-key checks of its INSERT (FOR KEY SHARE, which conflicts neither with
+// the import's grade update, nor the round edit's FOR NO KEY UPDATE, nor the import's FOR SHARE;
+// only with a round delete, which holds nothing else). So a queue lock holder never waits for a
+// lock that someone waiting for the queue lock holds, and no cycle can pass through it. The admin
+// round edit changes max_active without the queue lock: an admission reads it once, so what the
+// queue guarantees is that no admission lifts the admitted count above the max_active it read.
+// hasAdmittedTicket takes no lock at all, so a seat write may call it under its round lock (Q2).
+// Should a writer ever need both, it takes the queue lock last, after every round lock.
+//
 // Key space: round locks are the one-bigint form, pg_advisory_xact_lock(round_id). The import
-// lock is the two-int4 form pg_advisory_xact_lock(1, 1); Postgres keeps the two forms in separate
-// key spaces, so a round id can never collide with the import's key. Writers that skip a lock are
-// still stopped by the DB constraints (UNIQUE, CHECK); the locks only make the order simple.
+// lock is the two-int4 form pg_advisory_xact_lock(1, 1), and queue locks are the two-int4 form
+// with class key 2, pg_advisory_xact_lock(2, round_id); Postgres keeps the one-bigint and two-int4
+// forms in separate key spaces, and the class key keeps a queue lock apart from the import's, so
+// no two of these keys can collide. Writers that skip a lock are still stopped by the DB
+// constraints (UNIQUE, CHECK); the locks only make the order simple.
 
 // A fixed key (not per term) because students are shared across terms. See import-commit.ts,
 // initial-passwords.ts and updateRound in rounds.ts for what each holder relies on it for.
@@ -84,6 +99,16 @@ const IMPORT_LOCK_KEY: readonly [number, number] = Object.freeze([1, 1] as const
 
 export const lockImport = async (db: Queryable): Promise<void> => {
   await db.query('SELECT pg_advisory_xact_lock($1, $2)', [...IMPORT_LOCK_KEY]);
+};
+
+// The first key of the two-int4 form, per kind of lock; 1 is the import's (IMPORT_LOCK_KEY).
+const QUEUE_LOCK_CLASS = 2;
+
+// Serializes the queue writes of one round, so expiry, the admitted count and the admission that
+// follows it see each other's commits (README Phase 3). round ids are integer columns, so they fit
+// the int4 key.
+export const lockQueue = async (db: Queryable, roundId: number): Promise<void> => {
+  await db.query('SELECT pg_advisory_xact_lock($1::int, $2::int)', [QUEUE_LOCK_CLASS, roundId]);
 };
 
 export const lockRound = async (db: Queryable, roundId: number): Promise<void> => {

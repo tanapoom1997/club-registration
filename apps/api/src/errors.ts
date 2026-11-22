@@ -31,6 +31,7 @@ const HTTP_STATUS: Readonly<Record<ErrorCode, number>> = Object.freeze({
   [ERROR_CODES.waitlistNotNeeded]: 409,
   [ERROR_CODES.notWaitlisted]: 409,
   [ERROR_CODES.studentNotInRoundGrade]: 409,
+  [ERROR_CODES.notInQueue]: 409,
   [ERROR_CODES.rateLimited]: 429,
   [ERROR_CODES.internalError]: 500,
 });
@@ -70,6 +71,7 @@ const DEFAULT_MESSAGES: Readonly<Record<ErrorCode, string>> = Object.freeze({
   [ERROR_CODES.waitlistNotNeeded]: 'This club has a free seat; take it directly instead of waiting',
   [ERROR_CODES.notWaitlisted]: 'You are not on a waitlist this round',
   [ERROR_CODES.studentNotInRoundGrade]: "The student is not in this round's grade",
+  [ERROR_CODES.notInQueue]: 'You have no live queue ticket in this round; join the queue again',
   [ERROR_CODES.rateLimited]: 'Too many requests, try again later',
   [ERROR_CODES.internalError]: 'Internal server error',
 });

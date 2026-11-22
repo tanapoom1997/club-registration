@@ -23,7 +23,10 @@ import { adminRoundRoutes } from './routes/admin-rounds.js';
 import { adminStudentRoutes } from './routes/admin-students.js';
 import { authRoutes } from './routes/auth.js';
 import { healthRoutes } from './routes/health.js';
+import { studentQueueRoutes } from './routes/student-queue.js';
 import { studentRoutes } from './routes/student.js';
+import { DEFAULT_QUEUE_SETTINGS } from './services/queue.js';
+import type { QueueSettings } from './services/queue.js';
 
 // JSON bodies in this API are tiny; routes that take uploads raise this for themselves.
 const BODY_LIMIT_BYTES = 64 * 1024;
@@ -36,6 +39,8 @@ type AppOptions = {
   // stream lets tests capture log lines to prove no secret or personal data is written.
   logger?: AppLogger;
   trustProxy?: boolean;
+  // From env in production (config.ts); tests may shorten them.
+  queue?: QueueSettings;
 };
 
 // Tests' capturing loggers get the same serializers as production, so they test what ships.
@@ -58,6 +63,7 @@ export const buildApp = async ({
   jwtSecret,
   logger = false,
   trustProxy = false,
+  queue = DEFAULT_QUEUE_SETTINGS,
 }: AppOptions) => {
   const app = Fastify({
     logger: loggerOptions(logger),
@@ -121,6 +127,7 @@ export const buildApp = async ({
   await app.register(adminStudentRoutes({ pool, guard }), { prefix: '/api' });
   await app.register(adminExportRoutes({ pool, guard }), { prefix: '/api' });
   await app.register(studentRoutes({ pool, guard }), { prefix: '/api' });
+  await app.register(studentQueueRoutes({ pool, guard, settings: queue }), { prefix: '/api' });
 
   return app;
 };

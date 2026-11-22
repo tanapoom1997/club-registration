@@ -35,7 +35,7 @@ const EXPECTED_PRIVILEGES: Readonly<Record<string, readonly string[]>> = {
   clubs: ['SELECT', 'INSERT', 'UPDATE'],
   password_issuances: ['SELECT', 'INSERT'],
   pgmigrations: [],
-  queue_tickets: [],
+  queue_tickets: ['SELECT', 'INSERT'],
   registration_events: ['SELECT', 'INSERT'],
   registrations: ['SELECT', 'INSERT', 'DELETE'],
   rounds: ['SELECT', 'INSERT', 'UPDATE', 'DELETE'],
@@ -48,8 +48,10 @@ const COLUMN_PRIVILEGES = ['SELECT', 'INSERT', 'UPDATE', 'REFERENCES'];
 
 // Privileges club_app holds on single columns of a table it lacks them on as a whole: the change
 // of club moves a registration to another club and re-dates it, and nothing else of the row
-// (round_id, student_id) may ever be rewritten by the api.
+// (round_id, student_id) may ever be rewritten by the api. The queue moves a ticket's status,
+// heartbeat and admission time only: its place (created_at), student and round stay as joined.
 const EXPECTED_COLUMN_PRIVILEGES: Readonly<Record<string, Record<string, readonly string[]>>> = {
+  queue_tickets: { UPDATE: ['status', 'last_seen_at', 'admitted_at'] },
   registrations: { UPDATE: ['club_id', 'created_at'] },
 };
 
@@ -166,6 +168,11 @@ describe('club_app database role', () => {
     // Moving to another waitlist is a delete and an insert, never a rewrite of a place in a queue.
     ['reorder a waitlist', 'UPDATE waitlist_entries SET created_at = created_at'],
     ['move a waitlist entry to another club', 'UPDATE waitlist_entries SET club_id = club_id'],
+    // A ticket ends as expired or done and stays; rejoining is a new ticket at the back.
+    ['delete a queue ticket', 'DELETE FROM queue_tickets'],
+    ['move a queue ticket up the queue', 'UPDATE queue_tickets SET created_at = created_at'],
+    ['hand a queue ticket to another student', 'UPDATE queue_tickets SET student_id = student_id'],
+    ['move a queue ticket to another round', 'UPDATE queue_tickets SET round_id = round_id'],
     ['delete a user', 'DELETE FROM users'],
     ['read the migration table', 'SELECT name FROM pgmigrations'],
     ['run a program on the database server', `COPY (SELECT 1) TO PROGRAM 'true'`],

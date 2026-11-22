@@ -1,6 +1,12 @@
 import { describe, expect, it } from 'vitest';
-import { loadConfig, loadDatabaseConfig, poolSettingsFrom } from '../src/config.js';
+import {
+  loadConfig,
+  loadDatabaseConfig,
+  poolSettingsFrom,
+  queueSettingsFrom,
+} from '../src/config.js';
 import { createPool, DEFAULT_POOL_SETTINGS } from '../src/db.js';
+import { DEFAULT_QUEUE_SETTINGS } from '../src/services/queue.js';
 
 const VALID_ENV = {
   DATABASE_URL: 'postgres://fictional:fictional@127.0.0.1:5432/fictional',
@@ -100,5 +106,40 @@ describe('database pool settings', () => {
     } finally {
       await pool.end();
     }
+  });
+});
+
+describe('queue settings', () => {
+  it('defaults to a 60 s idle timeout and a 10 min admission TTL', () => {
+    expect(queueSettingsFrom(loadConfig(VALID_ENV))).toEqual({
+      idleTimeoutSeconds: 60,
+      admissionTtlSeconds: 600,
+    });
+    expect(queueSettingsFrom(loadConfig(VALID_ENV))).toEqual(DEFAULT_QUEUE_SETTINGS);
+  });
+
+  it('reads both from the environment, an empty value meaning the default', () => {
+    expect(
+      queueSettingsFrom(
+        loadConfig({
+          ...VALID_ENV,
+          QUEUE_IDLE_TIMEOUT_SECONDS: '45',
+          QUEUE_ADMISSION_TTL_SECONDS: '',
+        }),
+      ),
+    ).toEqual({ idleTimeoutSeconds: 45, admissionTtlSeconds: 600 });
+  });
+
+  it.each([
+    ['QUEUE_IDLE_TIMEOUT_SECONDS', '14'],
+    ['QUEUE_IDLE_TIMEOUT_SECONDS', '3601'],
+    ['QUEUE_IDLE_TIMEOUT_SECONDS', '60s'],
+    ['QUEUE_ADMISSION_TTL_SECONDS', '59'],
+    ['QUEUE_ADMISSION_TTL_SECONDS', '7201'],
+    ['QUEUE_ADMISSION_TTL_SECONDS', '1.5'],
+  ])('fails fast on %s=%s, naming the field', (name, value) => {
+    expect(() => loadConfig({ ...VALID_ENV, [name]: value })).toThrow(
+      `Invalid environment variables: ${name}`,
+    );
   });
 });

@@ -2,7 +2,7 @@
 
 ระบบลงทะเบียนชุมนุมของโรงเรียน สำหรับนักเรียน ~2,500 คน แบ่งรอบตามชั้น ม.1–ม.6 รอบละ ~400–450 คน
 
-> **สถานะ:** Phase 1 ฟีเจอร์ครบแล้ว (admin: รอบ, import Excel, รหัสผ่านเริ่มต้น, ชุมนุม, export Excel/PDF; นักเรียน: ดูชุมนุม, ลง/ยกเลิก พร้อม concurrency test 500 request) งาน Ops ทำ image, compose production + HTTPS และ backup/restore เสร็จแล้ว เหลือ runbook EC2 + DNS แล้ว load test บนเครื่องจริง **Phase 2 เริ่มแล้ว:** API เปลี่ยนชุมนุมแบบ atomic (`PUT /api/student/registration`) API waitlist ของนักเรียน (เข้า/ออก + promote อัตโนมัติหลังยกเลิก เปลี่ยนชุมนุม admin เพิ่มจำนวนรับ และยืนยัน import) API ให้ admin ดูรายชื่อสมาชิก/เพิ่ม/ย้าย/ลบนักเรียนแทน (PR 3a) API ให้ admin ดู/ลบรายชื่อรอและดู event log (PR 3b) หน้าเว็บนักเรียนของการย้ายชุมนุมและรายชื่อรอ (PR 4) หน้าเว็บ admin ดู/แก้รายชื่อสมาชิกและรายชื่อรอแทนนักเรียน (PR 5a) หน้าเว็บ admin ดูประวัติการลงทะเบียน (event log) กรองด้วยรอบ ชุมนุม หรือรหัสนักเรียน (PR 5b) และเรื่องที่ค้างจาก PR 4 สองเรื่อง (PR 5c: ข้อความ "เข้ารายชื่อรอ… ลำดับที่" ไม่ค้างเหนือข้อความได้ที่แล้ว และ focus ไม่หลุดไป body เมื่อ poll ทำให้ปุ่มออกจากรายชื่อรอที่มี focus หายไป) เสร็จ งานหน้าเว็บของ Phase 2 ครบแล้ว ต่อไปดู [ขั้นตอนถัดไป](#ขั้นตอนถัดไป) ความคืบหน้าดู [Roadmap](#roadmap) และ [รายการที่ยังเปิดอยู่](#รายการที่ยังเปิดอยู่)
+> **สถานะ:** Phase 1 ฟีเจอร์ครบแล้ว (admin: รอบ, import Excel, รหัสผ่านเริ่มต้น, ชุมนุม, export Excel/PDF; นักเรียน: ดูชุมนุม, ลง/ยกเลิก พร้อม concurrency test 500 request) งาน Ops ทำ image, compose production + HTTPS และ backup/restore เสร็จแล้ว เหลือ runbook EC2 + DNS แล้ว load test บนเครื่องจริง **Phase 2 เริ่มแล้ว:** API เปลี่ยนชุมนุมแบบ atomic (`PUT /api/student/registration`) API waitlist ของนักเรียน (เข้า/ออก + promote อัตโนมัติหลังยกเลิก เปลี่ยนชุมนุม admin เพิ่มจำนวนรับ และยืนยัน import) API ให้ admin ดูรายชื่อสมาชิก/เพิ่ม/ย้าย/ลบนักเรียนแทน (PR 3a) API ให้ admin ดู/ลบรายชื่อรอและดู event log (PR 3b) หน้าเว็บนักเรียนของการย้ายชุมนุมและรายชื่อรอ (PR 4) หน้าเว็บ admin ดู/แก้รายชื่อสมาชิกและรายชื่อรอแทนนักเรียน (PR 5a) หน้าเว็บ admin ดูประวัติการลงทะเบียน (event log) กรองด้วยรอบ ชุมนุม หรือรหัสนักเรียน (PR 5b) และเรื่องที่ค้างจาก PR 4 สองเรื่อง (PR 5c: ข้อความ "เข้ารายชื่อรอ… ลำดับที่" ไม่ค้างเหนือข้อความได้ที่แล้ว และ focus ไม่หลุดไป body เมื่อ poll ทำให้ปุ่มออกจากรายชื่อรอที่มี focus หายไป) เสร็จ งานหน้าเว็บของ Phase 2 ครบแล้ว **Phase 3 เริ่มแล้ว:** API ของคิว (Q1: `/api/student/queue` join/heartbeat/done/GET ยังไม่บังคับใช้กับ route อื่น) ต่อไปดู [ขั้นตอนถัดไป](#ขั้นตอนถัดไป) ความคืบหน้าดู [Roadmap](#roadmap) และ [รายการที่ยังเปิดอยู่](#รายการที่ยังเปิดอยู่)
 >
 > **หมายเหตุ:** ตัวเลข performance ทั้งหมดเป็นการประเมินจากหลักการ ยังไม่ได้วัดจริง ต้อง load test ก่อนใช้งาน
 
@@ -119,7 +119,7 @@ club_advisors       -- ครูของชุมนุม: full_name, phone, e
 registrations       -- สถานะปัจจุบัน UNIQUE(round_id, student_id)
 registration_events -- log append-only: register/cancel/change/admin_*/waitlist_*, actor_id, idempotency_key
 waitlist_entries    -- UNIQUE(round_id, student_id), เรียงตาม (created_at, id) โดย created_at = clock_timestamp() หลังได้ round lock
-queue_tickets       -- status: waiting | admitted | expired | done
+queue_tickets       -- status: waiting | admitted | expired | done, admitted_at (admitted ⇒ มีค่า), 1 ticket ที่ยังใช้ได้ต่อ (round, student), เรียง (created_at, id)
 password_issuances  -- บันทึกการออกรหัสผ่านเริ่มต้น: admin_id, ขอบเขต (ชั้น/ห้อง), จำนวน, idempotency_key (ไม่เก็บรหัสผ่าน)
 ```
 
@@ -418,12 +418,66 @@ Admin เพิ่ม/ลบ/ย้ายนักเรียนแทน บ�
 
 ### Phase 3: Queue คุมจำนวนคนเข้า
 
-- `POST /queue/join` → สร้าง ticket (idempotent) คืน position
-- `GET /queue/status` (poll ทุก 3–5 วิ) อัปเดต `last_seen` และ admit ตาม `max_active`
-- Ticket ที่ `last_seen` เกิน ~60 วิ → `expired` คืนที่ให้คนถัดไป
-- `/clubs` และ `/registrations` ต้องมี ticket สถานะ `admitted`
-- Admit ใช้ `FOR UPDATE SKIP LOCKED`
-- **Load test จริง** ปรับ `max_active` (เริ่มที่ ~150) และ pool size
+**เป้าหมาย:** ต่อรอบมีนักเรียนที่เลือกชุมนุมได้พร้อมกันไม่เกิน `rounds.max_active` คนที่เหลือรอคิวตามลำดับที่เข้า (กติกาธุรกิจข้อ 4)
+
+**การตัดสินใจของ Phase 3** (ยืนยันแล้ว)
+
+1. **route ที่ต้องมี ticket `admitted`** (ทำใน Q2): `GET /api/student/clubs` และการเขียนที่เอาที่นั่ง (ลง เปลี่ยน เข้ารายชื่อรอ) ส่วน `GET /api/student/round` (ผลของฉัน) ยกเลิก และออกจากรายชื่อรอ ไม่ต้องมี ticket เพราะไม่เอาที่นั่งของใคร
+2. **ไม่ admit เกิน `max_active` ต่อรอบ:** การเขียนของคิวทุกตัวถือ queue lock ของรอบ (`pg_advisory_xact_lock(2, round_id)` ใน `round-lock.ts`) แล้วนับและ admit ใน statement เดียว เลือก ticket ที่รออยู่ด้วย `FOR UPDATE SKIP LOCKED` เรียง `(created_at, id)`
+3. **หมดอายุ:** ticket (รอหรือ admitted) ที่ `last_seen_at` เก่ากว่า idle timeout (default 60 วินาที) เป็น `expired` และ ticket ที่ admitted แล้วหมดอายุเมื่อ `admitted_at` เก่ากว่า admission TTL (default 10 นาที) แม้ยัง poll อยู่ ทั้งสองค่ามาจาก env (`QUEUE_IDLE_TIMEOUT_SECONDS`, `QUEUE_ADMISSION_TTL_SECONDS` ตรวจด้วย Zod ตอน boot) เป็นค่าประเมินที่ต้องปรับหลัง load test (O5) ทุกการตัดสินเรื่องเวลาใช้นาฬิกา DB
+4. **ลงสำเร็จแล้ว ticket ยังเป็น admitted** จนหมดอายุ นักเรียนจึงยังเปลี่ยนชุมนุมได้ และกดปล่อยเองก่อนได้ (`done`)
+5. **เข้าคิวได้เฉพาะตอนรอบเปิด** (นาฬิกา DB กติกาช่วงเปิดเดียวกับการลง) ลำดับคือเวลาที่เข้า `created_at` = `clock_timestamp()` หลังได้ queue lock (เหตุผลเดียวกับ `waitlist_entries`) ลำดับคิวจึงตรงกับลำดับ lock
+6. **`max_active` เป็น NULL = รอบนั้นไม่มีคิว** (ทำใน Q4 ตอนนี้ยัง NOT NULL)
+7. **Load test เลื่อนไปทำบนเครื่อง EC2 พร้อม O5**
+
+**Q1: API ของคิว** (เสร็จแล้ว: `apps/api/src/services/queue.ts`, `routes/student-queue.ts`, `packages/shared/src/queue.ts`, migration `20261123000000_queue-tickets.sql`)
+
+| Method | Path | ทำอะไร |
+|---|---|---|
+| POST | `/api/student/queue/join` | เข้าคิวของรอบที่นักเรียนเห็น มี ticket ที่ยังไม่หมดอายุอยู่แล้ว = ตอบ ticket เดิม (นับเป็น heartbeat ด้วย ตอบได้แม้รอบปิด) ไม่มี = ticket ใหม่ท้ายคิว แล้ว admit ทันทีถ้ามีที่ |
+| POST | `/api/student/queue/heartbeat` | หน้าเว็บ poll ทุก 3–5 วินาที: อัปเดต `last_seen_at` → expire ticket ที่หมดอายุของรอบ → admit ได้ถึง `max_active - admitted` แทน `GET /queue/status` เดิม เพราะเขียน และ endpoint อ่านต้องไม่มี side effect |
+| POST | `/api/student/queue/done` | ปล่อย ticket (รอหรือ admitted) เป็น `done` ไม่มี ticket = ตอบสถานะปัจจุบัน ไม่ใช่ error ไม่ admit ใคร ที่ว่างไปถึงคนถัดไปตอน heartbeat/join ครั้งต่อไป |
+| GET | `/api/student/queue` | อ่านอย่างเดียวใน read-only snapshot: ไม่ expire ไม่ admit และ**ไม่นับเป็น heartbeat** |
+
+- **คำตอบ (ทั้ง 4 endpoint):** `200 { "round": <รอบแบบ GET /api/student/round> | null, "ticket": null | { "status": "waiting", "position": 3 } | { "status": "admitted", "admittedUntil": "<ISO>" } | { "status": "expired" } | { "status": "done" } }` `ticket` คือ ticket ล่าสุดของนักเรียนในรอบนั้นตามนาฬิกา DB (ticket ที่เลย timeout แสดงเป็น `expired` แม้ยังไม่มีการเขียนใดเปลี่ยนแถว) `null` = ยังไม่เคยเข้าคิว `position` 1 = คนถัดไปที่จะได้ (ticket ที่รอและยังไม่หมดอายุข้างหน้า + 1) `admittedUntil` = เวลาที่ TTL หมด (idle timeout ทำให้หมดก่อนได้ถ้าหยุด heartbeat) ไม่ส่ง `max_active` จำนวน admitted หรือข้อมูลของนักเรียนคนอื่น `round` เป็นข้อมูลที่นักเรียนเห็นอยู่แล้ว ใส่ไว้ให้หน้ารอคิว poll endpoint เดียว
+- **เลือกรอบ:** กติกาเดียวกับ S1 (Phase 1 ข้อ 4) ด้วยนาฬิกา DB นักเรียนและรอบมาจาก session เท่านั้น body ของ POST ทั้งสามต้องเป็น JSON `{}` แบบ strict (ใส่ `studentId`, `roundId`, `position` = `400`, ไม่มี body หรือเป็น text = `400`, form = `415`) เพื่อคงการกัน CSRF แบบ JSON-only เหมือนการเขียนอื่น query ของ GET เป็น strict
+- **Error:** `409 round_not_open` (join ตอนรอบยังไม่เปิด/ปิดแล้ว หรือชั้นไม่มีรอบ และไม่มี ticket เดิม), `409 not_in_queue` (heartbeat ไม่มี ticket ที่ยังไม่หมดอายุ: ไม่เคยเข้า ปล่อยแล้ว หรือหมดอายุ รวมถึง heartbeat ที่มาช้าเกิน idle timeout ซึ่งถือว่าหมดอายุเสมอ ไม่ขึ้นกับว่ามีคนอื่นเขียนก่อนหรือไม่ หรือชั้นไม่มีรอบ), `403` admin / ยังไม่เปลี่ยนรหัสครั้งแรก / `student_profile_missing`, `401` ไม่มี session, `429` เกิน rate limit
+- **ลำดับใน transaction ของการเขียน:** `BEGIN` → เลือกรอบ (นาฬิกา DB) → `pg_advisory_xact_lock(2, round_id)` → expire ticket ที่หมดอายุของรอบ → การเปลี่ยนของคำขอเอง (heartbeat/ticket ใหม่/done) → admit (join, heartbeat) → อ่านคำตอบ → `COMMIT` statement ที่ admit:
+
+```sql
+WITH room AS (
+  SELECT GREATEST(
+    COALESCE((SELECT r.max_active FROM rounds r WHERE r.id = $1
+              AND statement_timestamp() >= r.opens_at AND statement_timestamp() < r.closes_at), 0)
+    - (SELECT count(*) FROM queue_tickets a WHERE a.round_id = $1 AND a.status = 'admitted'),
+    0) AS slots
+), next AS (
+  SELECT w.id FROM queue_tickets w WHERE w.round_id = $1 AND w.status = 'waiting'
+  ORDER BY w.created_at, w.id LIMIT (SELECT slots FROM room) FOR UPDATE SKIP LOCKED
+)
+UPDATE queue_tickets SET status = 'admitted', admitted_at = statement_timestamp()
+WHERE id = ANY (ARRAY(SELECT id FROM next));
+```
+
+- **ทำไมไม่เกิน `max_active`:** การเขียนของคิวในรอบเดียวกันเรียงกันด้วย queue lock การนับ admitted และการ admit อยู่ใน statement เดียวหลัง expire ภายใต้ lock เดียวกัน จึงไม่มี admission ใดดันจำนวนเกิน `max_active` ที่มันอ่าน รอบที่ไม่เปิดมี 0 ที่ (ไม่ admit ใครในรอบที่ลงไม่ได้) admin ลด `max_active` ต่ำกว่าจำนวน admitted ได้ (แก้รอบไม่ถือ queue lock): คนที่ admitted แล้วไม่ถูกเตะออก แต่ไม่มีใครถูก admit เพิ่มจนกว่าจะต่ำกว่าค่าใหม่ (`GREATEST(..., 0)`) invariant ที่รับประกันจึงเป็น "ไม่มี admission ใดทำให้เกิน" ซึ่ง enforce ด้วย lock + statement ที่มีเงื่อนไข ส่วน "1 คน 1 ticket ที่ยังใช้ได้ต่อรอบ" enforce ที่ DB ด้วย partial unique index `queue_tickets_live_ticket_idx` และ ticket เดินหน้าอย่างเดียว (waiting → admitted → expired/done) ด้วย trigger `queue_tickets_forward_only` (ticket ที่จบแล้วกลับมาไม่ได้ เข้าใหม่ = ticket ใหม่ท้ายคิว และ `admitted_at` แก้ไม่ได้หลัง admit จึงยืด TTL ไม่ได้) และ `CHECK` admitted ⇒ มี `admitted_at`
+- **ไม่มี deadlock:** queue lock อยู่คนละ key space กับ round lock (bigint ตัวเดียว) และ import lock `(1, 1)` transaction ของคิวถือแค่ lock นี้ตัวเดียว ไม่ถืออะไรก่อน เขียนเฉพาะ `queue_tickets` (ไม่มี writer อื่น) และแตะ `rounds`/`student_profiles` ด้วยการอ่านธรรมดากับ FK check (`FOR KEY SHARE`) เท่านั้น ไม่แตะตารางที่นั่ง จึงไม่เกิดวงรอกับ round/import lock (รายละเอียดใน `round-lock.ts`) ถ้าวันหนึ่งต้องถือทั้งสองแบบ ให้ถือ queue lock ทีหลังสุด
+- **Idempotent โดยโครงสร้าง:** ไม่แตะที่นั่ง จึงไม่รับ `idempotency_key` และไม่เขียน `registration_events` (CLAUDE.md กฎข้อ 7): join ซ้ำได้ ticket เดิม (ไม่มีแถวที่สอง), heartbeat ซ้ำแค่เลื่อน `last_seen_at`, done ซ้ำตอบสถานะ `done` เดิม
+- **Rate limit (ต่อนักเรียน store ใน memory):** heartbeat + GET รวมกัน 60 ครั้ง/นาที (poll 12–20 ครั้ง/นาที เผื่อสองแท็บและ retry) join + done รวมกัน 20 ครั้ง/นาที แยกจากงบ 30 ครั้ง/นาทีของการลง/เปลี่ยน/ยกเลิก/waitlist การ poll จึงไม่กินงบการเลือกชุมนุม
+- **Log:** student id, round id, ผล (`queued`/`already_queued`/`seen`/`released`/`no_live_ticket` หรือรหัส error), สถานะ ticket และจำนวนที่ expire/admit ในคำขอนั้น ไม่ log ชื่อ
+- **สำหรับ Q2:** `hasAdmittedTicket(db, { roundId, studentId }, settings)` อ่านอย่างเดียว ไม่ถือ lock ใช้นิยาม "ยังไม่หมดอายุ" เดียวกับ heartbeat (ticket ที่เลยเวลาไม่นับแม้แถวยังเป็น `admitted`) เรียกใน transaction ที่ถือ round lock ได้
+- **สิทธิ์ DB:** `club_app` ได้ `SELECT`, `INSERT` และ `UPDATE` เฉพาะ `status`, `last_seen_at`, `admitted_at` ไม่มี `DELETE` (ticket ที่จบอยู่เป็นประวัติ) และแก้ `created_at` (ลำดับคิว) `student_id` `round_id` ไม่ได้ index ใช้ของเดิม (`queue_tickets_admission_idx`) EXPLAIN ANALYZE บนข้อมูลสมมติ 30,000 ticket บนเครื่องพัฒนา (ไม่ใช่สเปค production ไม่มี load พร้อมกัน) ทุก statement ใช้ index และต่ำกว่า 0.5 ms (บันทึกใน `queue.ts`) เป็นตัวเลขประกอบการเลือก index เท่านั้น ยังไม่ใช่ผล load test (O5)
+- **Test:** `apps/api/test/queue.test.ts` (admit ทันทีเมื่อมีที่, ลำดับและ position, join ซ้ำ, รอบไม่เปิด/ไม่มีรอบ, หมดอายุแล้วไปท้ายคิว, done แล้วเข้าใหม่, idle expiry, TTL expiry, heartbeat ช้าถูกปฏิเสธเสมอ, heartbeat ไม่มี ticket, รอบปิดไม่ admit, admin ลด `max_active`, done ทุกกรณี, GET ไม่มี side effect, `hasAdmittedTicket`, trigger/CHECK, guard/body/415, rate limit แยกงบ, log ไม่มีชื่อ) และ `queue-concurrency.test.ts` (500 คน join พร้อมกัน `max_active` 30 → admitted 30 พอดี รอ 470 ลำดับ 1..470 ไม่ซ้ำไม่ขาด โดยมี connection แยกสุ่มอ่านจำนวน admitted ตลอดเวลาว่าไม่เกิน 30, คนน้อยกว่า `max_active` ได้ทุกคน, done 10 คนแข่งกับ heartbeat 490 คน → ได้ 10 คนถัดไปตามลำดับคิว, คนเดียวกด join 20 ครั้งพร้อมกันได้ ticket เดียว) ตัวตรวจ invariant `queueInvariantViolations` (`test/support/queue.ts`: 1 ticket ที่ใช้ได้ต่อคนต่อรอบ, `admitted_at` ตรงกับสถานะ, admitted ≤ `max_active`, ไม่มีคนรอที่อยู่หน้าคน admitted, ticket อยู่ในรอบของชั้นตัวเอง) รันหลังทุกเทสต์ เวลาใช้การย้อนแถวใน DB แทนการรอ
+
+**ที่เหลือของ Phase 3**
+
+| งาน | สถานะ |
+|---|---|
+| Q1 API ของคิว (join/heartbeat/done/GET) | **เสร็จแล้ว** |
+| Q2 บังคับ ticket `admitted` ที่ `GET /api/student/clubs` และการลง/เปลี่ยน/เข้ารายชื่อรอ (ใช้ `hasAdmittedTicket`) | ยังไม่ทำ |
+| Q3 หน้าเว็บรอคิว (heartbeat ทุก 3–5 วินาที, ปุ่มปล่อยคิว) | ยังไม่ทำ |
+| Q4 หน้า admin: จำนวนคนรอ/เข้าแล้วต่อรอบ, แก้ `max_active` ระหว่างรอบเปิด และ `max_active` เป็น NULL ได้ (= ไม่มีคิว) ทั้ง migration และ API | ยังไม่ทำ |
+| Q5 E2E (`max_active` = 1: คนที่สองรอจนคนแรกปล่อยคิว) และเอกสาร (README, CLAUDE.md, docs/operations.md) | ยังไม่ทำ |
+| Q6 load test บน EC2 พร้อม O5: ปรับ `max_active` (เริ่ม ~150), pool size, `QUEUE_*` | เลื่อนไปพร้อม O5 |
 
 > **ข้อจำกัด:** queue/promote ยังไม่ได้ออกแบบสำหรับหลาย instance ยึดเครื่องเดียวไว้
 

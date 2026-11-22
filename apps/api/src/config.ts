@@ -2,6 +2,8 @@ import { z } from 'zod';
 import { APP_DB_PASSWORD_PATTERN } from './db-role.js';
 import { DEFAULT_POOL_SETTINGS } from './db.js';
 import type { PoolSettings } from './db.js';
+import { DEFAULT_QUEUE_SETTINGS, QUEUE_SETTING_LIMITS } from './services/queue.js';
+import type { QueueSettings } from './services/queue.js';
 
 // Compose hands an optional variable that the env file leaves out to the container as an empty
 // string (`${DB_POOL_MAX:-}`), so empty means "not set" rather than 0.
@@ -9,8 +11,8 @@ const emptyAsUnset = (value: unknown): unknown => (value === '' ? undefined : va
 
 // 0 would mean "no limit" to pg for every one of these, which is never what an operator wants.
 const MAX_TIMEOUT_MS = 600_000;
-const intSetting = (fallback: number, max: number) =>
-  z.preprocess(emptyAsUnset, z.coerce.number().int().min(1).max(max).default(fallback));
+const intSetting = (fallback: number, max: number, min = 1) =>
+  z.preprocess(emptyAsUnset, z.coerce.number().int().min(min).max(max).default(fallback));
 
 const databaseConfigSchema = z.object({
   DATABASE_URL: z.string().min(1),
@@ -30,6 +32,17 @@ const configSchema = databaseConfigSchema.extend({
   TRUST_PROXY: z.stringbool().default(false),
   // HS256 is only as strong as its key; 32 characters of randomness is the floor.
   JWT_SECRET: z.string().min(32),
+  // The queue's timeouts (README Phase 3), estimates until the load test on the real host (O5).
+  QUEUE_IDLE_TIMEOUT_SECONDS: intSetting(
+    DEFAULT_QUEUE_SETTINGS.idleTimeoutSeconds,
+    QUEUE_SETTING_LIMITS.idleTimeoutSeconds.max,
+    QUEUE_SETTING_LIMITS.idleTimeoutSeconds.min,
+  ),
+  QUEUE_ADMISSION_TTL_SECONDS: intSetting(
+    DEFAULT_QUEUE_SETTINGS.admissionTtlSeconds,
+    QUEUE_SETTING_LIMITS.admissionTtlSeconds.max,
+    QUEUE_SETTING_LIMITS.admissionTtlSeconds.min,
+  ),
 });
 
 // migrate connects as the database owner (DATABASE_URL) and gives club_app its login. Optional so
@@ -68,4 +81,9 @@ export const poolSettingsFrom = (config: DatabaseConfig): PoolSettings => ({
   connectionTimeoutMs: config.DB_CONNECTION_TIMEOUT_MS,
   statementTimeoutMs: config.DB_STATEMENT_TIMEOUT_MS,
   idleInTransactionTimeoutMs: config.DB_IDLE_IN_TRANSACTION_TIMEOUT_MS,
+});
+
+export const queueSettingsFrom = (config: Config): QueueSettings => ({
+  idleTimeoutSeconds: config.QUEUE_IDLE_TIMEOUT_SECONDS,
+  admissionTtlSeconds: config.QUEUE_ADMISSION_TTL_SECONDS,
 });
