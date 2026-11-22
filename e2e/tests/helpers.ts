@@ -7,6 +7,10 @@ import type { Account } from '../fixtures.js';
 
 export const LOGIN_ID_LABEL = 'รหัสนักเรียน / รหัสผู้ใช้';
 export const PASSWORD_LABEL = 'รหัสผ่าน';
+// A student's login lands on the club list; /student is the menu page, where the change of
+// password and a refused admin page lead.
+export const STUDENT_LANDING = /\/student\/clubs$/;
+export const STUDENT_HOME = /\/student$/;
 
 export const submitLogin = async (page: Page, loginId: string, password: string): Promise<void> => {
   await page.goto('/login');

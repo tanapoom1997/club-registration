@@ -1,5 +1,10 @@
 import { ERROR_CODES } from '@club-registration/shared';
-import type { QueueTicket, StudentQueueResponse, StudentRound } from '@club-registration/shared';
+import type {
+  QueueTicket,
+  StudentClubRef,
+  StudentQueueResponse,
+  StudentRound,
+} from '@club-registration/shared';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import type { Query, QueryClient, QueryFunctionContext } from '@tanstack/react-query';
 import { useEffect } from 'react';
@@ -153,9 +158,11 @@ export const QUEUE_MESSAGES = Object.freeze({
   admittedHelp: 'ลงหรือย้ายชุมนุมได้จนถึงเวลานี้ เลือกเสร็จแล้วกด "เสร็จแล้ว ปล่อยคิว" เพื่อให้คนถัดไปได้เข้า',
   keepOpen: 'อย่าปิดหรือสลับไปหน้าอื่นนาน ระบบอาจถือว่าออกจากคิว',
   connectionLost: 'เชื่อมต่อระบบไม่ได้ชั่วคราว กำลังลองใหม่ ถ้าหลุดนานเกิน 1 นาทีอาจต้องเข้าคิวใหม่',
-  expiredHelp:
-    'หน้านี้ไม่ได้ติดต่อระบบนานเกินไป (เช่น ปิดหรือสลับไปหน้าอื่นนาน) หรือครบเวลาที่ให้เลือกชุมนุมแล้ว ชุมนุมที่ลงไว้แล้วยังอยู่ ถ้าจะเลือกต่อ กดเข้าคิวใหม่ (ต่อท้ายคิว)',
-  doneHelp: 'ชุมนุมที่ลงไว้แล้วยังอยู่ ถ้าจะเลือกใหม่ กดเข้าคิวใหม่ (ต่อท้ายคิว)',
+  expiredHelp: 'หน้านี้ไม่ได้ติดต่อระบบนานเกินไป (เช่น ปิดหรือสลับไปหน้าอื่นนาน) หรือครบเวลาที่ให้เลือกชุมนุมแล้ว',
+  // After the turn ended (expired or released): only a student who holds a club is told it stays.
+  heldKept: (club: StudentClubRef) =>
+    `ชุมนุม ${club.clubCode} ${club.name} ที่ลงไว้ยังอยู่ ถ้าจะเลือกใหม่ กดเข้าคิวใหม่ (ต่อท้ายคิว)`,
+  noneHeld: 'คุณยังไม่ได้ลงชุมนุมในรอบนี้ ถ้าจะเลือก กดเข้าคิวใหม่ (ต่อท้ายคิว)',
   releaseUnknown: 'เชื่อมต่อระบบไม่สำเร็จ จึงยังไม่รู้ว่าปล่อยคิวแล้วหรือไม่ กดอีกครั้งได้ (ปล่อยซ้ำไม่มีผลเสีย)',
   releaseFallback: 'ปล่อยคิวไม่สำเร็จ กรุณาลองใหม่อีกครั้ง',
   // The result page (useQueueKeepalive): the place is kept while it is open, but the club list

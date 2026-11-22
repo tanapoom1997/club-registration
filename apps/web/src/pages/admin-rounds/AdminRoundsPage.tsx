@@ -172,6 +172,7 @@ export const AdminRoundsPage = () => {
         <ConfirmPanel
           message={`ลบรอบ ${roundName(deleting)} ใช่หรือไม่`}
           confirmLabel="ยืนยันลบ"
+          destructive
           pending={deleteMutation.isPending}
           onConfirm={() => confirmDelete(deleting)}
           onCancel={() => setDeleting(undefined)}

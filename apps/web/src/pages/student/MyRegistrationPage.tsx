@@ -189,6 +189,7 @@ export const MyRegistrationPage = () => {
               question={`ยกเลิกชุมนุม ${panel.club.clubCode} ${panel.club.name}?`}
               note="ที่นั่งจะว่างทันทีและอาจมีคนอื่นลงแทน ถ้าเปลี่ยนใจภายหลังอาจลงชุมนุมนี้กลับไม่ได้"
               confirmLabel="ยืนยัน ยกเลิกชุมนุม"
+              destructive
               pendingLabel="กำลังยกเลิก…"
               dismissLabel="ไม่ยกเลิก"
             />

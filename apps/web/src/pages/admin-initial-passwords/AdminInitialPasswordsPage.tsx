@@ -77,7 +77,10 @@ export const AdminInitialPasswordsPage = () => {
 
   const classrooms = statusQuery.data ?? [];
   const grades = [...new Set(classrooms.map((row) => row.grade))];
-  const selectedGrade = grade ?? grades[0];
+  // Until the admin picks one: the first grade with students who never got a password, which is
+  // what the page is for. Kept in state once used (see pinScope), so a refetch after an issue,
+  // which zeroes that grade, does not move the form to another grade under the result.
+  const selectedGrade = grade ?? classrooms.find((row) => row.neverIssued > 0)?.grade ?? grades[0];
   const gradeClassrooms = classrooms.filter((row) => row.grade === selectedGrade);
   const scope: Scope | undefined =
     selectedGrade === undefined ? undefined : { grade: selectedGrade, classroom, onlyUnissued };
@@ -85,8 +88,13 @@ export const AdminInitialPasswordsPage = () => {
   const expected = counts.neverIssued + (onlyUnissued ? 0 : counts.issuedPending);
   const invalidates = onlyUnissued ? 0 : counts.issuedPending;
 
+  const pinScope = () => {
+    if (grade === undefined) setGrade(selectedGrade);
+  };
+
   // Any change to the choice cancels a pending confirmation and hides the last result.
   const changeScope = (apply: () => void) => {
+    pinScope();
     apply();
     setConfirming(false);
     mutation.reset();
@@ -94,6 +102,7 @@ export const AdminInitialPasswordsPage = () => {
 
   const handleSubmit = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
+    pinScope();
     mutation.reset();
     setConfirming(true);
   };

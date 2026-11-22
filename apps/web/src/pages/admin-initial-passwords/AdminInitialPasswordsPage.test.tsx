@@ -227,6 +227,53 @@ describe('admin initial passwords page', () => {
     expect(downloads).toEqual([]);
   });
 
+  it('starts on the first grade that has students who never got a password', async () => {
+    mockApi({
+      'GET /api/auth/me': () => Response.json({ user: ADMIN }),
+      'GET /api/admin/students/password-status': () =>
+        Response.json({
+          classrooms: [
+            classroomStatus({ grade: 1, changed: 30 }),
+            classroomStatus({ grade: 4, neverIssued: 1 }),
+            classroomStatus({ grade: 5, neverIssued: 20 }),
+          ],
+        }),
+    });
+
+    await openPage();
+
+    expect(screen.getByLabelText<HTMLSelectElement>('ชั้น').value).toBe('4');
+    expect(screen.getByText(/^ม\.4 ทุกห้อง: จะออกรหัสผ่านให้ 1 คน/)).toBeTruthy();
+    expect(issueButton()).toHaveProperty('disabled', false);
+  });
+
+  it('stays on the grade just issued when the refreshed counts show nobody left there', async () => {
+    let classrooms = [
+      classroomStatus({ grade: 1, changed: 30 }),
+      classroomStatus({ grade: 4, neverIssued: 3 }),
+      classroomStatus({ grade: 5, neverIssued: 20 }),
+    ];
+    const fetchMock = mockApi({
+      'GET /api/auth/me': () => Response.json({ user: ADMIN }),
+      'GET /api/admin/students/password-status': () => Response.json({ classrooms }),
+      [`POST ${ISSUE_PATH}`]: () => {
+        classrooms = classrooms.map((row) =>
+          row.grade === 4 ? { ...row, neverIssued: 0, issuedPending: 3 } : row,
+        );
+        return fileResponse(3);
+      },
+    });
+    await openPage();
+    fireEvent.click(issueButton());
+
+    fireEvent.click(screen.getByRole('button', { name: 'ยืนยัน ออกรหัสผ่าน' }));
+
+    await screen.findByText(/ออกรหัสผ่านให้ 3 คนแล้ว/);
+    await waitFor(() => expect(screen.getByText(/^ม\.4 ทุกห้อง: จะออกรหัสผ่านให้ 0 คน/)).toBeTruthy());
+    expect(screen.getByLabelText<HTMLSelectElement>('ชั้น').value).toBe('4');
+    expect(bodyOf(issueCalls(fetchMock)[0] as [string, RequestInit])).toMatchObject({ grade: 4 });
+  });
+
   it('disables issuing when the scope has nobody left to issue', async () => {
     mockApi({
       'GET /api/auth/me': () => Response.json({ user: ADMIN }),

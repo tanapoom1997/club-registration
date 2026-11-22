@@ -163,6 +163,21 @@ describe('student clubs page', () => {
     },
   );
 
+  it.each(['upcoming', 'closed'] as const)(
+    'links the held club to the result without offering a cancel while the round is %s',
+    async (status) => {
+      mockStudentApi({ round: roundFixture({ status }), registration: registrationFor(ART) });
+
+      await openPage();
+
+      const held = screen.getByRole('heading', { name: 'ชุมนุมของฉัน' }).parentElement as HTMLElement;
+      const link = within(held).getByRole('link');
+      expect(link.textContent).toBe('ดูผลของฉัน');
+      expect(link.getAttribute('href')).toBe('/student/my-registration');
+      expect(held.textContent).not.toContain('ยกเลิก');
+    },
+  );
+
   it('registers after confirmation with a new idempotency key and shows the held club', async () => {
     const { fetchMock } = mockStudentApi();
     await openPage();
@@ -394,6 +409,32 @@ describe('student clubs page', () => {
       await openPage();
 
       expect(screen.queryByRole('button', { name: /^ย้ายมาชุมนุมนี้ / })).toBeNull();
+    });
+
+    it('shows the move as a secondary button once the student holds a club', async () => {
+      mockStudentApi({ registration: registrationFor(ART) });
+
+      await openPage();
+
+      expect(changeButton(CHESS.clubCode, CHESS.name).dataset.variant).toBe('outline');
+    });
+
+    it('keeps a first seat as the main button for a student without a club', async () => {
+      mockStudentApi();
+
+      await openPage();
+
+      expect(registerButton(CHESS.clubCode, CHESS.name).dataset.variant).toBe('primary');
+    });
+
+    it('keeps the register confirmation primary, not destructive', async () => {
+      mockStudentApi();
+      await openPage();
+
+      const dialog = startRegister(CHESS.clubCode, CHESS.name);
+
+      const confirm = within(dialog).getByRole('button', { name: 'ยืนยัน ลงชุมนุม' });
+      expect(confirm.dataset.variant).toBe('primary');
     });
 
     it.each(['upcoming', 'closed'] as const)(

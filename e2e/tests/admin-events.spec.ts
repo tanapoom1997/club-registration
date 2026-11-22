@@ -1,6 +1,6 @@
 import { expect, test } from '@playwright/test';
 import { ADMIN, EVENT_LOG_CLUB, STUDENTS, TERM, GRADE } from '../fixtures.js';
-import { logIn } from './helpers.js';
+import { STUDENT_LANDING, logIn } from './helpers.js';
 
 const clubLabel = (club: { code: string; name: string }) => `${club.code} ${club.name}`;
 
@@ -13,8 +13,7 @@ test('an admin finds the registration of a student in the event log by their cod
   const studentContext = await browser.newContext();
   const studentPage = await studentContext.newPage();
   try {
-    await logIn(studentPage, student, /\/student$/);
-    await studentPage.goto('/student/clubs');
+    await logIn(studentPage, student, STUDENT_LANDING);
     await studentPage
       .getByRole('article', { name: EVENT_LOG_CLUB.name, exact: true })
       .getByRole('button', { name: `ลงชุมนุม ${clubLabel(EVENT_LOG_CLUB)}` })

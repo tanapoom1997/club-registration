@@ -408,6 +408,18 @@ describe('student waitlist', () => {
       expect(callsTo(fetchMock, 'POST', LEAVE_PATH)).toHaveLength(0);
     });
 
+    it('shows the leave confirmation in the destructive style', async () => {
+      mockStudentApi({ waitlist: waitlistFor(MUSIC) });
+      await openClubsPage();
+
+      fireEvent.click(screen.getByRole('button', { name: LEAVE_BUTTON }));
+
+      const confirm = within(leaveDialog(MUSIC.clubCode, MUSIC.name)).getByRole('button', {
+        name: 'ยืนยัน ออกจากรายชื่อรอ',
+      });
+      expect(confirm.dataset.variant).toBe('destructive');
+    });
+
     it('shows the waitlist entry and leaves it on my-registration too', async () => {
       const { fetchMock } = mockStudentApi({
         registration: registrationFor(ART),

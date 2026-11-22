@@ -11,6 +11,16 @@ const STUDENT: SessionUser = {
   mustChangePassword: false,
 };
 
+const ADMIN: SessionUser = {
+  id: 2,
+  loginId: 'demo-admin',
+  fullName: 'ผู้ดูแลสมมติ',
+  role: 'admin',
+  mustChangePassword: false,
+};
+
+const NO_ROUND = { round: null, registration: null, waitlist: null, adminChange: null };
+
 const fillLogin = (loginId: string, password: string) => {
   fireEvent.change(screen.getByLabelText('รหัสนักเรียน / รหัสผู้ใช้'), {
     target: { value: loginId },
@@ -88,10 +98,72 @@ describe('auth routes', () => {
     expect(router.state.location.pathname).toBe('/change-password');
   });
 
-  it('shows a student only the student menu', async () => {
+  it('takes a student from login straight to the club list', async () => {
+    mockApi({
+      'GET /api/auth/me': unauthorized,
+      'POST /api/auth/login': () => Response.json({ user: STUDENT }),
+      'GET /api/student/round': () => Response.json(NO_ROUND),
+    });
+    const router = renderAt('/login');
+    await screen.findByRole('heading', { name: 'เข้าสู่ระบบ' });
+
+    fillLogin('demo1001', 'chosen-password');
+
+    expect(await screen.findByRole('heading', { level: 1, name: 'ชุมนุมในชั้นของฉัน' })).toBeTruthy();
+    expect(router.state.location.pathname).toBe('/student/clubs');
+  });
+
+  it('takes an admin from login to the admin home', async () => {
+    mockApi({
+      'GET /api/auth/me': unauthorized,
+      'POST /api/auth/login': () => Response.json({ user: ADMIN }),
+    });
+    const router = renderAt('/login');
+    await screen.findByRole('heading', { name: 'เข้าสู่ระบบ' });
+
+    fillLogin('demo-admin', 'chosen-password');
+
+    expect(await screen.findByRole('heading', { name: `สวัสดี ${ADMIN.fullName}` })).toBeTruthy();
+    expect(router.state.location.pathname).toBe('/admin');
+  });
+
+  it('opens the club list for a signed-in student at the site root', async () => {
+    mockApi({
+      'GET /api/auth/me': () => Response.json({ user: STUDENT }),
+      'GET /api/student/round': () => Response.json(NO_ROUND),
+    });
+
+    const router = renderAt('/');
+
+    expect(await screen.findByRole('heading', { level: 1, name: 'ชุมนุมในชั้นของฉัน' })).toBeTruthy();
+    expect(router.state.location.pathname).toBe('/student/clubs');
+  });
+
+  it('gives the admin home one h1, with each menu card a level 2 heading under it', async () => {
+    mockApi({ 'GET /api/auth/me': () => Response.json({ user: ADMIN }) });
+
+    renderAt('/admin');
+
+    await screen.findByRole('heading', { level: 1, name: `สวัสดี ${ADMIN.fullName}` });
+    expect(screen.getAllByRole('heading', { level: 1 })).toHaveLength(1);
+    const menus = screen.getAllByRole('heading', { level: 2 }).map((h) => h.textContent);
+    expect(menus).toContain('นำเข้า Excel');
+    expect(menus).toContain('รอบลงทะเบียน');
+  });
+
+  it('makes the login card title the page h1', async () => {
+    mockApi({ 'GET /api/auth/me': unauthorized });
+
+    renderAt('/login');
+
+    await screen.findByRole('heading', { level: 1, name: 'เข้าสู่ระบบ' });
+    expect(screen.getAllByRole('heading', { level: 1 })).toHaveLength(1);
+  });
+
+  it('shows a student only the student menu on the student home', async () => {
     mockApi({ 'GET /api/auth/me': () => Response.json({ user: STUDENT }) });
 
-    renderAt('/');
+    renderAt('/student');
 
     expect(await screen.findByRole('heading', { name: `สวัสดี ${STUDENT.fullName}` })).toBeTruthy();
     const nav = screen.getByRole('navigation', { name: 'เมนูหลัก' });

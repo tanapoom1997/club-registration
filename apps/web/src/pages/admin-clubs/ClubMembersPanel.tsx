@@ -119,6 +119,7 @@ export const ClubMembersPanel = ({ club, round, onClose }: ClubMembersPanelProps
           question={`นำ ${person} ออกจากชุมนุม ${club.clubCode} ${club.name}?`}
           note={removeMemberNote(round.status)}
           confirmLabel="ยืนยัน นำออกจากชุมนุม"
+          destructive
           pendingLabel="กำลังนำออก…"
           dismissLabel="ไม่นำออก"
         />
@@ -129,6 +130,7 @@ export const ClubMembersPanel = ({ club, round, onClose }: ClubMembersPanelProps
           question={`นำ ${person} ออกจากรายชื่อรอชุมนุม ${club.clubCode} ${club.name}?`}
           note="การนำออกจากรายชื่อรอไม่ทำให้ใครได้ที่ คนที่รอข้างหลังเลื่อนขึ้นหนึ่งลำดับ ถ้านักเรียนเข้ารายชื่อรอใหม่ภายหลังจะต่อท้ายคิว"
           confirmLabel="ยืนยัน นำออกจากรายชื่อรอ"
+          destructive
           pendingLabel="กำลังนำออกจากรายชื่อรอ…"
           dismissLabel="ไม่นำออก"
         />

@@ -9,9 +9,8 @@ import {
   TERM,
 } from '../fixtures.js';
 import type { Account } from '../fixtures.js';
-import { logIn, queryDatabase } from './helpers.js';
+import { STUDENT_LANDING, logIn, queryDatabase } from './helpers.js';
 
-const STUDENT_HOME = /\/student$/;
 const ADMIN_HOME = /\/admin$/;
 const CLUB_LIST = 'รายการชุมนุม';
 const QUEUE_CARD = 'คิวเลือกชุมนุม';
@@ -72,8 +71,7 @@ type StudentPage = { context: BrowserContext; page: Page; queue: Locator; loads:
 const openClubs = async (browser: Browser, account: Account): Promise<StudentPage> => {
   const context = await browser.newContext();
   const page = await context.newPage();
-  await logIn(page, account, STUDENT_HOME);
-  await page.goto('/student/clubs');
+  await logIn(page, account, STUDENT_LANDING);
   let loads = 0;
   page.on('load', () => {
     loads += 1;

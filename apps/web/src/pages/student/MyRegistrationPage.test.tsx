@@ -107,6 +107,17 @@ describe('student my-registration page', () => {
     await waitFor(() => expect(callsTo(fetchMock, 'GET', ROUND_PATH)).toHaveLength(2));
   });
 
+  it('shows the cancel confirmation in the destructive style', async () => {
+    mockStudentApi({ registration: HELD });
+    await openPage();
+
+    fireEvent.click(screen.getByRole('button', { name: CANCEL_BUTTON }));
+
+    const dialog = screen.getByRole('alertdialog', { name: DIALOG });
+    const confirm = within(dialog).getByRole('button', { name: 'ยืนยัน ยกเลิกชุมนุม' });
+    expect(confirm.dataset.variant).toBe('destructive');
+  });
+
   it('keeps the club when the student backs out of the confirmation', async () => {
     const { fetchMock } = mockStudentApi({ registration: HELD });
     await openPage();
@@ -212,7 +223,10 @@ describe('student my-registration page', () => {
     expect((await within(dialog).findByRole('alert')).textContent).toContain(
       'ยังไม่รู้ว่ายกเลิกสำเร็จหรือไม่',
     );
-    fireEvent.click(within(dialog).getByRole('button', { name: 'ลองอีกครั้ง' }));
+    const retry = within(dialog).getByRole('button', { name: 'ลองอีกครั้ง' });
+    // It resends the same cancel, so it looks like the confirm it repeats.
+    expect(retry.dataset.variant).toBe('destructive');
+    fireEvent.click(retry);
 
     expect(await screen.findByText(/ยกเลิกชุมนุมแล้ว/)).toBeTruthy();
     const keys = cancelKeys(fetchMock);

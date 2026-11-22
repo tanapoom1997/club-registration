@@ -19,6 +19,7 @@
   --color-brand: var(--brand);
   --color-muted: var(--muted);
   --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
   --color-input: var(--input);
   --color-ring: var(--ring);
   --font-sans:
@@ -31,6 +32,7 @@
 /*
  * Light theme only: the school asked for a white background, and following the OS dark mode made
  * the site look different on every student's phone. Text colours keep at least 4.5:1 on white.
+ * --input, the edge of a field, keeps at least 3:1 (WCAG 1.4.11): 3.37 on white, 3.09 on muted.
  */
 :root {
   color-scheme: light;
@@ -41,7 +43,7 @@
   --muted: oklch(0.97 0.007 265);
   --muted-foreground: oklch(0.48 0.03 265);
   --border: oklch(0.92 0.012 265);
-  --input: oklch(0.87 0.016 265);
+  --input: oklch(0.64 0.02 265);
   --primary: oklch(0.51 0.23 277);
   --primary-foreground: oklch(1 0 0);
   --primary-soft: oklch(0.96 0.025 277);
@@ -52,6 +54,7 @@
   --warning: oklch(0.97 0.05 85);
   --warning-foreground: oklch(0.5 0.15 48);
   --destructive: oklch(0.55 0.22 27);
+  --destructive-foreground: oklch(1 0 0);
 }
 
 body {

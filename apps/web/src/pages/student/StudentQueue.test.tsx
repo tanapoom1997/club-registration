@@ -451,13 +451,60 @@ describe('student queue on the clubs page', () => {
       await beat();
 
       await waitFor(() => expect(queueStatus().textContent).toBe('หมดเวลาคิวแล้ว'));
-      expect(queueCard().textContent).toContain('ชุมนุมที่ลงไว้แล้วยังอยู่');
       expect(clubList()).toBeNull();
       expect(callsTo(fetchMock, 'GET', QUEUE_PATH)).toHaveLength(1);
       const beats = callsTo(fetchMock, 'POST', QUEUE_HEARTBEAT_PATH).length;
       await advance(60_000);
       expect(callsTo(fetchMock, 'POST', QUEUE_HEARTBEAT_PATH)).toHaveLength(beats);
       expect(callsTo(fetchMock, 'POST', QUEUE_JOIN_PATH)).toHaveLength(1);
+    });
+
+    it.each([
+      ['expired', 'หมดเวลาคิวแล้ว'],
+      ['done', 'ปล่อยคิวแล้ว'],
+    ] as const)(
+      'tells a student without a club that they have none when the ticket is %s',
+      async (status, headline) => {
+        vi.useFakeTimers({ shouldAdvanceTime: true });
+        const { state } = await openAdmitted();
+
+        state.ticket = { status };
+        await beat();
+
+        await waitFor(() => expect(queueStatus().textContent).toBe(headline));
+        const text = queueCard().textContent;
+        expect(text).toContain('คุณยังไม่ได้ลงชุมนุมในรอบนี้ ถ้าจะเลือก กดเข้าคิวใหม่');
+        expect(text).not.toContain('ที่ลงไว้ยังอยู่');
+      },
+    );
+
+    it.each(['expired', 'done'] as const)(
+      'tells a student who holds a club that it stays when the ticket is %s',
+      async (status) => {
+        vi.useFakeTimers({ shouldAdvanceTime: true });
+        const { state } = mockStudentApi({ registration: registrationFor(ART) });
+        await openPage();
+        await screen.findByRole('list', { name: CLUB_LIST });
+
+        state.ticket = { status };
+        await beat();
+
+        await screen.findByRole('button', { name: REJOIN_BUTTON });
+        const text = queueCard().textContent;
+        expect(text).toContain(`ชุมนุม ${ART.clubCode} ${ART.name} ที่ลงไว้ยังอยู่`);
+        expect(text).not.toContain('ยังไม่ได้ลงชุมนุม');
+      },
+    );
+
+    it('says why the turn ended only when it timed out', async () => {
+      vi.useFakeTimers({ shouldAdvanceTime: true });
+      const { state } = await openAdmitted();
+
+      state.ticket = { status: 'done' };
+      await beat();
+
+      await screen.findByRole('button', { name: REJOIN_BUTTON });
+      expect(queueCard().textContent).not.toContain('ไม่ได้ติดต่อระบบนานเกินไป');
     });
 
     it('shows the release from another tab as released', async () => {
