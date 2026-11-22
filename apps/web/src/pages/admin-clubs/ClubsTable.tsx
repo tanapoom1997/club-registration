@@ -70,7 +70,8 @@ export const ClubsTable = ({ clubs, onEdit, onShowMembers }: ClubsTableProps) =>
           <TableCell className="text-right">
             {club.remaining === 0 ? <Badge variant="warning">เต็ม</Badge> : club.remaining}
           </TableCell>
-          <TableCell>
+          {/* Thai has no spaces between words, so a narrow cell would break "รายชื่อ" in two. */}
+          <TableCell className="whitespace-nowrap">
             <div className="flex justify-end gap-2">
               <Button
                 variant="outline"

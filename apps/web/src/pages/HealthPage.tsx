@@ -40,7 +40,7 @@ export const HealthPage = () => {
     <main className="mx-auto flex min-h-dvh max-w-md flex-col justify-center p-4">
       <Card>
         <CardHeader>
-          <CardTitle>สถานะระบบ</CardTitle>
+          <CardTitle as="h1">สถานะระบบ</CardTitle>
           <p className="text-sm text-muted-foreground">ระบบลงทะเบียนชุมนุม</p>
         </CardHeader>
         <CardContent>

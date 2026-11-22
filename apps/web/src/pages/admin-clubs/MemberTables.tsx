@@ -23,7 +23,7 @@ const RemoveButton = ({ person, actions }: { person: Person; actions: RowActions
   <div className="flex justify-end">
     <Button
       variant="outline"
-      className="px-3 py-1"
+      className="px-3 py-1 whitespace-nowrap"
       aria-label={`นำออก ${person.loginId} ${person.fullName}`}
       disabled={actions.disabled}
       onClick={(event) => actions.onRemove(person, event.currentTarget)}

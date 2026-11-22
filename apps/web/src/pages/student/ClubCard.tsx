@@ -186,7 +186,9 @@ export const ClubCard = ({
         offer !== 'none' && (
           <Button
             ref={actionRef}
-            variant={offer === 'join' ? 'outline' : 'primary'}
+            // Only a first seat is the main action. Once the student holds a club, moving is an
+            // option on every other card, and a wall of solid buttons would push it.
+            variant={offer === 'register' ? 'primary' : 'outline'}
             className="w-full sm:w-auto"
             aria-label={`${ACTION_TEXT[offer]} ${clubLabel(club)}`}
             disabled={!enabled}

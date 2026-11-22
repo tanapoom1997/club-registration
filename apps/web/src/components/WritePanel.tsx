@@ -28,6 +28,8 @@ type WritePanelProps = {
   pendingLabel: string;
   dismissLabel: string;
   followUp?: FollowUp | undefined;
+  // The write gives something up (a seat, a waitlist place): its confirm button is red.
+  destructive?: boolean;
 };
 
 // The confirmation of a seat write, on the student pages and in the admin's club lists. Inline
@@ -43,6 +45,7 @@ export const WritePanel = ({
   pendingLabel,
   dismissLabel,
   followUp,
+  destructive = false,
 }: WritePanelProps) => {
   const panelRef = useRef<HTMLDivElement>(null);
   useEffect(() => {
@@ -58,6 +61,8 @@ export const WritePanel = ({
   // A refused request is settled: the panel only explains why. A new attempt starts from the
   // button again, with a new idempotency key.
   const refused = error !== undefined && !canRetry;
+  // The retry resends the same write, so it looks like the confirm it repeats.
+  const sendVariant = destructive ? 'destructive' : 'primary';
 
   return (
     // Escape closing an alertdialog is the WAI-ARIA dialog pattern. The rule's per-element options
@@ -87,11 +92,11 @@ export const WritePanel = ({
         {refused ? (
           followUp && <Button onClick={followUp.onClick}>{followUp.label}</Button>
         ) : canRetry ? (
-          <Button onClick={onRetry} disabled={pending}>
+          <Button variant={sendVariant} onClick={onRetry} disabled={pending}>
             ลองอีกครั้ง
           </Button>
         ) : (
-          <Button onClick={onConfirm} disabled={pending}>
+          <Button variant={sendVariant} onClick={onConfirm} disabled={pending}>
             {confirmLabel}
           </Button>
         )}

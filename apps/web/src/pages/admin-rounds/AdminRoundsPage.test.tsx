@@ -342,6 +342,8 @@ describe('admin rounds page', () => {
 
     expect(within(form).getByRole('alertdialog').textContent).toContain('รอบนี้เปิดให้ลงทะเบียนอยู่');
     expect(fetchCalls(fetchMock, 'PATCH', '/api/admin/rounds/1')).toHaveLength(0);
+    // Saving gives nothing up, so its confirmation is not styled as destructive.
+    expect(within(form).getByRole('button', { name: 'ยืนยันบันทึก' }).dataset.variant).toBe('primary');
 
     fireEvent.click(within(form).getByRole('button', { name: 'ยืนยันบันทึก' }));
 
@@ -365,6 +367,21 @@ describe('admin rounds page', () => {
     expect(fetchCalls(fetchMock, 'PATCH', '/api/admin/rounds/1')).toHaveLength(0);
   });
 
+  it('has one h1, with the forms and the editor as level 2 headings under it', async () => {
+    const round = roundFixture();
+    mockRoundsApi([round]);
+    renderAt('/admin/rounds');
+
+    await openEditor(round);
+
+    expect(screen.getAllByRole('heading', { level: 1 }).map((h) => h.textContent)).toEqual([
+      'รอบลงทะเบียน',
+    ]);
+    const forms = screen.getAllByRole('heading', { level: 2 }).map((h) => h.textContent);
+    expect(forms).toEqual(expect.arrayContaining(['สร้างรอบ', 'สร้างครบทุกชั้น']));
+    expect(forms).toHaveLength(3);
+  });
+
   it('deletes an empty round only after the admin confirms', async () => {
     const round = roundFixture();
     const fetchMock = mockRoundsApi([round]);
@@ -379,6 +396,15 @@ describe('admin rounds page', () => {
     expect(await screen.findByText('ยังไม่มีรอบลงทะเบียน')).toBeTruthy();
     expect(fetchCalls(fetchMock, 'DELETE', '/api/admin/rounds/1')).toHaveLength(1);
     expect(screen.queryByRole('alertdialog')).toBeNull();
+  });
+
+  it('shows the delete confirmation in the destructive style', async () => {
+    mockRoundsApi([roundFixture()]);
+    renderAt('/admin/rounds');
+
+    fireEvent.click(await screen.findByRole('button', { name: 'ลบรอบ 2569/1 ม.1' }));
+
+    expect(screen.getByRole('button', { name: 'ยืนยันลบ' }).dataset.variant).toBe('destructive');
   });
 
   it('keeps the round when the admin cancels the delete', async () => {

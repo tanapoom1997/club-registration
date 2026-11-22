@@ -1,8 +1,11 @@
 import type { ComponentProps } from 'react';
 import { cn } from '@/lib/utils';
 
+// relative: a header's sr-only text is absolutely positioned, and without a positioned ancestor
+// here it is laid out against the page and widens the whole page on a phone instead of scrolling
+// inside this box.
 export const Table = ({ className, ...props }: ComponentProps<'table'>) => (
-  <div className="overflow-x-auto rounded-2xl border border-border bg-card shadow-card">
+  <div className="relative overflow-x-auto rounded-2xl border border-border bg-card shadow-card">
     <table className={cn('w-full text-left text-sm', className)} {...props} />
   </div>
 );

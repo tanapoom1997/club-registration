@@ -1,16 +1,14 @@
 import { expect, test } from '@playwright/test';
 import { ADVISOR_NAME, FULL_CLUB, OPEN_CLUB, STUDENTS } from '../fixtures.js';
-import { PASSWORD_LABEL, logIn, queryDatabase, submitLogin } from './helpers.js';
+import { PASSWORD_LABEL, STUDENT_LANDING, logIn, queryDatabase, submitLogin } from './helpers.js';
 
-const STUDENT_HOME = /\/student$/;
 // A club card is named by its heading (the club's name); its buttons and messages say code and name.
 const clubLabel = (club: { code: string; name: string }) => `${club.code} ${club.name}`;
 
 test('a student registers for a club, sees it as theirs, then cancels it', async ({ page }) => {
   const student = STUDENTS.registers;
-  await logIn(page, student, STUDENT_HOME);
+  await logIn(page, student, STUDENT_LANDING);
 
-  await page.goto('/student/clubs');
   const card = page.getByRole('article', { name: OPEN_CLUB.name, exact: true });
   await expect(card).toContainText(ADVISOR_NAME);
   await card.getByRole('button', { name: `ลงชุมนุม ${clubLabel(OPEN_CLUB)}` }).click();
@@ -41,9 +39,8 @@ test('a student registers for a club, sees it as theirs, then cancels it', async
 });
 
 test('a full club is shown as full and offers its waitlist instead of a seat', async ({ page }) => {
-  await logIn(page, STUDENTS.browses, STUDENT_HOME);
+  await logIn(page, STUDENTS.browses, STUDENT_LANDING);
 
-  await page.goto('/student/clubs');
   const card = page.getByRole('article', { name: FULL_CLUB.name, exact: true });
 
   await expect(card.getByText('เต็ม', { exact: true })).toBeVisible();
@@ -67,7 +64,7 @@ test('the first login asks for a new password before anything else', async ({ pa
   await page.getByLabel(/^รหัสผ่านใหม่/).fill(newPassword);
   await page.getByLabel('ยืนยันรหัสผ่านใหม่').fill(newPassword);
   await page.getByRole('button', { name: 'บันทึกรหัสผ่านใหม่' }).click();
-  await expect(page).toHaveURL(STUDENT_HOME);
+  await expect(page).toHaveURL(STUDENT_LANDING);
 
   await page.getByRole('button', { name: 'ออกจากระบบ' }).click();
   await expect(page).toHaveURL(/\/login$/);
@@ -75,5 +72,5 @@ test('the first login asks for a new password before anything else', async ({ pa
   await expect(page.getByText('รหัสผู้ใช้หรือรหัสผ่านไม่ถูกต้อง')).toBeVisible();
   await page.getByLabel(PASSWORD_LABEL, { exact: true }).fill(newPassword);
   await page.getByRole('button', { name: 'เข้าสู่ระบบ', exact: true }).click();
-  await expect(page).toHaveURL(STUDENT_HOME);
+  await expect(page).toHaveURL(STUDENT_LANDING);
 });

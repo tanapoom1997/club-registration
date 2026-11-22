@@ -64,7 +64,9 @@ export const LoginPage = () => {
         <CardHeader className="items-center space-y-3 text-center">
           <BrandMark className="mx-auto size-12 rounded-2xl" />
           <div className="space-y-1">
-            <CardTitle className="text-2xl">เข้าสู่ระบบ</CardTitle>
+            <CardTitle as="h1" className="text-2xl">
+              เข้าสู่ระบบ
+            </CardTitle>
             <p className="text-sm text-muted-foreground">ระบบลงทะเบียนชุมนุม</p>
           </div>
         </CardHeader>

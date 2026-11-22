@@ -1,9 +1,8 @@
 import { expect, test } from '@playwright/test';
 import type { Page } from '@playwright/test';
 import { CHANGE_FROM_CLUB, CHANGE_TO_CLUB, ONE_SEAT_CLUB, STUDENTS } from '../fixtures.js';
-import { logIn, queryDatabase } from './helpers.js';
+import { STUDENT_LANDING, logIn, queryDatabase } from './helpers.js';
 
-const STUDENT_HOME = /\/student$/;
 const clubLabel = (club: { code: string; name: string }) => `${club.code} ${club.name}`;
 // The page polls every 5 seconds while the round is open; a few polls' worth of slack.
 const POLL_TIMEOUT_MS = 15_000;
@@ -41,11 +40,10 @@ test('a student waits for a full club and gets the seat when its holder cancels'
   const holderContext = await browser.newContext();
   const holder = await holderContext.newPage();
   try {
-    await logIn(holder, STUDENTS.holdsSeat, STUDENT_HOME);
+    await logIn(holder, STUDENTS.holdsSeat, STUDENT_LANDING);
     await register(holder, ONE_SEAT_CLUB);
 
-    await logIn(page, STUDENTS.waits, STUDENT_HOME);
-    await page.goto('/student/clubs');
+    await logIn(page, STUDENTS.waits, STUDENT_LANDING);
     const card = page.getByRole('article', { name: ONE_SEAT_CLUB.name, exact: true });
     await expect(card.getByText('เต็ม', { exact: true })).toBeVisible();
     await card.getByRole('button', { name: `เข้ารายชื่อรอ ${clubLabel(ONE_SEAT_CLUB)}` }).click();
@@ -88,7 +86,7 @@ test('a student waits for a full club and gets the seat when its holder cancels'
 
 test('a student moves to another club in one step', async ({ page }) => {
   const student = STUDENTS.changes;
-  await logIn(page, student, STUDENT_HOME);
+  await logIn(page, student, STUDENT_LANDING);
   await register(page, CHANGE_FROM_CLUB);
 
   const card = page.getByRole('article', { name: CHANGE_TO_CLUB.name, exact: true });

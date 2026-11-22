@@ -13,6 +13,9 @@ const buttonVariants = cva(
         outline: 'border border-border bg-card shadow-xs hover:border-input hover:bg-muted',
         ghost: 'text-muted-foreground hover:bg-muted hover:text-foreground',
         danger: 'text-destructive hover:bg-destructive/10',
+        // The confirmation of a write that gives something up (a seat, a waitlist place, a round).
+        destructive:
+          'bg-destructive text-destructive-foreground shadow-sm shadow-destructive/25 hover:bg-destructive/90 hover:shadow-md hover:shadow-destructive/25',
       },
     },
     defaultVariants: { variant: 'primary' },
@@ -21,6 +24,13 @@ const buttonVariants = cva(
 
 type ButtonProps = ComponentProps<'button'> & VariantProps<typeof buttonVariants>;
 
+// data-variant names the style in the DOM, so a test can tell a red confirm from a primary one
+// without matching class names.
 export const Button = ({ className, variant, type = 'button', ...props }: ButtonProps) => (
-  <button type={type} className={cn(buttonVariants({ variant }), className)} {...props} />
+  <button
+    type={type}
+    data-variant={variant ?? 'primary'}
+    className={cn(buttonVariants({ variant }), className)}
+    {...props}
+  />
 );

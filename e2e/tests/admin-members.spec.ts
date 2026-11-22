@@ -9,7 +9,7 @@ import {
   NOTICE_TO_CLUB,
   STUDENTS,
 } from '../fixtures.js';
-import { logIn, queryDatabase } from './helpers.js';
+import { STUDENT_LANDING, logIn, queryDatabase } from './helpers.js';
 
 type Club = { code: string; name: string };
 
@@ -96,8 +96,7 @@ test('an admin removes a student from a waitlist', async ({ browser, page }) => 
   const studentContext = await browser.newContext();
   const studentPage = await studentContext.newPage();
   try {
-    await logIn(studentPage, student, /\/student$/);
-    await studentPage.goto('/student/clubs');
+    await logIn(studentPage, student, STUDENT_LANDING);
     await studentPage
       .getByRole('button', { name: `เข้ารายชื่อรอ ${clubLabel(ADMIN_WAITLIST_CLUB)}` })
       .click();
@@ -160,7 +159,7 @@ test('a student sees that an admin moved them, until they act themselves', async
   const studentContext = await browser.newContext();
   const studentPage = await studentContext.newPage();
   try {
-    await logIn(studentPage, student, /\/student$/);
+    await logIn(studentPage, student, STUDENT_LANDING);
     await studentPage.goto('/student/my-registration');
     const moved = `ผู้ดูแลระบบย้ายคุณจากชุมนุม ${clubLabel(NOTICE_FROM_CLUB)} ไปชุมนุม ${clubLabel(NOTICE_TO_CLUB)} เมื่อ`;
     const notice = studentPage.getByRole('status').filter({ hasText: moved });

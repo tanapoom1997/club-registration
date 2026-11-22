@@ -653,6 +653,36 @@ describe('admin club members panel', () => {
     expect(second).toBe(first);
   });
 
+  it.each([
+    {
+      list: 'club',
+      tableOf: membersTable,
+      student: S4,
+      place: 'ชุมนุม',
+      confirm: 'ยืนยัน นำออกจากชุมนุม',
+    },
+    {
+      list: 'waitlist',
+      tableOf: waitlistTable,
+      student: S1,
+      place: 'รายชื่อรอชุมนุม',
+      confirm: 'ยืนยัน นำออกจากรายชื่อรอ',
+    },
+  ] as const)(
+    'shows the removal from the $list in the destructive style',
+    async ({ tableOf, student, place, confirm }) => {
+      mockMembersApi();
+      renderAt('/admin/clubs');
+      const panel = await openMembers(MUSIC);
+
+      const dialog = startRemove(tableOf(panel, MUSIC), student, place);
+
+      expect(within(dialog).getByRole('button', { name: confirm }).dataset.variant).toBe(
+        'destructive',
+      );
+    },
+  );
+
   it('removes a waiter, never promoting anyone, and shows the queue that moved up', async () => {
     const { fetchMock } = mockMembersApi();
     renderAt('/admin/clubs');

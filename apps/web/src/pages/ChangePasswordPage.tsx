@@ -13,7 +13,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { ApiError, changePassword } from '@/lib/api';
-import { homePathFor, useLogout, useSession, useSetSession } from '@/lib/session';
+import { homePathFor, landingPathFor, useLogout, useSession, useSetSession } from '@/lib/session';
 
 const changePasswordErrorMessage = (error: unknown): string => {
   if (error instanceof ApiError && error.code === ERROR_CODES.invalidCurrentPassword) {
@@ -61,7 +61,8 @@ export const ChangePasswordPage = () => {
     mutationFn: changePassword,
     onSuccess: async (updatedUser) => {
       setSession(updatedUser);
-      await navigate(homePathFor(updatedUser.role), { replace: true });
+      // Where a login would have landed: a student goes on to the club list (U5).
+      await navigate(landingPathFor(updatedUser), { replace: true });
     },
     onError: (error) => {
       // An expired or revoked session cannot change anything; RequireSession then sends to login.
@@ -92,7 +93,7 @@ export const ChangePasswordPage = () => {
     <main className="mx-auto flex min-h-dvh max-w-sm flex-col justify-center p-4">
       <Card>
         <CardHeader>
-          <CardTitle>เปลี่ยนรหัสผ่าน</CardTitle>
+          <CardTitle as="h1">เปลี่ยนรหัสผ่าน</CardTitle>
           <p className="text-sm text-muted-foreground">
             {isForced ? 'เข้าสู่ระบบครั้งแรก กรุณาตั้งรหัสผ่านใหม่ก่อนใช้งาน' : 'ตั้งรหัสผ่านใหม่สำหรับบัญชีของคุณ'}
           </p>

@@ -15,10 +15,19 @@ export const CardHeader = ({ className, ...props }: ComponentProps<'div'>) => (
   <div className={cn('space-y-1 p-6 pb-4', className)} {...props} />
 );
 
-export const CardTitle = ({ className, children, ...props }: ComponentProps<'h1'>) => (
-  <h1 className={cn('text-xl font-bold', className)} {...props}>
+type CardTitleProps = ComponentProps<'h2'> & { as?: 'h1' | 'h2' | 'h3' };
+
+// An h2 by default: a card sits under the page's own h1. A page that is just one card (login,
+// change password) makes it the page's h1.
+export const CardTitle = ({
+  as: Heading = 'h2',
+  className,
+  children,
+  ...props
+}: CardTitleProps) => (
+  <Heading className={cn('text-xl font-bold', className)} {...props}>
     {children}
-  </h1>
+  </Heading>
 );
 
 export const CardContent = ({ className, ...props }: ComponentProps<'div'>) => (

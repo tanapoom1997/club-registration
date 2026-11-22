@@ -9,6 +9,8 @@ type ConfirmPanelProps = {
   pending: boolean;
   onConfirm: () => void;
   onCancel: () => void;
+  // The action removes something (a round): its confirm button is red.
+  destructive?: boolean;
 };
 
 // Inline rather than window.confirm so the question stays readable, styled and testable.
@@ -19,6 +21,7 @@ export const ConfirmPanel = ({
   pending,
   onConfirm,
   onCancel,
+  destructive = false,
 }: ConfirmPanelProps) => (
   <div
     role="alertdialog"
@@ -27,7 +30,11 @@ export const ConfirmPanel = ({
   >
     <p className="text-sm font-medium">{message}</p>
     <div className="flex flex-wrap gap-2">
-      <Button onClick={onConfirm} disabled={pending}>
+      <Button
+        variant={destructive ? 'destructive' : 'primary'}
+        onClick={onConfirm}
+        disabled={pending}
+      >
         {pending ? 'กำลังบันทึก…' : confirmLabel}
       </Button>
       <Button variant="outline" onClick={onCancel} disabled={pending}>

@@ -1,8 +1,7 @@
 import { expect, test } from '@playwright/test';
 import { QUEUE_CLUB, QUEUE_STUDENTS } from '../fixtures.js';
-import { logIn, queryDatabase } from './helpers.js';
+import { STUDENT_LANDING, logIn, queryDatabase } from './helpers.js';
 
-const STUDENT_HOME = /\/student$/;
 const CLUB_LIST = 'รายการชุมนุม';
 const QUEUE_CARD = 'คิวเลือกชุมนุม';
 // Heartbeats go every 4 seconds, and the one after the release lets the next student in.
@@ -25,15 +24,13 @@ test('the second student waits for the one place until the first releases it', a
   const firstContext = await browser.newContext();
   const first = await firstContext.newPage();
   try {
-    await logIn(first, QUEUE_STUDENTS.first, STUDENT_HOME);
-    await first.goto('/student/clubs');
+    await logIn(first, QUEUE_STUDENTS.first, STUDENT_LANDING);
     const firstQueue = first.getByRole('region', { name: QUEUE_CARD });
     await expect(firstQueue.getByRole('status')).toContainText('ถึงคิวของคุณแล้ว เลือกชุมนุมได้ถึง');
     await expect(first.getByRole('article', { name: QUEUE_CLUB.name, exact: true })).toBeVisible();
 
     // max_active 1: the second student is next in line and sees no club list.
-    await logIn(page, QUEUE_STUDENTS.second, STUDENT_HOME);
-    await page.goto('/student/clubs');
+    await logIn(page, QUEUE_STUDENTS.second, STUDENT_LANDING);
     const queue = page.getByRole('region', { name: QUEUE_CARD });
     await expect(queue.getByRole('status')).toHaveText('รอคิว');
     await expect(queue).toContainText('ลำดับที่ 1');

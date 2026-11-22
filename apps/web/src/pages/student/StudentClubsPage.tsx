@@ -236,7 +236,8 @@ export const StudentClubsPage = () => {
                   className="font-medium text-primary underline underline-offset-4"
                   to={MY_REGISTRATION_PATH}
                 >
-                  ดูผลของฉันและยกเลิก
+                  {/* Cancelling is only possible while the round is open. */}
+                  {round.status === 'open' ? 'ดูผลของฉันและยกเลิก' : 'ดูผลของฉัน'}
                 </Link>
               </p>
             </HeldClubCard>
@@ -272,7 +273,7 @@ export const StudentClubsPage = () => {
               }}
             />
           )}
-          <QueueGate queue={queue} headingRef={headingRef}>
+          <QueueGate queue={queue} registration={data.registration} headingRef={headingRef}>
             <RoundHint data={data} />
 
             {!clubs ? (

@@ -54,15 +54,15 @@ describe('change password page', () => {
     vi.unstubAllGlobals();
   });
 
-  it('sends both passwords and then opens the home page of the role', async () => {
+  it('sends both passwords and then opens where a login lands for the role', async () => {
     const { fetchMock, router } = await openPage(STUDENT, () =>
       Response.json({ user: { ...STUDENT, mustChangePassword: false } }),
     );
 
     submit();
 
-    await screen.findByRole('heading', { name: `สวัสดี ${STUDENT.fullName}` });
-    expect(router.state.location.pathname).toBe('/student');
+    await screen.findByRole('heading', { name: 'ชุมนุมในชั้นของฉัน', level: 1 });
+    expect(router.state.location.pathname).toBe('/student/clubs');
     const [[, init]] = changeRequests(fetchMock) as [[string, RequestInit]];
     expect(JSON.parse(init.body as string)).toEqual({
       currentPassword: 'initial-password',

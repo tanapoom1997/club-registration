@@ -16,6 +16,7 @@ export const LeaveWaitlistPanel = ({
     question={`ออกจากรายชื่อรอชุมนุม ${club.clubCode} ${club.name}?`}
     note="ลำดับที่ของคุณจะหายไปทันที ถ้าเข้ารายชื่อรอใหม่ภายหลังจะต่อท้ายคิว"
     confirmLabel="ยืนยัน ออกจากรายชื่อรอ"
+    destructive
     pendingLabel="กำลังออกจากรายชื่อรอ…"
     dismissLabel="ไม่ออก"
   />

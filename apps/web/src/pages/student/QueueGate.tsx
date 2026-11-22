@@ -1,3 +1,4 @@
+import type { StudentRegistration } from '@club-registration/shared';
 import { useRef } from 'react';
 import type { ReactNode, Ref, RefObject } from 'react';
 import { Link } from 'react-router';
@@ -14,7 +15,14 @@ const Note = ({ children }: { children: ReactNode }) => (
   <p className="text-sm text-muted-foreground">{children}</p>
 );
 
-const QueueBody = ({ queue, actionRef }: { queue: Queue; actionRef: Ref<HTMLButtonElement> }) => {
+type QueueBodyProps = {
+  queue: Queue;
+  // The student's club in the round, for what the card says once the turn ended.
+  registration: StudentRegistration | null;
+  actionRef: Ref<HTMLButtonElement>;
+};
+
+const QueueBody = ({ queue, registration, actionRef }: QueueBodyProps) => {
   const { view, connectionLost, rejoin, release } = queue;
   const lost = connectionLost && (
     <p className="text-sm text-destructive">{QUEUE_MESSAGES.connectionLost}</p>
@@ -66,9 +74,13 @@ const QueueBody = ({ queue, actionRef }: { queue: Queue; actionRef: Ref<HTMLButt
     case 'done':
       return (
         <>
-          <p className="text-sm">
-            {view.kind === 'expired' ? QUEUE_MESSAGES.expiredHelp : QUEUE_MESSAGES.doneHelp}
-          </p>
+          {view.kind === 'expired' && <p className="text-sm">{QUEUE_MESSAGES.expiredHelp}</p>}
+          {/* A student who ran out of time before confirming must not read that a club is kept. */}
+          {registration ? (
+            <p className="text-sm">{QUEUE_MESSAGES.heldKept(registration.club)}</p>
+          ) : (
+            <p className="text-sm font-medium text-warning-foreground">{QUEUE_MESSAGES.noneHeld}</p>
+          )}
           <div className="flex flex-wrap items-center gap-3">
             <Button ref={actionRef} className="w-full sm:w-auto" onClick={rejoin}>
               เข้าคิวใหม่
@@ -87,6 +99,7 @@ const QueueBody = ({ queue, actionRef }: { queue: Queue; actionRef: Ref<HTMLButt
 
 type QueueGateProps = {
   queue: Queue;
+  registration: StudentRegistration | null;
   // Where focus goes when the queue card itself is gone (the round closed under it).
   headingRef: RefObject<HTMLElement | null>;
   // What only an admitted student (or anyone, in a round without a queue) sees: the club list.
@@ -96,7 +109,7 @@ type QueueGateProps = {
 // The queue card above the club list while the round is open. The list keeps one place in the
 // tree whether the queue is off or admitted, so a round closing under an admitted student does
 // not remount it (and drop the focus inside it).
-export const QueueGate = ({ queue, headingRef, children }: QueueGateProps) => {
+export const QueueGate = ({ queue, registration, headingRef, children }: QueueGateProps) => {
   const { view } = queue;
   const statusRef = useRef<HTMLParagraphElement>(null);
   // The buttons in the card go when pressed (rejoin, release) and the list goes when a poll ends
@@ -119,7 +132,7 @@ export const QueueGate = ({ queue, headingRef, children }: QueueGateProps) => {
           >
             {queueHeadline(view)}
           </p>
-          <QueueBody queue={queue} actionRef={actionRef} />
+          <QueueBody queue={queue} registration={registration} actionRef={actionRef} />
         </Card>
       )}
       {showsClubs(view) && (

@@ -17,8 +17,12 @@ export const useSetSession = () => {
 
 export const homePathFor = (role: Role): string => `/${role}`;
 
-export const landingPathFor = (user: SessionUser): string =>
-  user.mustChangePassword ? '/change-password' : homePathFor(user.role);
+// Where a login lands. A student lands on the club list, the one thing they come for (on
+// registration day, their place in the queue); /student stays as the menu page.
+export const landingPathFor = (user: SessionUser): string => {
+  if (user.mustChangePassword) return '/change-password';
+  return user.role === 'student' ? '/student/clubs' : homePathFor(user.role);
+};
 
 export const useLogout = () => {
   const queryClient = useQueryClient();
