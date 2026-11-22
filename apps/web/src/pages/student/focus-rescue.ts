@@ -4,8 +4,9 @@ import type { RefObject } from 'react';
 // A poll can remove the element that has keyboard focus (the leave button once the student got
 // the seat, an admin removed the entry or the round closed; the join notice once it no longer
 // holds). The browser then drops focus to <body> and the student has to tab from the top again.
-// This moves it to the first fallback on the page instead, but only when that element had focus
-// as it went, so focus is never taken from anywhere else.
+// This moves it to the first fallback on the page instead, but only when that element (or, for a
+// container such as the club list a queue turn ends, something inside it) had focus as it went, so
+// focus is never taken from anywhere else.
 //
 // Why a ref-callback cleanup: React runs it before it removes the node from the DOM, so
 // document.activeElement still tells whether the node had focus. A blur event cannot: the spec's
@@ -22,7 +23,7 @@ export const useFocusRescue = <T extends HTMLElement>(
     element.current = node;
     return () => {
       element.current = null;
-      lostFocus.current = node === document.activeElement;
+      lostFocus.current = node?.contains(document.activeElement) ?? false;
     };
   }, []);
 

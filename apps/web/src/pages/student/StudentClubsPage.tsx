@@ -14,7 +14,9 @@ import { HeldClubCard } from './HeldClubCard';
 import { NoRound, RoundHeader, StudentLoadState } from './RoundHeader';
 import { PromotedNotice, WaitlistCard } from './WaitlistCard';
 import { LeaveWaitlistPanel } from './LeaveWaitlistPanel';
+import { QueueGate } from './QueueGate';
 import { useFocusRescue } from './focus-rescue';
+import { isInTurn, queueTurn, showsClubs, useQueue } from './queue-ui';
 import {
   CLUBS_POLL_INTERVAL_MS,
   STUDENT_CLUBS_QUERY_KEY,
@@ -32,9 +34,12 @@ import type { ClubWriteKind } from './student-ui';
 
 const MY_REGISTRATION_PATH = '/student/my-registration';
 
-// The confirmation that is open: one club's action, or leaving the waitlist (with the club named
-// when it opened, so its answer stays on screen after a refetch shows no entry any more).
-type Target = { kind: ClubWriteKind; clubId: number } | { kind: 'leave'; club: StudentClubRef };
+// The confirmation that is open: one club's action (with the queue turn it was opened in, see
+// isInTurn), or leaving the waitlist (with the club named when it opened, so its answer stays on
+// screen after a refetch shows no entry any more). Leaving takes no seat, so it needs no turn.
+type Target =
+  | { kind: ClubWriteKind; clubId: number; turn: string | undefined }
+  | { kind: 'leave'; club: StudentClubRef };
 
 const RoundHint = ({ data: { round, registration } }: { data: StudentClubsResponse }) => {
   if (!round) return null;
@@ -69,6 +74,10 @@ export const StudentClubsPage = () => {
   });
   useLogoutOnExpiredSession(query.error);
   const { mutation, start, retry, canRetry } = useStudentWrite();
+  const { data } = query;
+  const round = data?.round ?? null;
+  const queue = useQueue(round);
+  const turn = queueTurn(queue.view);
 
   const openConfirmation = (next: Target) => {
     mutation.reset();
@@ -80,9 +89,9 @@ export const StudentClubsPage = () => {
     setTarget(undefined);
   };
 
-  const { data } = query;
-  const round = data?.round ?? null;
-  const panelTarget = mutation.isSuccess ? undefined : target;
+  const outOfTurn =
+    target !== undefined && target.kind !== 'leave' && !isInTurn(queue.view, target.turn);
+  const panelTarget = mutation.isSuccess || outOfTurn ? undefined : target;
   const panelOpen = panelTarget !== undefined;
   const succeeded = mutation.isSuccess;
 
@@ -124,7 +133,7 @@ export const StudentClubsPage = () => {
       kind !== 'join' && isClubFull(mutation.error) && round?.status === 'open'
         ? {
             label: 'เข้ารายชื่อรอชุมนุมนี้',
-            onClick: () => openConfirmation({ kind: 'join', clubId }),
+            onClick: () => openConfirmation({ kind: 'join', clubId, turn }),
           }
         : undefined,
   });
@@ -178,7 +187,9 @@ export const StudentClubsPage = () => {
             <HeldClubCard registration={data.registration}>
               <p className="text-sm">
                 ลงได้ 1 ชุมนุมต่อรอบ
+                {/* The change buttons are on the club list, hidden while the student queues. */}
                 {round.status === 'open' &&
+                  showsClubs(queue.view) &&
                   ' ถ้าจะเปลี่ยน กด "ย้ายมาชุมนุมนี้" ที่ชุมนุมที่ยังมีที่ว่าง (ได้ที่ใหม่ก่อนจึงออกจากที่เดิม) หรือเข้ารายชื่อรอของชุมนุมที่เต็ม'}{' '}
                 <Link
                   className="font-medium text-primary underline underline-offset-4"
@@ -220,36 +231,38 @@ export const StudentClubsPage = () => {
               }}
             />
           )}
-          <RoundHint data={data} />
+          <QueueGate queue={queue} headingRef={headingRef}>
+            <RoundHint data={data} />
 
-          <h2 className="text-lg font-semibold">รายการชุมนุม ({data.clubs.length})</h2>
-          {data.clubs.length === 0 ? (
-            <p className="text-muted-foreground">รอบนี้ยังไม่มีชุมนุม</p>
-          ) : (
-            <ul aria-label="รายการชุมนุม" className="grid gap-3 md:grid-cols-2">
-              {data.clubs.map((club) => (
-                <li key={club.id}>
-                  <ClubCard
-                    club={club}
-                    registration={data.registration}
-                    waitlist={data.waitlist}
-                    offer={clubOffer(club, {
-                      round,
-                      registration: data.registration,
-                      waitlist: data.waitlist,
-                    })}
-                    enabled={round.status === 'open' && !mutation.isPending}
-                    write={
-                      panelTarget?.kind !== 'leave' && panelTarget?.clubId === club.id
-                        ? clubWrite(panelTarget.kind, club.id)
-                        : undefined
-                    }
-                    onStart={(kind) => openConfirmation({ kind, clubId: club.id })}
-                  />
-                </li>
-              ))}
-            </ul>
-          )}
+            <h2 className="text-lg font-semibold">รายการชุมนุม ({data.clubs.length})</h2>
+            {data.clubs.length === 0 ? (
+              <p className="text-muted-foreground">รอบนี้ยังไม่มีชุมนุม</p>
+            ) : (
+              <ul aria-label="รายการชุมนุม" className="grid gap-3 md:grid-cols-2">
+                {data.clubs.map((club) => (
+                  <li key={club.id}>
+                    <ClubCard
+                      club={club}
+                      registration={data.registration}
+                      waitlist={data.waitlist}
+                      offer={clubOffer(club, {
+                        round,
+                        registration: data.registration,
+                        waitlist: data.waitlist,
+                      })}
+                      enabled={round.status === 'open' && !mutation.isPending}
+                      write={
+                        panelTarget?.kind !== 'leave' && panelTarget?.clubId === club.id
+                          ? clubWrite(panelTarget.kind, club.id)
+                          : undefined
+                      }
+                      onStart={(kind) => openConfirmation({ kind, clubId: club.id, turn })}
+                    />
+                  </li>
+                ))}
+              </ul>
+            )}
+          </QueueGate>
         </>
       )}
     </section>

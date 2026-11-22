@@ -1,4 +1,5 @@
 import type {
+  QueueTicket,
   SessionUser,
   StudentClub,
   StudentRegistration,
@@ -24,6 +25,16 @@ export const CANCEL_PATH = '/api/student/registration/cancel';
 // A change is a PUT to REGISTER_PATH.
 export const WAITLIST_PATH = '/api/student/waitlist';
 export const LEAVE_PATH = '/api/student/waitlist/leave';
+
+export const QUEUE_PATH = '/api/student/queue';
+export const QUEUE_JOIN_PATH = '/api/student/queue/join';
+export const QUEUE_HEARTBEAT_PATH = '/api/student/queue/heartbeat';
+export const QUEUE_DONE_PATH = '/api/student/queue/done';
+
+// 08:15 Thai time on the fixture round's day.
+export const ADMITTED_UNTIL = '2026-12-01T01:15:00.000Z';
+export const ADMITTED: QueueTicket = { status: 'admitted', admittedUntil: ADMITTED_UNTIL };
+export const waitingAt = (position: number): QueueTicket => ({ status: 'waiting', position });
 
 export const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 
@@ -110,7 +121,13 @@ export type StudentState = {
   registration: StudentRegistration | null;
   waitlist: StudentWaitlist | null;
   clubs: StudentClub[];
+  // The student's latest queue ticket, and the one a join gives when there is no live ticket.
+  ticket: QueueTicket | null;
+  joinTicket: QueueTicket;
 };
+
+const isLiveTicket = (ticket: QueueTicket | null) =>
+  ticket?.status === 'waiting' || ticket?.status === 'admitted';
 
 const withSeatChange = (clubs: StudentClub[], clubId: number, change: number) =>
   clubs.map((club) =>
@@ -147,8 +164,12 @@ export const mockStudentApi = (
     registration: null,
     waitlist: null,
     clubs: CLUBS,
+    ticket: null,
+    // Let in at once, as with the default max_active, so the club list shows straight away.
+    joinTicket: ADMITTED,
     ...initial,
   };
+  const queueAnswer = () => Response.json({ round: state.round, ticket: state.ticket });
   const fetchMock = mockApi({
     'GET /api/auth/me': () => Response.json({ user: STUDENT }),
     [`GET ${CLUBS_PATH}`]: () =>
@@ -211,6 +232,22 @@ export const mockStudentApi = (
       }
       return Response.json({ registration: null });
     },
+    // The queue as the API keeps it: a join answers the live ticket or makes the next one (only
+    // while the round is open), a heartbeat needs a live ticket, done ends it.
+    [`POST ${QUEUE_JOIN_PATH}`]: () => {
+      if (!isLiveTicket(state.ticket)) {
+        if (state.round?.status !== 'open') return apiError(409, 'round_not_open')();
+        state.ticket = state.joinTicket;
+      }
+      return queueAnswer();
+    },
+    [`POST ${QUEUE_HEARTBEAT_PATH}`]: () =>
+      isLiveTicket(state.ticket) ? queueAnswer() : apiError(409, 'not_in_queue')(),
+    [`POST ${QUEUE_DONE_PATH}`]: () => {
+      if (isLiveTicket(state.ticket)) state.ticket = { status: 'done' };
+      return queueAnswer();
+    },
+    [`GET ${QUEUE_PATH}`]: queueAnswer,
     ...extra,
   });
   return { fetchMock, state };
