@@ -7,14 +7,16 @@ import { useMutation } from '@tanstack/react-query';
 import { useState } from 'react';
 import type { FormEvent } from 'react';
 import { Link, useNavigate } from 'react-router';
+import { AUTH_FIELD_CLASS, AuthShell } from '@/components/AuthShell';
 import { FormError } from '@/components/FormError';
 import { PasswordInput } from '@/components/PasswordInput';
 import { PASSWORD_MESSAGES } from '@/components/password-messages';
-import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Button, buttonVariants } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
+import { advanceOnEnter } from '@/lib/advance-on-enter';
 import { ApiError, changePassword } from '@/lib/api';
 import { homePathFor, landingPathFor, useLogout, useSession, useSetSession } from '@/lib/session';
+import { cn } from '@/lib/utils';
 
 const changePasswordErrorMessage = (error: unknown): string => {
   if (error instanceof ApiError && error.code === ERROR_CODES.invalidCurrentPassword) {
@@ -33,6 +35,8 @@ type PasswordFieldProps = {
   field: string;
   value: string;
   autoComplete: 'current-password' | 'new-password';
+  // "next" until the last field, so a phone keyboard says where Enter goes (advanceOnEnter).
+  enterKeyHint: 'next' | 'done';
   hint?: string | undefined;
   onChange: (value: string) => void;
 };
@@ -43,6 +47,7 @@ const PasswordField = ({
   field,
   value,
   autoComplete,
+  enterKeyHint,
   hint,
   onChange,
 }: PasswordFieldProps) => {
@@ -54,6 +59,9 @@ const PasswordField = ({
         id={id}
         field={field}
         autoComplete={autoComplete}
+        enterKeyHint={enterKeyHint}
+        className={AUTH_FIELD_CLASS}
+        onKeyDown={advanceOnEnter}
         value={value}
         onChange={(event) => onChange(event.target.value)}
         aria-describedby={hint === undefined ? undefined : hintId}
@@ -111,69 +119,65 @@ export const ChangePasswordPage = () => {
   const isForced = user?.mustChangePassword ?? false;
 
   return (
-    <main className="mx-auto flex min-h-dvh max-w-sm flex-col justify-center p-4">
-      <Card>
-        <CardHeader>
-          <CardTitle as="h1">เปลี่ยนรหัสผ่าน</CardTitle>
-          <p className="text-sm text-muted-foreground">
-            {isForced ? 'เข้าสู่ระบบครั้งแรก กรุณาตั้งรหัสผ่านใหม่ก่อนใช้งาน' : 'ตั้งรหัสผ่านใหม่สำหรับบัญชีของคุณ'}
-          </p>
-        </CardHeader>
-        <CardContent>
-          <form className="space-y-4" onSubmit={handleSubmit} noValidate>
-            <PasswordField
-              id="current-password"
-              label="รหัสผ่านเดิม"
-              field="รหัสผ่านเดิม"
-              autoComplete="current-password"
-              // On the first login, the student just typed it: say which one it is (U16).
-              hint={isForced ? PASSWORD_MESSAGES.initialPasswordHint : undefined}
-              value={currentPassword}
-              onChange={setCurrentPassword}
-            />
-            <PasswordField
-              id="new-password"
-              label={`รหัสผ่านใหม่ (อย่างน้อย ${PASSWORD_MIN_LENGTH} ตัว)`}
-              field="รหัสผ่านใหม่"
-              autoComplete="new-password"
-              value={newPassword}
-              onChange={setNewPassword}
-            />
-            <PasswordField
-              id="confirm-password"
-              label="ยืนยันรหัสผ่านใหม่"
-              field="รหัสผ่านใหม่ที่ยืนยัน"
-              autoComplete="new-password"
-              value={confirmPassword}
-              onChange={setConfirmPassword}
-            />
-            <FormError message={errorMessage} />
-            <Button type="submit" className="w-full" disabled={mutation.isPending}>
-              {mutation.isPending ? 'กำลังบันทึก…' : 'บันทึกรหัสผ่านใหม่'}
-            </Button>
-            {isForced ? (
-              // A forced change can be abandoned; leaving the session open on a lab computer cannot.
-              <Button
-                variant="ghost"
-                className="w-full"
-                onClick={() => logoutMutation.mutate()}
-                disabled={logoutMutation.isPending}
-              >
-                ออกจากระบบ
-              </Button>
-            ) : (
-              user && (
-                <Link
-                  to={homePathFor(user.role)}
-                  className="block text-center text-sm text-muted-foreground underline"
-                >
-                  กลับหน้าแรก
-                </Link>
-              )
-            )}
-          </form>
-        </CardContent>
-      </Card>
-    </main>
+    <AuthShell
+      title="เปลี่ยนรหัสผ่าน"
+      description={isForced ? 'เข้าสู่ระบบครั้งแรก กรุณาตั้งรหัสผ่านใหม่ก่อนใช้งาน' : 'ตั้งรหัสผ่านใหม่สำหรับบัญชีของคุณ'}
+    >
+      <form className="space-y-4" onSubmit={handleSubmit} noValidate>
+        <PasswordField
+          id="current-password"
+          label="รหัสผ่านเดิม"
+          field="รหัสผ่านเดิม"
+          autoComplete="current-password"
+          enterKeyHint="next"
+          // On the first login, the student just typed it: say which one it is (U16).
+          hint={isForced ? PASSWORD_MESSAGES.initialPasswordHint : undefined}
+          value={currentPassword}
+          onChange={setCurrentPassword}
+        />
+        <PasswordField
+          id="new-password"
+          label={`รหัสผ่านใหม่ (อย่างน้อย ${PASSWORD_MIN_LENGTH} ตัว)`}
+          field="รหัสผ่านใหม่"
+          autoComplete="new-password"
+          enterKeyHint="next"
+          value={newPassword}
+          onChange={setNewPassword}
+        />
+        <PasswordField
+          id="confirm-password"
+          label="ยืนยันรหัสผ่านใหม่"
+          field="รหัสผ่านใหม่ที่ยืนยัน"
+          autoComplete="new-password"
+          enterKeyHint="done"
+          value={confirmPassword}
+          onChange={setConfirmPassword}
+        />
+        <FormError message={errorMessage} boxed />
+        <Button type="submit" className="h-11 w-full" disabled={mutation.isPending}>
+          {mutation.isPending ? 'กำลังบันทึก…' : 'บันทึกรหัสผ่านใหม่'}
+        </Button>
+        {isForced ? (
+          // A forced change can be abandoned; leaving the session open on a lab computer cannot.
+          <Button
+            variant="ghost"
+            className="w-full"
+            onClick={() => logoutMutation.mutate()}
+            disabled={logoutMutation.isPending}
+          >
+            ออกจากระบบ
+          </Button>
+        ) : (
+          user && (
+            <Link
+              to={homePathFor(user.role)}
+              className={cn(buttonVariants({ variant: 'ghost' }), 'w-full')}
+            >
+              กลับหน้าแรก
+            </Link>
+          )
+        )}
+      </form>
+    </AuthShell>
   );
 };
