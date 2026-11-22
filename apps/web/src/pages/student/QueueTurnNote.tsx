@@ -1,18 +1,20 @@
 import { Link } from 'react-router';
+import { buttonVariants } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
-import { QUEUE_MESSAGES, admittedHeadline } from './queue-ui';
+import { QUEUE_MESSAGES } from './queue-ui';
+import { AdmittedHeadline, KeepOpenWarning, queueCardClass } from './QueueText';
 import type { QueueTurn } from './queue-ui';
 
 const CLUBS_PATH = '/student/clubs';
 
-const headline = (turn: QueueTurn): string => {
+const Headline = ({ turn }: { turn: QueueTurn }) => {
   switch (turn.kind) {
     case 'none':
-      return '';
+      return null;
     case 'waiting':
       return QUEUE_MESSAGES.waiting;
     case 'admitted':
-      return admittedHeadline(turn.admittedUntil);
+      return <AdmittedHeadline admittedUntil={turn.admittedUntil} />;
   }
 };
 
@@ -24,27 +26,33 @@ export const QueueTurnNote = ({ turn }: { turn: QueueTurn }) => {
   const live = turn.kind !== 'none';
   return (
     <div
-      className={cn(live && 'space-y-2 rounded-lg border border-border bg-card p-4')}
+      className={cn(
+        live && 'space-y-3 rounded-2xl border border-border bg-card p-4 shadow-card sm:p-5',
+        queueCardClass(turn.kind === 'admitted'),
+      )}
       aria-label={live ? 'คิวเลือกชุมนุม' : undefined}
       role={live ? 'region' : undefined}
     >
-      <p role="status" className={cn(live && 'font-semibold')}>
-        {headline(turn)}
+      <p role="status" className={cn(live && 'text-lg font-semibold')}>
+        <Headline turn={turn} />
       </p>
       {turn.kind === 'waiting' && (
         <>
           <p className="text-sm">
-            ลำดับที่ <span className="text-2xl font-bold text-primary">{turn.position}</span>
+            ลำดับที่ <span className="text-4xl font-bold text-primary">{turn.position}</span>
           </p>
           <p className="text-sm text-muted-foreground">{QUEUE_MESSAGES.keepaliveWaitingHelp}</p>
         </>
       )}
-      {live && (
-        <p className="text-sm font-medium text-warning-foreground">{QUEUE_MESSAGES.keepOpen}</p>
-      )}
+      {live && <KeepOpenWarning />}
       {live && (
         <Link
-          className="inline-flex min-h-11 items-center text-sm font-medium text-primary underline underline-offset-4 sm:min-h-0"
+          // Admitted: choosing a club is what the turn is for, so it is the page's main button
+          // (the no-club card then leaves its own out).
+          className={cn(
+            buttonVariants({ variant: turn.kind === 'admitted' ? 'primary' : 'outline' }),
+            'w-full sm:w-auto',
+          )}
           to={CLUBS_PATH}
         >
           {turn.kind === 'admitted' ? QUEUE_MESSAGES.toClubs : QUEUE_MESSAGES.backToClubs}

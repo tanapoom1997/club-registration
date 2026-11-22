@@ -4,11 +4,11 @@ import type { ReactNode, Ref, RefObject } from 'react';
 import { Link } from 'react-router';
 import { FormError } from '@/components/FormError';
 import { Button } from '@/components/ui/button';
-import { alertVariants } from '@/components/ui/alert';
 import { Card } from '@/components/ui/card';
 import { cn } from '@/lib/utils';
 import { useFocusRescue } from './focus-rescue';
-import { QUEUE_MESSAGES, admittedParts, queueHeadline, showsClubs } from './queue-ui';
+import { QUEUE_MESSAGES, queueHeadline, showsClubs } from './queue-ui';
+import { AdmittedHeadline, KeepOpenWarning, queueCardClass } from './QueueText';
 import type { Queue, QueueView } from './queue-ui';
 
 const MY_REGISTRATION_PATH = '/student/my-registration';
@@ -17,28 +17,13 @@ const Note = ({ children }: { children: ReactNode }) => (
   <p className="text-sm text-muted-foreground">{children}</p>
 );
 
-// The warning a student must not miss while they hold a place: losing it means the back of the
-// queue on the busiest day.
-const KeepOpen = () => (
-  <p className={cn(alertVariants({ variant: 'warning' }), 'font-medium')}>
-    {QUEUE_MESSAGES.keepOpen}
-  </p>
-);
-
-// The live line's content. Admitted sets the deadline large on its own line; the words (and so
-// what a screen reader announces) are exactly queueHeadline's.
-const Headline = ({ view }: { view: QueueView }) => {
-  if (view.kind !== 'admitted') return queueHeadline(view);
-  const { lead, until, time } = admittedParts(view.admittedUntil);
-  return (
-    <>
-      {lead}{' '}
-      <span className="block text-base font-normal">
-        {until} <span className="text-3xl font-bold whitespace-nowrap text-primary">{time}</span>
-      </span>
-    </>
+// The live line's content; admitted sets the deadline apart (AdmittedHeadline).
+const Headline = ({ view }: { view: QueueView }) =>
+  view.kind === 'admitted' ? (
+    <AdmittedHeadline admittedUntil={view.admittedUntil} />
+  ) : (
+    queueHeadline(view)
   );
-};
 
 type QueueBodyProps = {
   queue: Queue;
@@ -73,7 +58,7 @@ const QueueBody = ({ queue, registration, actionRef }: QueueBodyProps) => {
             ลำดับที่ <span className="text-4xl font-bold text-primary">{view.position}</span>
           </p>
           <p className="text-sm">{QUEUE_MESSAGES.waitingHelp}</p>
-          <KeepOpen />
+          <KeepOpenWarning />
           {lost}
         </>
       );
@@ -81,7 +66,7 @@ const QueueBody = ({ queue, registration, actionRef }: QueueBodyProps) => {
       return (
         <>
           <Note>{QUEUE_MESSAGES.admittedHelp}</Note>
-          <KeepOpen />
+          <KeepOpenWarning />
           {lost}
           <Button
             ref={actionRef}
@@ -148,11 +133,8 @@ export const QueueGate = ({ queue, registration, headingRef, children }: QueueGa
     <>
       {view.kind !== 'off' && (
         <Card
-          className={cn(
-            'space-y-3 p-5',
-            // The student's turn is the moment the whole page exists for: it gets the main colour.
-            view.kind === 'admitted' && 'border-primary/40 bg-primary-soft ring-2 ring-primary/15',
-          )}
+          // The student's turn is the moment the whole page exists for: it gets the main colour.
+          className={cn('space-y-3 p-5', queueCardClass(view.kind === 'admitted'))}
           aria-label="คิวเลือกชุมนุม"
           role="region"
         >
