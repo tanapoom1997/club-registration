@@ -1,9 +1,10 @@
 import { ERROR_CODES } from '@club-registration/shared';
 import type { ClassroomPasswordStatus } from '@club-registration/shared';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import type { FormEvent } from 'react';
 import { Link } from 'react-router';
+import { ConfirmPanel } from '@/components/ConfirmPanel';
 import { FormError } from '@/components/FormError';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
@@ -13,6 +14,7 @@ import { Card } from '@/components/ui/card';
 import { cn } from '@/lib/utils';
 import { ApiError, fetchPasswordStatus, issueInitialPasswords } from '@/lib/api';
 import { saveFile } from '@/lib/download';
+import { useReturnFocus } from '@/lib/panel-focus';
 import { useSetSession } from '@/lib/session';
 import { gradeLabel } from '@/lib/round-display';
 import { PasswordStatusTable, formatCount } from './PasswordStatusTable';
@@ -74,6 +76,17 @@ export const AdminInitialPasswordsPage = () => {
       await queryClient.invalidateQueries({ queryKey: STATUS_QUERY_KEY });
     },
   });
+
+  // The confirmation replaces the issue button, so focus goes back to the one that renders again.
+  // After an issue, the notice saying what happened comes first: the refetched counts may have
+  // disabled the button. Open until the request (and the refetch it waits for) has settled, so the
+  // result decides where focus goes.
+  const issueButtonRef = useRef<HTMLButtonElement>(null);
+  const successRef = useRef<HTMLParagraphElement>(null);
+  useReturnFocus(
+    confirming || mutation.isPending,
+    mutation.isSuccess ? [successRef, issueButtonRef] : [issueButtonRef],
+  );
 
   const classrooms = statusQuery.data ?? [];
   const grades = [...new Set(classrooms.map((row) => row.grade))];
@@ -214,7 +227,11 @@ export const AdminInitialPasswordsPage = () => {
                 {invalidates > 0 && ` (ในนี้ ${formatCount(invalidates)} คนจะได้รหัสใหม่แทนรหัสเดิม)`}
               </p>
               {!confirming && (
-                <Button type="submit" disabled={expected === 0 || mutation.isPending}>
+                <Button
+                  ref={issueButtonRef}
+                  type="submit"
+                  disabled={expected === 0 || mutation.isPending}
+                >
                   ออกรหัสผ่านและดาวน์โหลด
                 </Button>
               )}
@@ -222,14 +239,17 @@ export const AdminInitialPasswordsPage = () => {
           </Card>
 
           {confirming && (
-            <div
-              role="alertdialog"
-              aria-label="ยืนยันการออกรหัสผ่าน"
-              className={cn(alertVariants({ variant: 'warning' }), 'max-w-xl space-y-3 p-4')}
+            <ConfirmPanel
+              label="ยืนยันการออกรหัสผ่าน"
+              message={`ออกรหัสผ่านให้ ${scopeLabel(scope)} ประมาณ ${formatCount(expected)} คน?`}
+              confirmLabel="ยืนยัน ออกรหัสผ่าน"
+              pending={mutation.isPending}
+              pendingLabel="กำลังสร้างรหัสผ่าน…"
+              pendingNote="กำลังสร้างรหัสผ่าน… อาจใช้เวลาหลายวินาที กรุณาอย่าปิดหน้านี้"
+              onConfirm={handleConfirm}
+              onCancel={() => setConfirming(false)}
+              className="max-w-xl"
             >
-              <p className="text-sm font-medium">
-                ออกรหัสผ่านให้ {scopeLabel(scope)} ประมาณ {formatCount(expected)} คน?
-              </p>
               {invalidates > 0 && (
                 <p className="text-sm font-medium">
                   รหัสผ่านเดิมของนักเรียน {formatCount(invalidates)} คนที่พิมพ์แจกไปแล้วจะใช้ไม่ได้ทันที
@@ -239,29 +259,17 @@ export const AdminInitialPasswordsPage = () => {
               <p className="text-sm">
                 ไฟล์ที่ได้คือสำเนาเดียวของรหัสผ่าน เก็บรักษาให้ดีและอย่าส่งต่อทางช่องทางสาธารณะ
               </p>
-              {mutation.isPending && (
-                <p className="text-sm" role="status">
-                  กำลังสร้างรหัสผ่าน… อาจใช้เวลาหลายวินาที กรุณาอย่าปิดหน้านี้
-                </p>
-              )}
-              <div className="flex flex-wrap gap-2">
-                <Button onClick={handleConfirm} disabled={mutation.isPending}>
-                  {mutation.isPending ? 'กำลังสร้างรหัสผ่าน…' : 'ยืนยัน ออกรหัสผ่าน'}
-                </Button>
-                <Button
-                  variant="outline"
-                  onClick={() => setConfirming(false)}
-                  disabled={mutation.isPending}
-                >
-                  ยกเลิก
-                </Button>
-              </div>
-            </div>
+            </ConfirmPanel>
           )}
 
           <FormError message={mutation.isError ? issueErrorMessage(mutation.error) : undefined} />
           {mutation.isSuccess && (
-            <p className={alertVariants({ variant: 'success' })} role="status">
+            <p
+              ref={successRef}
+              tabIndex={-1}
+              className={cn(alertVariants({ variant: 'success' }), 'focus:outline-none')}
+              role="status"
+            >
               ออกรหัสผ่านให้ {formatCount(mutation.data.issuedCount)} คนแล้ว ดาวน์โหลดไฟล์{' '}
               {mutation.data.filename} แล้ว ไฟล์นี้ดาวน์โหลดซ้ำไม่ได้ ถ้าไม่พบไฟล์ในเครื่องต้องออกรหัสใหม่
               (รหัสในไฟล์เดิมจะใช้ไม่ได้)

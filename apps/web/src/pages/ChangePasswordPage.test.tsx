@@ -137,4 +137,80 @@ describe('change password page', () => {
     // The href, not where a click lands: the role guard would also turn /student into /admin.
     expect(screen.getByRole('link', { name: 'กลับหน้าแรก' }).getAttribute('href')).toBe('/admin');
   });
+
+  // README Phase 4, P4c (U16).
+  describe('typing a password on a phone', () => {
+    const descriptionOf = (input: HTMLElement) => {
+      const ids = input.getAttribute('aria-describedby');
+      return ids === null ? null : document.getElementById(ids)?.textContent;
+    };
+
+    it('says the current password is the initial one from the teacher on the first login', async () => {
+      await openPage(STUDENT, () => Response.json({ user: STUDENT }));
+
+      expect(descriptionOf(screen.getByLabelText('รหัสผ่านเดิม'))).toBe(
+        'รหัสผ่านเริ่มต้นที่ได้รับจากครูหรือผู้ดูแลระบบ (รหัสเดียวกับที่เพิ่งใช้เข้าสู่ระบบ)',
+      );
+    });
+
+    it('does not mention the initial password when the change is not forced', async () => {
+      await openPage(ADMIN, () => Response.json({ user: ADMIN }));
+
+      expect(descriptionOf(screen.getByLabelText('รหัสผ่านเดิม'))).toBeNull();
+      expect(screen.queryByText(/รหัสผ่านเริ่มต้นที่ได้รับจากครู/)).toBeNull();
+    });
+
+    it('shows and hides each password with its own toggle, without submitting', async () => {
+      const { fetchMock } = await openPage(STUDENT, () => Response.json({ user: STUDENT }));
+      const current = screen.getByLabelText<HTMLInputElement>('รหัสผ่านเดิม');
+      const next = screen.getByLabelText<HTMLInputElement>(/^รหัสผ่านใหม่/);
+      expect([current.type, next.type]).toEqual(['password', 'password']);
+
+      fireEvent.click(screen.getByRole('button', { name: 'แสดงรหัสผ่านเดิม' }));
+
+      expect(current.type).toBe('text');
+      expect(next.type).toBe('password');
+      const hide = screen.getByRole('button', { name: 'ซ่อนรหัสผ่านเดิม' });
+      expect(hide.textContent).toBe('ซ่อน');
+      expect(hide.getAttribute('aria-controls')).toBe(current.id);
+      expect(changeRequests(fetchMock)).toEqual([]);
+
+      fireEvent.click(hide);
+
+      expect(current.type).toBe('password');
+      expect(screen.getByRole('button', { name: 'แสดงรหัสผ่านเดิม' }).textContent).toBe('แสดง');
+    });
+
+    it('keeps what the browser and the keyboard need to treat the fields as passwords', async () => {
+      await openPage(STUDENT, () => Response.json({ user: STUDENT }));
+      fireEvent.click(screen.getByRole('button', { name: 'แสดงรหัสผ่านใหม่' }));
+      fireEvent.click(screen.getByRole('button', { name: 'แสดงรหัสผ่านใหม่ที่ยืนยัน' }));
+
+      const fields = [
+        screen.getByLabelText('รหัสผ่านเดิม'),
+        screen.getByLabelText(/^รหัสผ่านใหม่/),
+        screen.getByLabelText('ยืนยันรหัสผ่านใหม่'),
+      ].map((input) => ({
+        autocomplete: input.getAttribute('autocomplete'),
+        autocapitalize: input.getAttribute('autocapitalize'),
+        spellcheck: input.getAttribute('spellcheck'),
+      }));
+      expect(fields).toEqual([
+        { autocomplete: 'current-password', autocapitalize: 'none', spellcheck: 'false' },
+        { autocomplete: 'new-password', autocapitalize: 'none', spellcheck: 'false' },
+        { autocomplete: 'new-password', autocapitalize: 'none', spellcheck: 'false' },
+      ]);
+    });
+
+    it('sends the password typed while it was shown', async () => {
+      const { fetchMock } = await openPage(STUDENT, () =>
+        Response.json({ user: { ...STUDENT, mustChangePassword: false } }),
+      );
+      fireEvent.click(screen.getByRole('button', { name: 'แสดงรหัสผ่านเดิม' }));
+
+      submit();
+
+      await waitFor(() => expect(changeRequests(fetchMock)).toHaveLength(1));
+    });
+  });
 });

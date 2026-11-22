@@ -1,7 +1,8 @@
 import type { Round } from '@club-registration/shared';
 import { useQuery } from '@tanstack/react-query';
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import type { FormEvent } from 'react';
+import { ConfirmPanel } from '@/components/ConfirmPanel';
 import { FormError } from '@/components/FormError';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -9,9 +10,9 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Table, TableBody, TableCell, TableHead, TableHeader } from '@/components/ui/table';
 import { deleteRound, fetchRounds } from '@/lib/api';
+import { useReturnFocus } from '@/lib/panel-focus';
 import { STATUS_DISPLAY, gradeLabel } from '@/lib/round-display';
 import { formatThaiDateTime } from '@/lib/thai-time';
-import { ConfirmPanel } from './ConfirmPanel';
 import { CreateRoundBatchForm, CreateRoundForm } from './CreateRoundForms';
 import { EditRoundForm } from './EditRoundForm';
 import {
@@ -25,10 +26,13 @@ import {
 
 const roundName = ({ term, grade }: Round) => `${term} ${gradeLabel(grade)}`;
 
+// The button is passed along so focus can go back to it when what it opened closes.
+type RoundAction = (round: Round, opener: HTMLButtonElement) => void;
+
 type RoundsTableProps = {
   rounds: readonly Round[];
-  onEdit: (round: Round) => void;
-  onDelete: (round: Round) => void;
+  onEdit: RoundAction;
+  onDelete: RoundAction;
 };
 
 const RoundsTable = ({ rounds, onEdit, onDelete }: RoundsTableProps) => (
@@ -80,7 +84,7 @@ const RoundsTable = ({ rounds, onEdit, onDelete }: RoundsTableProps) => (
                   variant="outline"
                   className="px-3 py-1"
                   aria-label={`แก้ไขรอบ ${roundName(round)}`}
-                  onClick={() => onEdit(round)}
+                  onClick={(event) => onEdit(round, event.currentTarget)}
                 >
                   แก้ไข
                 </Button>
@@ -90,7 +94,7 @@ const RoundsTable = ({ rounds, onEdit, onDelete }: RoundsTableProps) => (
                     variant="danger"
                     className="px-3 py-1"
                     aria-label={`ลบรอบ ${roundName(round)}`}
-                    onClick={() => onDelete(round)}
+                    onClick={(event) => onDelete(round, event.currentTarget)}
                   >
                     ลบ
                   </Button>
@@ -107,9 +111,16 @@ const RoundsTable = ({ rounds, onEdit, onDelete }: RoundsTableProps) => (
 export const AdminRoundsPage = () => {
   const [termInput, setTermInput] = useState('');
   const [termFilter, setTermFilter] = useState('');
-  // An id, not a snapshot, so the editor sees the latest status after every refetch.
-  const [editingId, setEditingId] = useState<number>();
-  const [deleting, setDeleting] = useState<Round>();
+  // An id, not a snapshot, so the editor sees the latest status after every refetch. `reveal`
+  // counts the clicks on edit buttons, so a second click brings the open editor back into view.
+  const [editTarget, setEditTarget] = useState<{ id: number; reveal: number }>();
+  const editingId = editTarget?.id;
+  // `opened` keys the confirmation, so a click on another round's delete button opens a new one,
+  // which takes focus again.
+  const [deleting, setDeleting] = useState<{ round: Round; opened: number }>();
+  const editOpener = useRef<HTMLButtonElement>(null);
+  const deleteOpener = useRef<HTMLButtonElement>(null);
+  const headingRef = useRef<HTMLHeadingElement>(null);
 
   const roundsQuery = useQuery({
     queryKey: [...ROUNDS_QUERY_KEY, termFilter],
@@ -130,23 +141,34 @@ export const AdminRoundsPage = () => {
       onSuccess: () => {
         // The refetch usually drops the round and closes its editor, but if the reload fails the
         // stale list still holds it, and the editor would stay open on a round that is gone.
-        if (editingId === round.id) setEditingId(undefined);
+        if (editingId === round.id) setEditTarget(undefined);
       },
     });
   };
 
-  const startDelete = (round: Round) => {
+  const startDelete: RoundAction = (round, opener) => {
     deleteMutation.reset();
-    setDeleting(round);
+    deleteOpener.current = opener;
+    setDeleting((current) => ({ round, opened: (current?.opened ?? 0) + 1 }));
+  };
+
+  const startEdit: RoundAction = ({ id }, opener) => {
+    editOpener.current = opener;
+    setEditTarget((current) => ({ id, reveal: (current?.reveal ?? 0) + 1 }));
   };
 
   const rounds = roundsQuery.data ?? [];
   const editing = rounds.find(({ id }) => id === editingId);
+  useReturnFocus(editing !== undefined, [editOpener]);
+  // A deleted round's button is gone with its row, so focus goes to the page heading instead.
+  useReturnFocus(deleting !== undefined, [deleteOpener, headingRef]);
 
   return (
     <section className="space-y-6">
       <div className="space-y-1">
-        <h1 className="text-2xl font-bold">รอบลงทะเบียน</h1>
+        <h1 ref={headingRef} tabIndex={-1} className="text-2xl font-bold focus:outline-none">
+          รอบลงทะเบียน
+        </h1>
         <p className="text-sm text-muted-foreground">
           1 รอบต่อชั้นต่อภาคเรียน เวลาทั้งหมดเป็นเวลาประเทศไทย สถานะคำนวณจากเวลาของเซิร์ฟเวอร์
           จำนวนรอคิวและได้คิวแล้วอัปเดตเองทุก {ROUNDS_POLL_INTERVAL_MS / 1000} วินาทีระหว่างที่มีรอบเปิดอยู่
@@ -170,11 +192,12 @@ export const AdminRoundsPage = () => {
 
       {deleting && (
         <ConfirmPanel
-          message={`ลบรอบ ${roundName(deleting)} ใช่หรือไม่`}
+          key={deleting.opened}
+          message={`ลบรอบ ${roundName(deleting.round)} ใช่หรือไม่`}
           confirmLabel="ยืนยันลบ"
           destructive
           pending={deleteMutation.isPending}
-          onConfirm={() => confirmDelete(deleting)}
+          onConfirm={() => confirmDelete(deleting.round)}
           onCancel={() => setDeleting(undefined)}
         />
       )}
@@ -196,12 +219,17 @@ export const AdminRoundsPage = () => {
           {termFilter === '' ? 'ยังไม่มีรอบลงทะเบียน' : `ไม่มีรอบของภาคเรียน ${termFilter}`}
         </p>
       ) : (
-        <RoundsTable rounds={rounds} onEdit={({ id }) => setEditingId(id)} onDelete={startDelete} />
+        <RoundsTable rounds={rounds} onEdit={startEdit} onDelete={startDelete} />
       )}
 
       {editing && (
         // Keyed so choosing another round starts a fresh form instead of keeping old input.
-        <EditRoundForm key={editing.id} round={editing} onDone={() => setEditingId(undefined)} />
+        <EditRoundForm
+          key={editing.id}
+          round={editing}
+          reveal={editTarget?.reveal ?? 0}
+          onDone={() => setEditTarget(undefined)}
+        />
       )}
 
       <div className="grid gap-4 md:grid-cols-2">

@@ -55,6 +55,22 @@ describe('auth routes', () => {
     expect(router.state.location.pathname).toBe('/change-password');
   });
 
+  // README Phase 4, P4c (U16).
+  it('shows the password on request without sending the form', async () => {
+    const fetchMock = mockApi({ 'GET /api/auth/me': unauthorized });
+    renderAt('/login');
+    await screen.findByRole('heading', { name: 'เข้าสู่ระบบ' });
+    const password = screen.getByLabelText<HTMLInputElement>('รหัสผ่าน');
+    expect(password.type).toBe('password');
+
+    fireEvent.click(screen.getByRole('button', { name: 'แสดงรหัสผ่าน' }));
+
+    expect(password.type).toBe('text');
+    expect(password.getAttribute('autocomplete')).toBe('current-password');
+    expect(screen.getByRole('button', { name: 'ซ่อนรหัสผ่าน' })).toBeTruthy();
+    expect(fetchMock.mock.calls.filter(([input]) => input === '/api/auth/login')).toEqual([]);
+  });
+
   it('shows an error when the credentials are wrong', async () => {
     mockApi({
       'GET /api/auth/me': unauthorized,

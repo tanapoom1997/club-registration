@@ -18,7 +18,10 @@ const clubLabel = (club: Club) => `${club.code} ${club.name}`;
 const openMembers = async (page: Page, club: Club) => {
   await page.goto('/admin/clubs');
   await page.getByRole('button', { name: `รายชื่อชุมนุม ${club.code}`, exact: true }).click();
-  return page.getByRole('region', { name: `รายชื่อชุมนุม ${clubLabel(club)}` });
+  const panel = page.getByRole('region', { name: `รายชื่อชุมนุม ${clubLabel(club)}` });
+  // The panel opens below the clubs table, so it takes focus (README Phase 4, P4c U6).
+  await expect(panel.getByRole('heading', { name: `รายชื่อชุมนุม ${clubLabel(club)}` })).toBeFocused();
+  return panel;
 };
 
 const assign = async (page: Page, club: Club, loginId: string) => {

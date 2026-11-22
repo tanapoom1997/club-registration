@@ -79,9 +79,10 @@ test('the first login asks for a new password before anything else', async ({ pa
   await page.goto('/student/clubs');
   await expect(page).toHaveURL(/\/change-password$/);
 
-  await page.getByLabel('รหัสผ่านเดิม').fill(student.password);
+  // Exact: each field's show/hide toggle is named after it ("แสดงรหัสผ่านเดิม").
+  await page.getByLabel('รหัสผ่านเดิม', { exact: true }).fill(student.password);
   await page.getByLabel(/^รหัสผ่านใหม่/).fill(newPassword);
-  await page.getByLabel('ยืนยันรหัสผ่านใหม่').fill(newPassword);
+  await page.getByLabel('ยืนยันรหัสผ่านใหม่', { exact: true }).fill(newPassword);
   await page.getByRole('button', { name: 'บันทึกรหัสผ่านใหม่' }).click();
   await expect(page).toHaveURL(STUDENT_LANDING);
 

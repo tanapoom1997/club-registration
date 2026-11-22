@@ -1,13 +1,14 @@
 import { DEFAULT_MAX_ACTIVE, updateRoundRequestSchema } from '@club-registration/shared';
 import type { Round, UpdateRoundRequest } from '@club-registration/shared';
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import type { FormEvent } from 'react';
 import { FormError } from '@/components/FormError';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { updateRound } from '@/lib/api';
+import { useRevealPanel, useReturnFocus } from '@/lib/panel-focus';
 import { isoToThaiInput } from '@/lib/thai-time';
-import { ConfirmPanel } from './ConfirmPanel';
+import { ConfirmPanel } from '@/components/ConfirmPanel';
 import { RoundWindowFields } from './RoundWindowFields';
 import { gradeLabel } from '@/lib/round-display';
 import { queueEditNotes, roundErrorMessage, useRoundMutation, windowFromValues } from './round-ui';
@@ -21,10 +22,15 @@ const valuesOf = (round: Round): WindowValues => ({
   noQueue: round.maxActive === null,
 });
 
-type EditRoundFormProps = { round: Round; onDone: () => void };
+type EditRoundFormProps = {
+  round: Round;
+  // Changes on every click of the round's edit button (useRevealPanel).
+  reveal: number;
+  onDone: () => void;
+};
 
 // Term and grade are shown but not editable: they identify the round and the API refuses them.
-export const EditRoundForm = ({ round, onDone }: EditRoundFormProps) => {
+export const EditRoundForm = ({ round, reveal, onDone }: EditRoundFormProps) => {
   const [values, setValues] = useState<WindowValues>(() => valuesOf(round));
   const [validationError, setValidationError] = useState<string>();
   // Holds the parsed change while the admin is asked to confirm editing an open round.
@@ -32,6 +38,11 @@ export const EditRoundForm = ({ round, onDone }: EditRoundFormProps) => {
   const mutation = useRoundMutation(
     async (request: UpdateRoundRequest) => await updateRound(round.id, request),
   );
+  const headingRef = useRevealPanel<HTMLHeadingElement>(reveal);
+  // The confirmation replaces the save button, so focus goes back to the one that renders again.
+  // Open until the request settles: the button is disabled while it is in flight.
+  const submitRef = useRef<HTMLButtonElement>(null);
+  useReturnFocus(pendingChange !== undefined || mutation.isPending, [submitRef]);
 
   const save = (request: UpdateRoundRequest) => {
     mutation.mutate(request, {
@@ -65,7 +76,12 @@ export const EditRoundForm = ({ round, onDone }: EditRoundFormProps) => {
   return (
     <Card>
       <CardHeader>
-        <CardTitle id="edit-round-title" className="text-base">
+        <CardTitle
+          ref={headingRef}
+          id="edit-round-title"
+          tabIndex={-1}
+          className="scroll-mt-6 text-base focus:outline-none sm:scroll-mt-36"
+        >
           {title}
         </CardTitle>
         <p className="text-sm text-muted-foreground">
@@ -100,7 +116,7 @@ export const EditRoundForm = ({ round, onDone }: EditRoundFormProps) => {
             />
           ) : (
             <div className="flex flex-wrap gap-2">
-              <Button type="submit" disabled={mutation.isPending}>
+              <Button ref={submitRef} type="submit" disabled={mutation.isPending}>
                 {mutation.isPending ? 'กำลังบันทึก…' : 'บันทึกการแก้ไข'}
               </Button>
               <Button variant="outline" onClick={onDone} disabled={mutation.isPending}>

@@ -8,9 +8,10 @@ import { useState } from 'react';
 import type { FormEvent } from 'react';
 import { Link, useNavigate } from 'react-router';
 import { FormError } from '@/components/FormError';
+import { PasswordInput } from '@/components/PasswordInput';
+import { PASSWORD_MESSAGES } from '@/components/password-messages';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { ApiError, changePassword } from '@/lib/api';
 import { homePathFor, landingPathFor, useLogout, useSession, useSetSession } from '@/lib/session';
@@ -28,24 +29,44 @@ const changePasswordErrorMessage = (error: unknown): string => {
 type PasswordFieldProps = {
   id: string;
   label: string;
+  // What the field holds, for its show/hide toggle (PasswordInput).
+  field: string;
   value: string;
   autoComplete: 'current-password' | 'new-password';
+  hint?: string | undefined;
   onChange: (value: string) => void;
 };
 
-const PasswordField = ({ id, label, value, autoComplete, onChange }: PasswordFieldProps) => (
-  <div className="space-y-1.5">
-    <Label htmlFor={id}>{label}</Label>
-    <Input
-      id={id}
-      type="password"
-      autoComplete={autoComplete}
-      value={value}
-      onChange={(event) => onChange(event.target.value)}
-      required
-    />
-  </div>
-);
+const PasswordField = ({
+  id,
+  label,
+  field,
+  value,
+  autoComplete,
+  hint,
+  onChange,
+}: PasswordFieldProps) => {
+  const hintId = `${id}-hint`;
+  return (
+    <div className="space-y-1.5">
+      <Label htmlFor={id}>{label}</Label>
+      <PasswordInput
+        id={id}
+        field={field}
+        autoComplete={autoComplete}
+        value={value}
+        onChange={(event) => onChange(event.target.value)}
+        aria-describedby={hint === undefined ? undefined : hintId}
+        required
+      />
+      {hint !== undefined && (
+        <p id={hintId} className="text-sm text-muted-foreground">
+          {hint}
+        </p>
+      )}
+    </div>
+  );
+};
 
 export const ChangePasswordPage = () => {
   const navigate = useNavigate();
@@ -103,13 +124,17 @@ export const ChangePasswordPage = () => {
             <PasswordField
               id="current-password"
               label="รหัสผ่านเดิม"
+              field="รหัสผ่านเดิม"
               autoComplete="current-password"
+              // On the first login, the student just typed it: say which one it is (U16).
+              hint={isForced ? PASSWORD_MESSAGES.initialPasswordHint : undefined}
               value={currentPassword}
               onChange={setCurrentPassword}
             />
             <PasswordField
               id="new-password"
               label={`รหัสผ่านใหม่ (อย่างน้อย ${PASSWORD_MIN_LENGTH} ตัว)`}
+              field="รหัสผ่านใหม่"
               autoComplete="new-password"
               value={newPassword}
               onChange={setNewPassword}
@@ -117,6 +142,7 @@ export const ChangePasswordPage = () => {
             <PasswordField
               id="confirm-password"
               label="ยืนยันรหัสผ่านใหม่"
+              field="รหัสผ่านใหม่ที่ยืนยัน"
               autoComplete="new-password"
               value={confirmPassword}
               onChange={setConfirmPassword}
