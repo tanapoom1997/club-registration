@@ -85,6 +85,9 @@ export const COMMON_ERRORS: Readonly<Record<string, string>> = Object.freeze({
 });
 
 const ROUND_NOT_OPEN = 'ตอนนี้ไม่อยู่ในช่วงเปิดลงทะเบียน (ยังไม่เปิดหรือปิดไปแล้ว)';
+// queue_required (Q2): the turn ended before the request reached the server. Shown only until the
+// page has read the ticket again and put the queue card back with its "join again" button.
+const QUEUE_REQUIRED = 'หมดเวลาคิวของคุณแล้ว จึงยังเลือกชุมนุมไม่ได้ กดเข้าคิวใหม่เพื่อเลือกต่อ';
 const CLUB_NOT_FOUND = 'ไม่พบชุมนุมนี้แล้ว รายการอาจเปลี่ยนไป กรุณาดูรายการล่าสุด';
 
 type WriteMessages = {
@@ -105,6 +108,7 @@ const WRITE_MESSAGES: Readonly<Record<StudentWriteKind, WriteMessages>> = Object
       [ERROR_CODES.alreadyRegistered]:
         'คุณลงชุมนุมอื่นในรอบนี้ไว้แล้ว ถ้าจะเปลี่ยน กด "ย้ายมาชุมนุมนี้" ที่ชุมนุมที่ยังมีที่ว่าง',
       [ERROR_CODES.roundNotOpen]: ROUND_NOT_OPEN,
+      [ERROR_CODES.queueRequired]: QUEUE_REQUIRED,
       [ERROR_CODES.notFound]: CLUB_NOT_FOUND,
     },
     unknownOutcome:
@@ -119,6 +123,7 @@ const WRITE_MESSAGES: Readonly<Record<StudentWriteKind, WriteMessages>> = Object
       [ERROR_CODES.notRegistered]:
         'คุณยังไม่มีชุมนุมในรอบนี้ (อาจยกเลิกไปแล้ว) กรุณาดูรายการล่าสุดแล้วกด "ลงชุมนุม" แทน',
       [ERROR_CODES.roundNotOpen]: ROUND_NOT_OPEN,
+      [ERROR_CODES.queueRequired]: QUEUE_REQUIRED,
       [ERROR_CODES.notFound]: CLUB_NOT_FOUND,
     },
     unknownOutcome:
@@ -132,6 +137,7 @@ const WRITE_MESSAGES: Readonly<Record<StudentWriteKind, WriteMessages>> = Object
       [ERROR_CODES.waitlistNotNeeded]:
         'ชุมนุมนี้มีที่ว่างแล้ว ไม่ต้องรอ กรุณาดูรายการล่าสุดแล้วลงหรือย้ายมาชุมนุมนี้ได้เลย',
       [ERROR_CODES.roundNotOpen]: 'เข้ารายชื่อรอไม่ได้ เพราะตอนนี้ไม่อยู่ในช่วงเปิดลงทะเบียน',
+      [ERROR_CODES.queueRequired]: QUEUE_REQUIRED,
       [ERROR_CODES.notFound]: CLUB_NOT_FOUND,
     },
     unknownOutcome:

@@ -1,17 +1,17 @@
 import { ERROR_CODES } from '@club-registration/shared';
 import type { StudentWaitlist } from '@club-registration/shared';
 import type pg from 'pg';
+import { dbNow } from '../db.js';
 import { AppError } from '../errors.js';
 import {
   REGISTRATION_OUTCOMES,
   assertSameRequest,
-  dbNow,
   findPriorEvent,
   insertEvent,
   lockStudentProfile,
   visibleClubTarget,
 } from './registrations.js';
-import type { PriorEvent, RegistrationOutcome } from './registrations.js';
+import type { AdmissionGate, PriorEvent, RegistrationOutcome } from './registrations.js';
 import { lockRound, lockRoundOfClub } from './round-lock.js';
 import { findStudentGrade, findWaitlist, selectStudentRound } from './student-round.js';
 
@@ -140,8 +140,9 @@ export type JoinWaitlistInput = { studentId: number; clubId: number; idempotency
 //
 //   404 unknown club → replay (200) / 409 idempotency_key_reused → 403 student_profile_missing
 //   → 404 club the student is not shown → 200 already waiting for this club (written nothing, so
-//   answered even outside the window, like register's already_held) → 409 round_not_open → 409
-//   already_in_club → 409 waitlist_not_needed → write.
+//   answered even outside the window, like register's already_held) → 409 round_not_open → 403
+//   queue_required (the gate, as for register: registrations.ts) → 409 already_in_club → 409
+//   waitlist_not_needed → write.
 //
 // round_not_open comes before the rest, as for register, change and cancel: outside the window the
 // answer is always "not open". A student who holds another club may join (README Phase 2 decision
@@ -152,6 +153,7 @@ export type JoinWaitlistInput = { studentId: number; clubId: number; idempotency
 export const joinWaitlist = async (
   db: pg.PoolClient,
   { studentId, clubId, idempotencyKey }: JoinWaitlistInput,
+  gate: AdmissionGate,
 ): Promise<WaitlistResult> => {
   const roundId = await lockRoundOfClub(db, clubId);
   if (roundId === undefined) throw new AppError(ERROR_CODES.notFound, 'Club not found');
@@ -174,6 +176,9 @@ export const joinWaitlist = async (
     };
   }
   if (!state.is_open) throw new AppError(ERROR_CODES.roundNotOpen);
+  // A read said open; the insert below decides the window again by its own clock, so a round
+  // that was not open here never reaches the write.
+  await gate(db, roundId);
   if (state.held_club_id === clubId) throw new AppError(ERROR_CODES.alreadyInClub);
   if (state.has_free_seat) throw new AppError(ERROR_CODES.waitlistNotNeeded);
 

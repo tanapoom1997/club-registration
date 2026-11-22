@@ -35,6 +35,7 @@ import {
   storedSeats,
   waitForAdvisoryLockWaiter,
 } from './support/registration.js';
+import { takeTurnFor } from './support/queue.js';
 
 // An admin listing a club's waitlist and taking students off it (README Phase 2, PR 3b), through
 // the whole app against a real Postgres. Every value is made up.
@@ -102,13 +103,15 @@ describe('admin club waitlist', () => {
       payload: { loginId, idempotencyKey: key },
     });
 
-  const asStudent = async (studentId: number, url: string, payload: Record<string, unknown>) =>
-    await app.inject({
+  const asStudent = async (studentId: number, url: string, payload: Record<string, unknown>) => {
+    await takeTurnFor(pool, studentId, url);
+    return await app.inject({
       method: 'POST',
       url,
       cookies: { [SESSION_COOKIE]: sessionCookie(app, studentId) },
       payload,
     });
+  };
   const cancel = async (studentId: number) =>
     await asStudent(studentId, '/api/student/registration/cancel', { idempotencyKey: newKey() });
   const join = async (studentId: number, clubId: number) =>

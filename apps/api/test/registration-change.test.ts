@@ -30,8 +30,10 @@ import {
   seatStudent,
   sessionCookie,
   storedSeats,
+  ungated,
   waitForAdvisoryLockWaiter,
 } from './support/registration.js';
+import { takeTurnFor } from './support/queue.js';
 
 // PUT /api/student/registration: moving a seat to another club in one transaction (README
 // Phase 2). Every value is made up.
@@ -60,14 +62,16 @@ describe('student change of club', () => {
     studentId: number,
     payload: NonNullable<InjectOptions['payload']>,
     headers: NonNullable<InjectOptions['headers']> = {},
-  ): Promise<InjectResponse> =>
-    await app.inject({
+  ): Promise<InjectResponse> => {
+    await takeTurnFor(pool, studentId, url);
+    return await app.inject({
       method,
       url,
       cookies: { [SESSION_COOKIE]: sessionCookie(app, studentId) },
       payload,
       headers,
     });
+  };
 
   const change = async (studentId: number, clubId: number, idempotencyKey = newKey()) =>
     await send('PUT', REGISTRATION_URL, studentId, { clubId, idempotencyKey });
@@ -505,8 +509,16 @@ describe('student change of club', () => {
     const studentId = await createStudentId(pool);
 
     const results = await withTransaction(pool, async (client) => [
-      await registerForClub(client, { studentId, clubId: first, idempotencyKey: newKey() }),
-      await changeRegistration(client, { studentId, clubId: second, idempotencyKey: newKey() }),
+      await registerForClub(
+        client,
+        { studentId, clubId: first, idempotencyKey: newKey() },
+        ungated,
+      ),
+      await changeRegistration(
+        client,
+        { studentId, clubId: second, idempotencyKey: newKey() },
+        ungated,
+      ),
     ]);
 
     expect(results.map(({ outcome }) => outcome)).toEqual(['registered', 'changed']);

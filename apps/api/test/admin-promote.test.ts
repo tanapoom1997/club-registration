@@ -45,6 +45,7 @@ import {
   sessionCookie,
   storedSeats,
 } from './support/registration.js';
+import { admitDirectly, takeTurnFor } from './support/queue.js';
 
 // The promote engine run by an admin's writes (README Phase 2): a club edit that raises capacity,
 // a round edit that reopens a closed round and an import commit that raises capacity. Each
@@ -105,13 +106,15 @@ describe('promotion by admin writes', () => {
     url: string,
     studentId: number,
     payload: NonNullable<InjectOptions['payload']>,
-  ) =>
-    await app.inject({
+  ) => {
+    await takeTurnFor(pool, studentId, url);
+    return await app.inject({
       method,
       url,
       cookies: { [SESSION_COOKIE]: sessionCookie(app, studentId) },
       payload,
     });
+  };
 
   const join = async (studentId: number, clubId: number) =>
     await asStudent('POST', '/api/student/waitlist', studentId, {
@@ -632,6 +635,9 @@ describe('promotion by admin writes', () => {
       });
       const roomy = await createClub(pool, roundId, uniqueCode(), { capacity: 20 });
       const [forRoomy, forFull] = [await createStudents(pool, 10), await createStudents(pool, 5)];
+      // Let in before the round closed and still on the page, so the queue gate (Q2) is no part
+      // of this race: what decides each outcome is still the edit's commit.
+      await admitDirectly(pool, roundId, [...forRoomy, ...forFull]);
 
       const [patched, roomyOutcomes, fullOutcomes] = await Promise.all([
         patchRound(roundId, reopen),

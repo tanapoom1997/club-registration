@@ -24,6 +24,8 @@ import {
   registerForClub,
 } from '../services/registrations.js';
 import type { RegistrationResult } from '../services/registrations.js';
+import { requireAdmittedTicket } from '../services/queue.js';
+import type { QueueSettings } from '../services/queue.js';
 import { listStudentClubs, readStudentRound } from '../services/student-round.js';
 import { joinWaitlist, leaveWaitlist } from '../services/waitlist.js';
 import type { WaitlistResult } from '../services/waitlist.js';
@@ -37,8 +39,24 @@ const WRITE_WINDOW_MS = 60_000;
 // What a logged-in student reads and writes in their own grade's round. The student, and through
 // their profile the grade and round, come from the session alone: no path, query or body field
 // can choose them. Responses carry club and advisor names, so logs carry ids and outcomes only.
+//
+// The queue gate (README Phase 3, Q2) is always on here: the club list and the writes that take a
+// seat or a place in line (register, change, waitlist join) need a live admitted queue ticket
+// while the round is open. It runs inside each request's own transaction, after the round lock,
+// the idempotency replay and the window check (registrations.ts says why), never in a preHandler:
+// a replayed key must still get its stored answer once the ticket ended, and a closed round must
+// still answer round_not_open. Cancel, leaving the waitlist and the student's own result are not
+// gated: they take nobody's seat.
 export const studentRoutes =
-  ({ pool, guard }: { pool: pg.Pool; guard: AuthGuard }): FastifyPluginAsyncZod =>
+  ({
+    pool,
+    guard,
+    queue,
+  }: {
+    pool: pg.Pool;
+    guard: AuthGuard;
+    queue: QueueSettings;
+  }): FastifyPluginAsyncZod =>
   // eslint-disable-next-line @typescript-eslint/require-await -- Fastify plugins must be async
   async (app) => {
     // preValidation, as for admin routes: other roles learn nothing about the schema from a 400.
@@ -101,7 +119,7 @@ export const studentRoutes =
       {
         schema: { querystring: studentQuerySchema, response: { 200: studentRoundResponseSchema } },
       },
-      async (request) => await readStudentRound(pool, requireAuthUser(request).id, new Date()),
+      async (request) => await readStudentRound(pool, requireAuthUser(request).id),
     );
 
     app.get(
@@ -109,7 +127,18 @@ export const studentRoutes =
       {
         schema: { querystring: studentQuerySchema, response: { 200: studentClubsResponseSchema } },
       },
-      async (request) => await listStudentClubs(pool, requireAuthUser(request).id, new Date()),
+      async (request) => {
+        const studentId = requireAuthUser(request).id;
+        try {
+          return await listStudentClubs(pool, studentId, requireAdmittedTicket(studentId, queue));
+        } catch (error) {
+          // Ids and the code only, like the writes' refusals.
+          if (error instanceof AppError && error.code === ERROR_CODES.queueRequired) {
+            request.log.info({ studentId, outcome: error.code }, 'student clubs refused');
+          }
+          throw error;
+        }
+      },
     );
 
     // JSON bodies only (Fastify refuses other content types), which with the SameSite=Strict
@@ -130,7 +159,12 @@ export const studentRoutes =
           request,
           'register',
           clubId,
-          async (client) => await registerForClub(client, { studentId, clubId, idempotencyKey }),
+          async (client) =>
+            await registerForClub(
+              client,
+              { studentId, clubId, idempotencyKey },
+              requireAdmittedTicket(studentId, queue),
+            ),
         );
         return { registration };
       },
@@ -154,7 +188,12 @@ export const studentRoutes =
           request,
           'change',
           clubId,
-          async (client) => await changeRegistration(client, { studentId, clubId, idempotencyKey }),
+          async (client) =>
+            await changeRegistration(
+              client,
+              { studentId, clubId, idempotencyKey },
+              requireAdmittedTicket(studentId, queue),
+            ),
         );
         return { registration };
       },
@@ -200,7 +239,12 @@ export const studentRoutes =
           request,
           'waitlist join',
           clubId,
-          async (client) => await joinWaitlist(client, { studentId, clubId, idempotencyKey }),
+          async (client) =>
+            await joinWaitlist(
+              client,
+              { studentId, clubId, idempotencyKey },
+              requireAdmittedTicket(studentId, queue),
+            ),
         );
         return { waitlist };
       },

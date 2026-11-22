@@ -5,6 +5,7 @@ import type { FastifyInstance } from 'fastify';
 import type { Pool } from 'pg';
 import { withTransaction } from '../../src/db.js';
 import { registerForClub } from '../../src/services/registrations.js';
+import type { AdmissionGate } from '../../src/services/registrations.js';
 import { uniqueStudentId, uniqueTerm } from './import-db.js';
 
 // Fixtures for the registration tests. Every value is made up.
@@ -106,13 +107,18 @@ export const moveWindow = async (
   );
 };
 
+// For fixtures that call the seat services directly to set the stage, not to test the queue: the
+// student routes always pass the real gate (requireAdmittedTicket), which the queue gate tests
+// exercise through the API.
+export const ungated: AdmissionGate = () => Promise.resolve();
+
 // Seats a student through the real service, so the event log stays consistent with the seats and
 // the invariant check below holds for seeded data too.
 export const seatStudent = async (pool: Pool, studentId: number, clubId: number) =>
   await withTransaction(
     pool,
     async (client) =>
-      await registerForClub(client, { studentId, clubId, idempotencyKey: newKey() }),
+      await registerForClub(client, { studentId, clubId, idempotencyKey: newKey() }, ungated),
   );
 
 // A waitlist entry with its waitlist_join event, written straight to the tables because the API

@@ -1,11 +1,11 @@
-import type { StudentClubRef, StudentClubsResponse } from '@club-registration/shared';
+import type { StudentClubRef, StudentRoundResponse } from '@club-registration/shared';
 import { useQuery } from '@tanstack/react-query';
 import { useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router';
 import { FormError } from '@/components/FormError';
 import { alertVariants } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
-import { fetchStudentClubs } from '@/lib/api';
+import { fetchStudentClubs, fetchStudentRound } from '@/lib/api';
 import { formatThaiDateTime } from '@/lib/thai-time';
 import { cn } from '@/lib/utils';
 import { ClubCard } from './ClubCard';
@@ -16,10 +16,18 @@ import { PromotedNotice, WaitlistCard } from './WaitlistCard';
 import { LeaveWaitlistPanel } from './LeaveWaitlistPanel';
 import { QueueGate } from './QueueGate';
 import { useFocusRescue } from './focus-rescue';
-import { isInTurn, queueTurn, showsClubs, useQueue } from './queue-ui';
+import {
+  isInTurn,
+  isQueueRequired,
+  queueTurn,
+  showsClubs,
+  useBackToQueue,
+  useQueue,
+} from './queue-ui';
 import {
   CLUBS_POLL_INTERVAL_MS,
   STUDENT_CLUBS_QUERY_KEY,
+  STUDENT_ROUND_QUERY_KEY,
   clubOffer,
   clubsRefetchInterval,
   isClubFull,
@@ -41,7 +49,7 @@ type Target =
   | { kind: ClubWriteKind; clubId: number; turn: string | undefined }
   | { kind: 'leave'; club: StudentClubRef };
 
-const RoundHint = ({ data: { round, registration } }: { data: StudentClubsResponse }) => {
+const RoundHint = ({ data: { round, registration } }: { data: StudentRoundResponse }) => {
   if (!round) return null;
   if (round.status === 'upcoming') {
     return (
@@ -66,18 +74,40 @@ const RoundHint = ({ data: { round, registration } }: { data: StudentClubsRespon
 
 export const StudentClubsPage = () => {
   const [target, setTarget] = useState<Target>();
-  const query = useQuery({
-    queryKey: STUDENT_CLUBS_QUERY_KEY,
-    queryFn: fetchStudentClubs,
+  // The page starts from the round read, not the club list (Q2): while the round is open the list
+  // answers 403 queue_required until the student's turn, so only this read can tell the page to
+  // queue. It polls as the list used to, which keeps a waiting student's own club, waitlist place
+  // and promotion notice current without the list.
+  const roundQuery = useQuery({
+    queryKey: STUDENT_ROUND_QUERY_KEY,
+    queryFn: fetchStudentRound,
     retry: retryRead,
     refetchInterval: (current) => clubsRefetchInterval(current.state.data?.round),
   });
-  useLogoutOnExpiredSession(query.error);
-  const { mutation, start, retry, canRetry } = useStudentWrite();
-  const { data } = query;
-  const round = data?.round ?? null;
+  useLogoutOnExpiredSession(roundQuery.error);
+  const round = roundQuery.data?.round ?? null;
   const queue = useQueue(round);
   const turn = queueTurn(queue.view);
+  // The list only where the API gives it: a round that is not open (no queue), or the student's
+  // turn. Never while joining, waiting, or once the turn ended, which would only earn 403s.
+  const listAllowed = round !== null && (round.status !== 'open' || queue.view.kind === 'admitted');
+  const clubsQuery = useQuery({
+    queryKey: STUDENT_CLUBS_QUERY_KEY,
+    queryFn: fetchStudentClubs,
+    enabled: listAllowed,
+    retry: retryRead,
+    // The round read above notices the status changes; the counts only move while it is open.
+    refetchInterval: () => (round?.status === 'open' ? CLUBS_POLL_INTERVAL_MS : false),
+  });
+  useLogoutOnExpiredSession(clubsQuery.error);
+  useBackToQueue(clubsQuery.error, round?.id);
+  const clubsData = listAllowed ? clubsQuery.data : undefined;
+  // The student's own club and waitlist place from whichever answer is newer: both carry them, and
+  // a write's answer is put into both.
+  const data =
+    clubsData && clubsQuery.dataUpdatedAt >= roundQuery.dataUpdatedAt ? clubsData : roundQuery.data;
+  const clubs = clubsData?.clubs;
+  const { mutation, start, retry, canRetry } = useStudentWrite();
 
   const openConfirmation = (next: Target) => {
     mutation.reset();
@@ -143,9 +173,14 @@ export const StudentClubsPage = () => {
     mutation.isError &&
     panelTarget !== undefined &&
     panelTarget.kind !== 'leave' &&
-    !data?.clubs.some(({ id }) => id === panelTarget.clubId)
+    clubs !== undefined &&
+    !clubs.some(({ id }) => id === panelTarget.clubId)
       ? writeErrorMessage(panelTarget.kind, mutation.error)
       : undefined;
+  // A queue_required is not a lost connection: the queue card says what happened.
+  const connectionLost =
+    roundQuery.isRefetchError ||
+    (listAllowed && clubsQuery.isRefetchError && !isQueueRequired(clubsQuery.error));
 
   return (
     <section className="space-y-4">
@@ -155,16 +190,16 @@ export const StudentClubsPage = () => {
 
       {!data ? (
         <StudentLoadState
-          error={query.error}
-          isPending={query.isPending}
-          onRetry={() => void query.refetch()}
+          error={roundQuery.error}
+          isPending={roundQuery.isPending}
+          onRetry={() => void roundQuery.refetch()}
         />
       ) : !round ? (
         <NoRound />
       ) : (
         <>
           <RoundHeader round={round} />
-          {query.isRefetchError && (
+          {connectionLost && (
             <p className="text-sm text-muted-foreground">
               เชื่อมต่อระบบไม่ได้ชั่วคราว ตัวเลขที่เห็นอาจไม่ใช่ล่าสุด
             </p>
@@ -234,12 +269,20 @@ export const StudentClubsPage = () => {
           <QueueGate queue={queue} headingRef={headingRef}>
             <RoundHint data={data} />
 
-            <h2 className="text-lg font-semibold">รายการชุมนุม ({data.clubs.length})</h2>
-            {data.clubs.length === 0 ? (
-              <p className="text-muted-foreground">รอบนี้ยังไม่มีชุมนุม</p>
+            {!clubs ? (
+              <StudentLoadState
+                error={clubsQuery.error}
+                // A queue_required is followed by the queue card's own state, not an error here.
+                isPending={clubsQuery.isPending || isQueueRequired(clubsQuery.error)}
+                onRetry={() => void clubsQuery.refetch()}
+              />
             ) : (
+              <h2 className="text-lg font-semibold">รายการชุมนุม ({clubs.length})</h2>
+            )}
+            {clubs?.length === 0 && <p className="text-muted-foreground">รอบนี้ยังไม่มีชุมนุม</p>}
+            {clubs !== undefined && clubs.length > 0 && (
               <ul aria-label="รายการชุมนุม" className="grid gap-3 md:grid-cols-2">
-                {data.clubs.map((club) => (
+                {clubs.map((club) => (
                   <li key={club.id}>
                     <ClubCard
                       club={club}

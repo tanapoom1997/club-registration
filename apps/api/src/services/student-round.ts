@@ -8,10 +8,11 @@ import type {
   StudentWaitlist,
 } from '@club-registration/shared';
 import type pg from 'pg';
-import { withReadOnlySnapshot } from '../db.js';
+import { dbNow, withReadOnlySnapshot } from '../db.js';
 import type { Queryable } from '../db.js';
 import { AppError } from '../errors.js';
 import { ADVISOR_NAMES_JOIN } from './clubs.js';
+import type { AdmissionGate } from './registrations.js';
 import { roundStatusAt } from './rounds.js';
 
 // What a student sees of their own grade's round. Every function takes the student id from the
@@ -220,21 +221,32 @@ const readSelection = async (
 };
 
 // Each read runs in one read-only snapshot, so the round, the student's registration, their
-// waitlist place and the club counts all describe the same moment, even while others write.
+// waitlist place and the club counts all describe the same moment, even while others write. The
+// round is picked, and its status decided, by the DB clock, as the writes and the queue's join
+// pick it (Q2): the web joins the queue when this says open, and the club list's gate below asks
+// for a ticket when it says open, so the three must never disagree about "open" at a window edge
+// (a web page told "open" by one and "not open" by the other would go round in circles).
 export const readStudentRound = async (
   pool: pg.Pool,
   studentId: number,
-  now: Date,
 ): Promise<StudentRoundResponse> =>
-  await withReadOnlySnapshot(pool, async (client) => await readSelection(client, studentId, now));
+  await withReadOnlySnapshot(
+    pool,
+    async (client) => await readSelection(client, studentId, await dbNow(client)),
+  );
 
+// The club list is what a queue turn is for (README Phase 3, decision 1): while the round is open
+// by that same DB clock, `gate` must pass (403 queue_required without a live admitted ticket).
+// An upcoming or closed round, or none at all, is listed to anyone, as before the queue: nothing
+// can be taken from it.
 export const listStudentClubs = async (
   pool: pg.Pool,
   studentId: number,
-  now: Date,
+  gate: AdmissionGate,
 ): Promise<StudentClubsResponse> =>
   await withReadOnlySnapshot(pool, async (client) => {
-    const selection = await readSelection(client, studentId, now);
+    const selection = await readSelection(client, studentId, await dbNow(client));
+    if (selection.round?.status === 'open') await gate(client, selection.round.id);
     const clubs = selection.round ? await listClubs(client, selection.round.id) : [];
     return { ...selection, clubs };
   });

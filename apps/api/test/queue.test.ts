@@ -613,10 +613,11 @@ describe('student queue', () => {
 
       const limited = await heartbeat(studentId);
       const reading = await read(studentId);
-      const released = await done(studentId);
+      // Registered while the turn is still held: a register needs it (Q2), and done gives it up.
       const registered = await send('POST', '/api/student/registration', studentId, {
         payload: { clubId, idempotencyKey: newKey() },
       });
+      const released = await done(studentId);
 
       expect([limited.statusCode, reading.statusCode]).toEqual([429, 429]);
       expect(errorOf(limited).code).toBe('rate_limited');

@@ -36,6 +36,7 @@ import {
   registrationInvariantViolations,
   seatStudent,
   sessionCookie,
+  ungated,
 } from './support/registration.js';
 
 // The import commit against registrations (CLAUDE.md rule 3): before planning, the commit takes
@@ -165,7 +166,11 @@ describe('import commit and the round locks', () => {
       await registrar.query('BEGIN');
       const registrarPid = await backendPid(registrar);
       // The real service, not committed yet: it holds the round lock and the seat.
-      await registerForClub(registrar, { studentId: student.id, clubId, idempotencyKey: newKey() });
+      await registerForClub(
+        registrar,
+        { studentId: student.id, clubId, idempotencyKey: newKey() },
+        ungated,
+      );
 
       const importing = settle(commitImport(pool, { term, parsed, actorId: adminId }));
       const waiter = await waitForLockWaiter(pool, ({ pid }) => pid !== registrarPid);
@@ -224,11 +229,11 @@ describe('import commit and the round locks', () => {
         withTransaction(
           pool,
           async (client) =>
-            await registerForClub(client, {
-              studentId: student.id,
-              clubId,
-              idempotencyKey: newKey(),
-            }),
+            await registerForClub(
+              client,
+              { studentId: student.id, clubId, idempotencyKey: newKey() },
+              ungated,
+            ),
         ),
       );
       // The registration queues on the round lock the import holds.
@@ -383,11 +388,11 @@ describe('import commit and the round locks', () => {
         const registrarPid = await backendPid(registrar);
         // The real service in the earlier term's round, not committed yet: it holds that round's
         // lock, the seat and a FOR SHARE lock on the student's profile.
-        await registerForClub(registrar, {
-          studentId: student.id,
-          clubId,
-          idempotencyKey: newKey(),
-        });
+        await registerForClub(
+          registrar,
+          { studentId: student.id, clubId, idempotencyKey: newKey() },
+          ungated,
+        );
 
         const importing = settle(commitImport(pool, { term, parsed, actorId: adminId }));
         const waiter = await waitForLockWaiter(pool, ({ pid }) => pid !== registrarPid);
@@ -524,7 +529,11 @@ describe('import commit and the round locks', () => {
         // rounds row; it must not queue behind the write (which waits for the import, which waits
         // for this registration). Postgres would break such a cycle with 40P01.
         const registered = await settle(
-          registerForClub(registrar, { studentId: student.id, clubId, idempotencyKey: newKey() }),
+          registerForClub(
+            registrar,
+            { studentId: student.id, clubId, idempotencyKey: newKey() },
+            ungated,
+          ),
         );
         await registrar.query('COMMIT');
         finished = true;
@@ -562,7 +571,7 @@ describe('import commit and the round locks', () => {
       await withTransaction(
         pool,
         async (client) =>
-          await joinWaitlist(client, { studentId, clubId, idempotencyKey: newKey() }),
+          await joinWaitlist(client, { studentId, clubId, idempotencyKey: newKey() }, ungated),
       );
 
     const waitingIn = async (term: string) => {
@@ -659,7 +668,11 @@ describe('import commit and the round locks', () => {
         await joiner.query('BEGIN');
         const joinerPid = await backendPid(joiner);
         // The real service, not committed yet: it holds that round's lock and the new entry.
-        await joinWaitlist(joiner, { studentId: student.id, clubId, idempotencyKey: newKey() });
+        await joinWaitlist(
+          joiner,
+          { studentId: student.id, clubId, idempotencyKey: newKey() },
+          ungated,
+        );
 
         const importing = settle(
           commitImport(pool, { term: uniqueTerm(), parsed, actorId: adminId }),

@@ -1,9 +1,10 @@
 import { ERROR_CODES } from '@club-registration/shared';
 import type { QueueTicket, StudentQueueResponse, StudentRound } from '@club-registration/shared';
 import type pg from 'pg';
+import { dbNow } from '../db.js';
 import type { Queryable } from '../db.js';
 import { AppError } from '../errors.js';
-import { dbNow } from './registrations.js';
+import type { AdmissionGate } from './registrations.js';
 import { lockQueue } from './round-lock.js';
 import { findStudentGrade, selectStudentRound } from './student-round.js';
 
@@ -363,9 +364,9 @@ export const readQueue = async (
   return await answer(db, round, studentId, settings);
 };
 
-// For Q2's gate on the seat-taking writes: whether the student holds a live admitted ticket in the
-// round now (DB clock). A plain read with no lock, so a transaction holding the round lock may call
-// it without joining the queue's lock order (round-lock.ts).
+// The queue gate's question (Q2): whether the student holds a live admitted ticket in the round now
+// (DB clock). A plain read with no lock, so a transaction holding the round lock may call it
+// without joining the queue's lock order (round-lock.ts).
 export const hasAdmittedTicket = async (
   db: Queryable,
   { roundId, studentId }: { roundId: number; studentId: number },
@@ -381,3 +382,15 @@ export const hasAdmittedTicket = async (
   );
   return rows[0]?.admitted === true;
 };
+
+// The gate of a student's own seat-taking request and of their club list (README Phase 3, Q2): in
+// an open round, no live admitted ticket = 403 queue_required. The callers decide when the round
+// is open (registrations.ts, student-round.ts); this only asks the queue. Built by the student
+// routes, the only callers that are gated.
+export const requireAdmittedTicket =
+  (studentId: number, settings: QueueSettings): AdmissionGate =>
+  async (db, roundId) => {
+    if (!(await hasAdmittedTicket(db, { roundId, studentId }, settings))) {
+      throw new AppError(ERROR_CODES.queueRequired);
+    }
+  };

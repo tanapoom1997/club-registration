@@ -8,9 +8,11 @@ import {
 import type { FastifyInstance } from 'fastify';
 import type { Pool } from 'pg';
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from 'vitest';
+import { buildApp } from '../src/app.js';
 import { SESSION_COOKIE } from '../src/auth/session.js';
 import { DEFAULT_POOL_SETTINGS, createPool } from '../src/db.js';
-import { buildTestApp } from './support/app.js';
+import { DEFAULT_QUEUE_SETTINGS } from '../src/services/queue.js';
+import { TEST_JWT_SECRET } from './support/app.js';
 import { createClub, uniqueCode } from './support/import-db.js';
 import {
   appConnectionUri,
@@ -29,6 +31,7 @@ import {
   sessionCookie,
   storedSeats,
 } from './support/registration.js';
+import { admitStudents, queueInvariantViolations } from './support/queue.js';
 
 // The point of the system (README "Testing"): many students pressing the button at once against
 // a real Postgres. Requests go through the whole app (guard, validation, transaction) with
@@ -52,7 +55,7 @@ const countBy = (responses: InjectResponse[]) =>
 describe('registration under concurrency', () => {
   let container: StartedPostgreSqlContainer;
   let pool: Pool;
-  let app: Awaited<ReturnType<typeof buildTestApp>>;
+  let app: Awaited<ReturnType<typeof buildApp>>;
 
   const register = async (studentId: number, clubId: number, idempotencyKey = newKey()) =>
     await app.inject({
@@ -77,6 +80,23 @@ describe('registration under concurrency', () => {
       cookies: { [SESSION_COOKIE]: sessionCookie(app, studentId) },
       payload: { idempotencyKey },
     });
+
+  const release = async (studentId: number) =>
+    await app.inject({
+      method: 'POST',
+      url: '/api/student/queue/done',
+      cookies: { [SESSION_COOKIE]: sessionCookie(app, studentId) },
+      payload: {},
+    });
+
+  // Students let into their queue turn before the race (a seat write needs one since Q2, and the
+  // web page joins before it offers the clubs), so the race is the round lock's, as before.
+  const studentsInTurn = async (roundId: number, count: number) => {
+    const ids = await createStudents(pool, count);
+    await admitStudents(pool, roundId, ids);
+    return ids;
+  };
+  const studentInTurn = async (roundId: number) => (await studentsInTurn(roundId, 1))[0]!;
 
   const changeEventCount = async (clubId: number) => {
     const { rows } = await pool.query<{ events: number }>(
@@ -115,18 +135,25 @@ describe('registration under concurrency', () => {
   beforeEach(async () => {
     // A student writes to their grade's selected round, so each test starts with no rounds.
     await truncateAsOwner(container, ['rounds']);
-    app = await buildTestApp(pool);
+    // Tickets are admitted before each race and must outlast it: this file tests the round lock,
+    // not ticket expiry, so a race slowed down by a busy CI machine must not idle them out.
+    app = await buildApp({
+      pool,
+      jwtSecret: TEST_JWT_SECRET,
+      queue: { ...DEFAULT_QUEUE_SETTINGS, idleTimeoutSeconds: 3_600 },
+    });
   });
 
   afterEach(async () => {
     await app.close();
     expect(await registrationInvariantViolations(pool)).toEqual([]);
+    expect(await queueInvariantViolations(pool)).toEqual([]);
   });
 
   it('seats exactly capacity out of 500 students racing for one club', async () => {
     const roundId = await createOpenRound(pool);
     const clubId = await createClub(pool, roundId, uniqueCode(), { capacity: 30 });
-    const students = await createStudents(pool, 500);
+    const students = await studentsInTurn(roundId, 500);
 
     const startedAt = performance.now();
     const responses = await Promise.all(
@@ -154,7 +181,7 @@ describe('registration under concurrency', () => {
     const clubs = await Promise.all(
       Array.from({ length: 10 }, async () => await createClub(pool, roundId, uniqueCode())),
     );
-    const studentId = await createStudentId(pool);
+    const studentId = await studentInTurn(roundId);
 
     const responses = await Promise.all(
       clubs.map(async (clubId) => await register(studentId, clubId)),
@@ -172,7 +199,7 @@ describe('registration under concurrency', () => {
   it('carries out a request once when it is sent many times at once with one key', async () => {
     const roundId = await createOpenRound(pool);
     const clubId = await createClub(pool, roundId, uniqueCode());
-    const studentId = await createStudentId(pool);
+    const studentId = await studentInTurn(roundId);
     const key = newKey();
 
     const responses = await Promise.all(
@@ -192,7 +219,7 @@ describe('registration under concurrency', () => {
       createClub(pool, roundId, uniqueCode()),
       createClub(pool, roundId, uniqueCode()),
     ]);
-    const studentId = await createStudentId(pool);
+    const studentId = await studentInTurn(roundId);
     const key = newKey();
 
     const responses = await Promise.all(
@@ -243,7 +270,7 @@ describe('registration under concurrency', () => {
       createClub(pool, roundId, uniqueCode()),
       createClub(pool, roundId, uniqueCode()),
     ]);
-    const students = await createStudents(pool, 20);
+    const students = await studentsInTurn(roundId, 20);
     for (const studentId of students) await seatStudent(pool, studentId, from);
 
     const races = await Promise.all(
@@ -274,7 +301,7 @@ describe('registration under concurrency', () => {
     const holders = await createStudents(pool, 30);
     for (const studentId of holders) await seatStudent(pool, studentId, clubId);
     const leaving = holders.slice(0, 10);
-    const newcomers = await createStudents(pool, 60);
+    const newcomers = await studentsInTurn(roundId, 60);
 
     const [cancels, registers] = await Promise.all([
       Promise.all(leaving.map(async (studentId) => await cancel(studentId))),
@@ -295,6 +322,76 @@ describe('registration under concurrency', () => {
     });
   }, 60_000);
 
+  // The queue gate (README Phase 3, Q2) under the same race: only a student in their turn may take
+  // a seat, whoever reaches the round lock first.
+  describe('queue gate', () => {
+    it('seats only students in their turn when they race students without one', async () => {
+      const roundId = await createOpenRound(pool);
+      const clubId = await createClub(pool, roundId, uniqueCode(), { capacity: 30 });
+      const inTurn = await studentsInTurn(roundId, 100);
+      const outOfTurn = await createStudents(pool, 100);
+      const racers = [...inTurn, ...outOfTurn].sort(() => Math.random() - 0.5);
+
+      const responses = await Promise.all(
+        racers.map(async (studentId) => ({
+          studentId,
+          code: codeOf(await register(studentId, clubId)),
+        })),
+      );
+
+      const codesFor = (ids: readonly number[]) =>
+        responses.filter(({ studentId }) => ids.includes(studentId)).map(({ code }) => code);
+      expect(new Set(codesFor(outOfTurn))).toEqual(new Set(['queue_required']));
+      expect(
+        codesFor(inTurn).reduce<Record<string, number>>(
+          (counts, code) => ({ ...counts, [code]: (counts[code] ?? 0) + 1 }),
+          {},
+        ),
+      ).toEqual({ ok: 30, club_full: 70 });
+      expect(await storedSeats(pool, clubId)).toEqual({ registered: 30, capacity: 30, rows: 30 });
+      const { rows } = await pool.query<{ student_id: number }>(
+        'SELECT student_id FROM registrations WHERE club_id = $1',
+        [clubId],
+      );
+      expect(rows.every(({ student_id: studentId }) => inTurn.includes(studentId))).toBe(true);
+      expect(
+        (await Promise.all(outOfTurn.map(async (id) => await eventsOf(pool, id)))).flat(),
+      ).toEqual([]);
+    }, 120_000);
+
+    it('keeps seats and tickets consistent when students give up the turn while registering', async () => {
+      const roundId = await createOpenRound(pool);
+      const clubId = await createClub(pool, roundId, uniqueCode(), { capacity: 100 });
+      const students = await studentsInTurn(roundId, 40);
+
+      const races = await Promise.all(
+        students.map(async (studentId) => {
+          const [released, registered] = await Promise.all([
+            release(studentId),
+            register(studentId, clubId),
+          ]);
+          return { studentId, released, registered: codeOf(registered) };
+        }),
+      );
+
+      // Either order is fine: a register that read the ticket before the release committed took
+      // its seat, one after it was refused. Never anything else, and never a seat without an ok.
+      for (const { studentId, released, registered } of races) {
+        expect(released.statusCode).toBe(200);
+        expect(['ok', 'queue_required']).toContain(registered);
+        expect(await registrationOf(studentId)).toEqual(registered === 'ok' ? [clubId] : []);
+      }
+      const seated = races.filter(({ registered }) => registered === 'ok').length;
+      expect(await storedSeats(pool, clubId)).toMatchObject({ registered: seated, rows: seated });
+      const { rows } = await pool.query<{ live: number }>(
+        `SELECT count(*)::int AS live FROM queue_tickets
+         WHERE round_id = $1 AND status IN ('waiting', 'admitted')`,
+        [roundId],
+      );
+      expect(rows[0]?.live).toBe(0);
+    }, 60_000);
+  });
+
   describe('changing club', () => {
     it('moves exactly as many students as there are free seats; the rest stay put', async () => {
       const roundId = await createOpenRound(pool);
@@ -304,7 +401,7 @@ describe('registration under concurrency', () => {
       ]);
       const holders = await createStudents(pool, 5);
       for (const studentId of holders) await seatStudent(pool, studentId, to);
-      const movers = await createStudents(pool, 40);
+      const movers = await studentsInTurn(roundId, 40);
       for (const studentId of movers) await seatStudent(pool, studentId, from);
 
       const responses = await Promise.all(
@@ -331,9 +428,9 @@ describe('registration under concurrency', () => {
       const holders = await createStudents(pool, 8);
       for (const studentId of holders) await seatStudent(pool, studentId, to);
       const leaving = holders.slice(0, 4);
-      const movers = await createStudents(pool, 20);
+      const movers = await studentsInTurn(roundId, 20);
       for (const studentId of movers) await seatStudent(pool, studentId, from);
-      const newcomers = await createStudents(pool, 20);
+      const newcomers = await studentsInTurn(roundId, 20);
 
       const [cancels, changes, registers] = await Promise.all([
         Promise.all(leaving.map(async (studentId) => await cancel(studentId))),
@@ -370,7 +467,7 @@ describe('registration under concurrency', () => {
         createClub(pool, roundId, uniqueCode(), { capacity: 1 }),
         createClub(pool, roundId, uniqueCode(), { capacity: 1 }),
       ]);
-      const [inFirst, inSecond] = await createStudents(pool, 2);
+      const [inFirst, inSecond] = await studentsInTurn(roundId, 2);
       await seatStudent(pool, inFirst!, first);
       await seatStudent(pool, inSecond!, second);
 
@@ -387,7 +484,7 @@ describe('registration under concurrency', () => {
         createClub(pool, roundId, uniqueCode()),
         createClub(pool, roundId, uniqueCode()),
       ]);
-      const studentId = await createStudentId(pool);
+      const studentId = await studentInTurn(roundId);
       await seatStudent(pool, studentId, from);
       const key = newKey();
 
@@ -411,7 +508,7 @@ describe('registration under concurrency', () => {
       const [from, ...targets] = await Promise.all(
         Array.from({ length: 11 }, async () => await createClub(pool, roundId, uniqueCode())),
       );
-      const studentId = await createStudentId(pool);
+      const studentId = await studentInTurn(roundId);
       await seatStudent(pool, studentId, from!);
 
       const responses = await Promise.all(
@@ -490,7 +587,7 @@ describe('registration under concurrency', () => {
     it('seats exactly capacity out of 500 students and queues every other one', async () => {
       const roundId = await createOpenRound(pool);
       const clubId = await createClub(pool, roundId, uniqueCode(), { capacity: 30 });
-      const students = await createStudents(pool, 500);
+      const students = await studentsInTurn(roundId, 500);
 
       const startedAt = performance.now();
       const outcomes = await Promise.all(
@@ -523,7 +620,7 @@ describe('registration under concurrency', () => {
       const clubId = await createClub(pool, roundId, uniqueCode(), { capacity: 30 });
       const holders = await createStudents(pool, 30);
       for (const studentId of holders) await seatStudent(pool, studentId, clubId);
-      const waiters = await createStudents(pool, 50);
+      const waiters = await studentsInTurn(roundId, 50);
       for (const studentId of waiters) expect(codeOf(await join(studentId, clubId))).toBe('ok');
 
       const cancels = await Promise.all(
@@ -542,7 +639,7 @@ describe('registration under concurrency', () => {
       const roundId = await createOpenRound(pool);
       const clubId = await createClub(pool, roundId, uniqueCode(), { capacity: 1 });
       await seatStudent(pool, await createStudentId(pool), clubId);
-      const studentId = await createStudentId(pool);
+      const studentId = await studentInTurn(roundId);
       const key = newKey();
 
       const responses = await Promise.all(
@@ -561,7 +658,7 @@ describe('registration under concurrency', () => {
       const roundId = await createOpenRound(pool);
       const clubId = await createClub(pool, roundId, uniqueCode(), { capacity: 1 });
       await seatStudent(pool, await createStudentId(pool), clubId);
-      const studentId = await createStudentId(pool);
+      const studentId = await studentInTurn(roundId);
       await join(studentId, clubId);
       const key = newKey();
 
@@ -582,7 +679,7 @@ describe('registration under concurrency', () => {
       const clubId = await createClub(pool, roundId, uniqueCode(), { capacity: 10 });
       const holders = await createStudents(pool, 10);
       for (const studentId of holders) await seatStudent(pool, studentId, clubId);
-      const newcomers = await createStudents(pool, 40);
+      const newcomers = await studentsInTurn(roundId, 40);
 
       const [cancels, outcomes] = await Promise.all([
         Promise.all(holders.slice(0, 5).map(async (studentId) => await cancelOnce(studentId))),

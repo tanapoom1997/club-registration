@@ -1,6 +1,11 @@
 import type { StartedPostgreSqlContainer } from '@testcontainers/postgresql';
 import pg from 'pg';
 import type { Pool } from 'pg';
+import { ERROR_CODES } from '@club-registration/shared';
+import { withTransaction } from '../../src/db.js';
+import { AppError } from '../../src/errors.js';
+import { DEFAULT_QUEUE_SETTINGS, joinQueue } from '../../src/services/queue.js';
+import type { QueueSettings } from '../../src/services/queue.js';
 
 // Fixtures and invariant checks for the queue tests (README Phase 3). Every value is made up.
 
@@ -31,6 +36,101 @@ export const statusCounts = async (pool: Pool, roundId: number) => {
 
 export const setMaxActive = async (pool: Pool, roundId: number, maxActive: number) => {
   await pool.query('UPDATE rounds SET max_active = $2 WHERE id = $1', [roundId, maxActive]);
+};
+
+// Lets students into their turn the way the web page does: each joins the queue of the round they
+// are shown, through the real service, so the seat writes' queue gate (Q2) lets them through. The
+// round (open now) gets room for all of them first, so the admission order and max_active stay
+// as the queue's invariants expect. Throws if anyone was not let in, so a test never silently
+// starts with a waiting ticket.
+export const admitStudents = async (
+  pool: Pool,
+  roundId: number,
+  studentIds: readonly number[],
+  settings: QueueSettings = DEFAULT_QUEUE_SETTINGS,
+): Promise<void> => {
+  await pool.query(
+    `UPDATE rounds SET max_active = GREATEST(max_active, $2::int + (
+       SELECT count(*)::int FROM queue_tickets WHERE round_id = $1 AND status = 'admitted'
+     ))
+     WHERE id = $1`,
+    [roundId, studentIds.length],
+  );
+  for (const studentId of studentIds) {
+    const { roundId: joined, response } = await withTransaction(
+      pool,
+      async (client) => await joinQueue(client, { studentId, settings }),
+    );
+    if (joined !== roundId || response.ticket?.status !== 'admitted') {
+      throw new Error(`Student ${studentId} was not admitted in round ${roundId}`);
+    }
+  }
+};
+
+// Admitted tickets written straight to the table, for a round the queue cannot be joined in now:
+// students let in before an admin closed it, still on the page when it reopens. Same columns a
+// real admission writes (status, admitted_at, last_seen_at by the DB clock), with room made in
+// max_active as admitStudents does, so the queue's invariants hold.
+export const admitDirectly = async (
+  pool: Pool,
+  roundId: number,
+  studentIds: readonly number[],
+): Promise<void> => {
+  await pool.query(
+    `UPDATE rounds SET max_active = GREATEST(max_active, $2::int + (
+       SELECT count(*)::int FROM queue_tickets WHERE round_id = $1 AND status = 'admitted'
+     ))
+     WHERE id = $1`,
+    [roundId, studentIds.length],
+  );
+  await pool.query(
+    `INSERT INTO queue_tickets (round_id, student_id, status, created_at, last_seen_at, admitted_at)
+     SELECT $1, id, 'admitted', clock_timestamp(), statement_timestamp(), statement_timestamp()
+     FROM unnest($2::int[]) WITH ORDINALITY AS v(id, ord)
+     ORDER BY ord`,
+    [roundId, studentIds],
+  );
+};
+
+// What the web page does before it offers a student the clubs: join the queue of the round they
+// are shown (README Phase 3, Q3), through the real service. For the tests of what a seat write
+// does once the student may choose (Q2's gate itself is tested apart, without this). A round that
+// is not open has no queue, and the request under test then answers for itself (round_not_open,
+// already_held, student_profile_missing), as it would on the page; a ticket left waiting throws,
+// so a test never silently writes without its turn (raise max_active, or use admitStudents).
+export const takeTurn = async (
+  pool: Pool,
+  studentId: number,
+  settings: QueueSettings = DEFAULT_QUEUE_SETTINGS,
+): Promise<void> => {
+  try {
+    const { roundId, response } = await withTransaction(
+      pool,
+      async (client) => await joinQueue(client, { studentId, settings }),
+    );
+    if (response.ticket?.status !== 'admitted') {
+      throw new Error(`Student ${studentId} is still waiting in round ${roundId}`);
+    }
+  } catch (error) {
+    const noQueue =
+      error instanceof AppError &&
+      (error.code === ERROR_CODES.roundNotOpen || error.code === ERROR_CODES.studentProfileMissing);
+    if (!noQueue) throw error;
+  }
+};
+
+// The student endpoints behind the queue gate (README Phase 3, decision 1), by path: the club list
+// (GET), register and change (POST/PUT /registration) and the waitlist join (POST /waitlist).
+// Cancel (/registration/cancel) and leave (/waitlist/leave) are other paths.
+const GATED_PATHS: ReadonlySet<string> = new Set([
+  '/api/student/clubs',
+  '/api/student/registration',
+  '/api/student/waitlist',
+]);
+
+// takeTurn before a request to a gated path, as the page would have; nothing for other paths.
+export const takeTurnFor = async (pool: Pool, studentId: number, url: string): Promise<void> => {
+  if (GATED_PATHS.has(url.split('?')[0] ?? url)) await takeTurn(pool, studentId);
 };
 
 // Moves the live tickets of these students back in time, as if their last heartbeat or their

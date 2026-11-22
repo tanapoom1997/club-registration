@@ -129,6 +129,13 @@ export type StudentState = {
 const isLiveTicket = (ticket: QueueTicket | null) =>
   ticket?.status === 'waiting' || ticket?.status === 'admitted';
 
+// The API's queue gate (Q2), enforced here too so a page that asked for the list or a seat out of
+// turn fails in its tests as it would against the real API: in an open round, the club list and
+// the seat-taking writes need an admitted ticket.
+const outOfTurn = (state: StudentState) =>
+  state.round?.status === 'open' && state.ticket?.status !== 'admitted';
+const queueRequired = apiError(403, 'queue_required');
+
 const withSeatChange = (clubs: StudentClub[], clubId: number, change: number) =>
   clubs.map((club) =>
     club.id === clubId
@@ -173,12 +180,14 @@ export const mockStudentApi = (
   const fetchMock = mockApi({
     'GET /api/auth/me': () => Response.json({ user: STUDENT }),
     [`GET ${CLUBS_PATH}`]: () =>
-      Response.json({
-        round: state.round,
-        registration: state.registration,
-        waitlist: state.waitlist,
-        clubs: state.round ? state.clubs : [],
-      }),
+      outOfTurn(state)
+        ? queueRequired()
+        : Response.json({
+            round: state.round,
+            registration: state.registration,
+            waitlist: state.waitlist,
+            clubs: state.round ? state.clubs : [],
+          }),
     [`GET ${ROUND_PATH}`]: () =>
       Response.json({
         round: state.round,
@@ -186,6 +195,7 @@ export const mockStudentApi = (
         waitlist: state.waitlist,
       }),
     [`POST ${REGISTER_PATH}`]: (init) => {
+      if (outOfTurn(state)) return queueRequired();
       const club = keyedClubOf(state, init);
       if (club && !state.registration) {
         if (!seatFree(club)) return apiError(409, 'club_full')();
@@ -195,6 +205,7 @@ export const mockStudentApi = (
       return Response.json({ registration: state.registration });
     },
     [`PUT ${REGISTER_PATH}`]: (init) => {
+      if (outOfTurn(state)) return queueRequired();
       const club = keyedClubOf(state, init);
       if (!club) return apiError(404, 'not_found')();
       if (!state.registration) return apiError(409, 'not_registered')();
@@ -207,6 +218,7 @@ export const mockStudentApi = (
       return Response.json({ registration: state.registration });
     },
     [`POST ${WAITLIST_PATH}`]: (init) => {
+      if (outOfTurn(state)) return queueRequired();
       const club = keyedClubOf(state, init);
       if (!club) return apiError(404, 'not_found')();
       if (state.waitlist?.club.id !== club.id) {
