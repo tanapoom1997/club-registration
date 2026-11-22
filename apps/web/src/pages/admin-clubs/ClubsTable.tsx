@@ -39,7 +39,7 @@ type ClubsTableProps = {
 // Names, descriptions and advisor details are rendered as text nodes only: they come from admin
 // input and the Excel file, so they must never reach the page as HTML.
 export const ClubsTable = ({ clubs, onEdit, onShowMembers }: ClubsTableProps) => (
-  <Table aria-label="รายการชุมนุม">
+  <Table aria-label="รายการชุมนุม" className="min-w-4xl">
     <TableHeader>
       <tr>
         <TableHead>รหัส</TableHead>

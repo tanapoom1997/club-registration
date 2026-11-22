@@ -36,7 +36,7 @@ type RoundsTableProps = {
 };
 
 const RoundsTable = ({ rounds, onEdit, onDelete }: RoundsTableProps) => (
-  <Table aria-label="รายการรอบลงทะเบียน">
+  <Table aria-label="รายการรอบลงทะเบียน" className="min-w-4xl">
     <TableHeader>
       <tr>
         <TableHead>ภาคเรียน</TableHead>
@@ -169,7 +169,7 @@ export const AdminRoundsPage = () => {
         <h1 ref={headingRef} tabIndex={-1} className="text-2xl font-bold focus:outline-none">
           รอบลงทะเบียน
         </h1>
-        <p className="text-sm text-muted-foreground">
+        <p className="max-w-prose text-sm text-muted-foreground">
           1 รอบต่อชั้นต่อภาคเรียน เวลาทั้งหมดเป็นเวลาประเทศไทย สถานะคำนวณจากเวลาของเซิร์ฟเวอร์
           จำนวนรอคิวและได้คิวแล้วอัปเดตเองทุก {ROUNDS_POLL_INTERVAL_MS / 1000} วินาทีระหว่างที่มีรอบเปิดอยู่
         </p>

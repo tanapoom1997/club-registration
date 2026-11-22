@@ -21,7 +21,11 @@ type EventsTableProps = {
 // Every name and club comes from the Excel import or admin input, so all of it is rendered as
 // text nodes only, never as HTML.
 export const EventsTable = ({ events, onPickStudent }: EventsTableProps) => (
-  <Table aria-label="ประวัติการลงทะเบียน" aria-describedby={EVENTS_TABLE_HELP_ID}>
+  <Table
+    aria-label="ประวัติการลงทะเบียน"
+    aria-describedby={EVENTS_TABLE_HELP_ID}
+    className="min-w-5xl"
+  >
     <TableHeader>
       <tr>
         <TableHead>เวลา</TableHead>

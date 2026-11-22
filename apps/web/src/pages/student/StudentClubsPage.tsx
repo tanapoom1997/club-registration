@@ -74,7 +74,7 @@ const RoundHint = ({ data: { round, registration } }: { data: StudentRoundRespon
     return <p className="text-sm text-muted-foreground">รอบนี้ปิดรับลงทะเบียนแล้ว</p>;
   }
   return (
-    <p className="text-sm text-muted-foreground">
+    <p className="max-w-prose text-sm text-muted-foreground">
       {registration ? '' : 'กดลงชุมนุมที่ต้องการได้ 1 ชุมนุม '}
       ชุมนุมที่เต็มหรือมีคนรออยู่เข้ารายชื่อรอได้ 1 ชุมนุม จำนวนที่เหลืออัปเดตอัตโนมัติทุก {CLUBS_POLL_INTERVAL_MS /
         1000}{' '}
