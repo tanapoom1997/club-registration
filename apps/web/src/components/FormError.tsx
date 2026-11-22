@@ -1,3 +1,4 @@
+import { alertVariants } from '@/components/ui/alert';
 import { cn } from '@/lib/utils';
 
 type FormErrorProps = {
@@ -12,8 +13,7 @@ export const FormError = ({ message, boxed = false }: FormErrorProps) =>
     <p
       className={cn(
         'text-sm text-destructive',
-        boxed &&
-          'rounded-xl bg-destructive/10 p-3 font-medium ring-1 ring-destructive/20 ring-inset',
+        boxed && [alertVariants({ variant: 'danger' }), 'font-medium'],
       )}
       role="alert"
     >

@@ -18,6 +18,7 @@ import { useSetSession } from '@/lib/session';
 import { ROUNDS_QUERY_KEY } from '@/pages/admin-rounds/round-ui';
 import { ConfirmImport } from './ConfirmImport';
 import { ImportSummary } from './ImportSummary';
+import { XlsxFilePicker } from './XlsxFilePicker';
 
 const MAX_FILE_MB = IMPORT_MAX_FILE_BYTES / (1024 * 1024);
 
@@ -172,7 +173,7 @@ export const AdminImportPage = () => {
           ก่อนนำเข้าชุมนุม
         </p>
       ) : (
-        <Card className="max-w-md p-6">
+        <Card className="max-w-md p-4 sm:p-6">
           <form
             aria-label="ตรวจสอบไฟล์นำเข้า"
             className="space-y-4"
@@ -198,19 +199,22 @@ export const AdminImportPage = () => {
             </div>
             <div className="space-y-1.5">
               <Label htmlFor="import-file">ไฟล์ Excel (.xlsx)</Label>
-              <input
+              <XlsxFilePicker
                 id="import-file"
-                type="file"
                 accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-                className="block w-full cursor-pointer rounded-lg border border-dashed border-input p-2 text-sm text-muted-foreground file:mr-3 file:cursor-pointer file:rounded-md file:border-0 file:bg-primary-soft file:px-4 file:py-2 file:font-medium file:text-primary hover:border-primary/50 focus-visible:border-primary focus-visible:ring-4 focus-visible:ring-primary/15 focus-visible:outline-none"
-                onChange={(event) => {
-                  setFile(event.target.files?.[0]);
+                file={file}
+                onChange={(chosen) => {
+                  setFile(chosen);
                   resetResult();
                 }}
               />
             </div>
-            <FormError message={errorMessage} />
-            <Button type="submit" disabled={mutation.isPending || commitMutation.isPending}>
+            <FormError message={errorMessage} boxed />
+            <Button
+              type="submit"
+              className="w-full sm:w-auto"
+              disabled={mutation.isPending || commitMutation.isPending}
+            >
               {mutation.isPending ? 'กำลังตรวจสอบ…' : 'ตรวจสอบไฟล์'}
             </Button>
           </form>
