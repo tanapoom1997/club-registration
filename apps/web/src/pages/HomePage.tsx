@@ -20,17 +20,11 @@ export const HomePage = ({ role }: { role: Role }) => {
               to={item.path}
               className="group block h-full rounded-2xl focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:outline-none"
             >
-              <Card className="relative h-full transition-all group-hover:-translate-y-0.5 group-hover:border-primary/40 group-hover:shadow-card-hover">
-                <CardHeader className="pr-12">
+              <Card className="h-full transition-all group-hover:-translate-y-0.5 group-hover:border-primary/40 group-hover:shadow-card-hover">
+                <CardHeader>
                   <CardTitle className="text-base group-hover:text-primary">{item.label}</CardTitle>
                   <p className="text-sm text-muted-foreground">{item.description}</p>
                 </CardHeader>
-                <span
-                  aria-hidden="true"
-                  className="absolute top-6 right-5 text-muted-foreground transition-all group-hover:translate-x-0.5 group-hover:text-primary"
-                >
-                  →
-                </span>
               </Card>
             </Link>
           </li>

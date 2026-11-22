@@ -1,4 +1,5 @@
 import { MAX_ACTIVE_LIMIT } from '@club-registration/shared';
+import { CheckboxRow } from '@/components/CheckboxRow';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { QUEUE_SETTING_MESSAGES } from './round-ui';
@@ -56,26 +57,13 @@ export const RoundWindowFields = ({ idPrefix, values, onChange }: RoundWindowFie
           required={!values.noQueue}
         />
       </div>
-      {/* The whole row is the label, 44 px tall, so the box is easy to hit on a phone. */}
-      <label className="flex min-h-11 cursor-pointer items-start gap-3 rounded-xl border border-border p-3 transition-colors hover:bg-muted has-checked:border-primary/40 has-checked:bg-primary-soft">
-        <input
-          type="checkbox"
-          className="mt-0.5 size-5 shrink-0 accent-primary"
-          checked={values.noQueue}
-          // Named by its label line only: the help under it is the description, not the name.
-          aria-labelledby={`${idPrefix}-no-queue-label`}
-          aria-describedby={`${idPrefix}-no-queue-help`}
-          onChange={(event) => onChange({ ...values, noQueue: event.target.checked })}
-        />
-        <span className="space-y-0.5">
-          <span id={`${idPrefix}-no-queue-label`} className="block text-sm font-medium">
-            {QUEUE_SETTING_MESSAGES.noQueueLabel}
-          </span>
-          <span id={`${idPrefix}-no-queue-help`} className="block text-sm text-muted-foreground">
-            {QUEUE_SETTING_MESSAGES.noQueueHelp}
-          </span>
-        </span>
-      </label>
+      <CheckboxRow
+        id={`${idPrefix}-no-queue`}
+        label={QUEUE_SETTING_MESSAGES.noQueueLabel}
+        description={QUEUE_SETTING_MESSAGES.noQueueHelp}
+        checked={values.noQueue}
+        onChange={(noQueue) => onChange({ ...values, noQueue })}
+      />
     </div>
   );
 };

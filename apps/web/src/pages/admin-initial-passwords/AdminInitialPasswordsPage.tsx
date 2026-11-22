@@ -4,6 +4,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useRef, useState } from 'react';
 import type { FormEvent } from 'react';
 import { Link } from 'react-router';
+import { CheckboxRow } from '@/components/CheckboxRow';
 import { ConfirmPanel } from '@/components/ConfirmPanel';
 import { FormError } from '@/components/FormError';
 import { Button } from '@/components/ui/button';
@@ -169,7 +170,7 @@ export const AdminInitialPasswordsPage = () => {
         </p>
       ) : (
         <>
-          <Card className="max-w-md p-6">
+          <Card className="max-w-md p-4 sm:p-6">
             <form
               aria-label="ออกรหัสผ่านเริ่มต้น"
               className="space-y-4"
@@ -212,16 +213,14 @@ export const AdminInitialPasswordsPage = () => {
                   ))}
                 </Select>
               </div>
-              <label className="flex items-start gap-2 text-sm">
-                <input
-                  type="checkbox"
-                  className="mt-1"
-                  checked={onlyUnissued}
-                  disabled={mutation.isPending}
-                  onChange={(event) => changeScope(() => setOnlyUnissued(event.target.checked))}
-                />
-                <span>เฉพาะนักเรียนที่ยังไม่เคยได้รหัสผ่าน (ไม่แตะรหัสที่ออกไปแล้ว)</span>
-              </label>
+              <CheckboxRow
+                id="issue-only-unissued"
+                label="เฉพาะนักเรียนที่ยังไม่เคยได้รหัสผ่าน"
+                description="ไม่แตะรหัสที่ออกไปแล้ว"
+                checked={onlyUnissued}
+                disabled={mutation.isPending}
+                onChange={(checked) => changeScope(() => setOnlyUnissued(checked))}
+              />
               <p className="text-sm text-muted-foreground" aria-live="polite">
                 {scopeLabel(scope)}: จะออกรหัสผ่านให้ {formatCount(expected)} คน
                 {invalidates > 0 && ` (ในนี้ ${formatCount(invalidates)} คนจะได้รหัสใหม่แทนรหัสเดิม)`}
@@ -230,6 +229,7 @@ export const AdminInitialPasswordsPage = () => {
                 <Button
                   ref={issueButtonRef}
                   type="submit"
+                  className="w-full sm:w-auto"
                   disabled={expected === 0 || mutation.isPending}
                 >
                   ออกรหัสผ่านและดาวน์โหลด
