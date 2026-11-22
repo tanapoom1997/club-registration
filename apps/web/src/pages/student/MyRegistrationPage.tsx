@@ -6,6 +6,7 @@ import { Button } from '@/components/ui/button';
 import { alertVariants } from '@/components/ui/alert';
 import { cn } from '@/lib/utils';
 import { fetchStudentRound } from '@/lib/api';
+import { AdminChangeNotice } from './AdminChangeNotice';
 import { HeldClubCard } from './HeldClubCard';
 import { LeaveWaitlistPanel } from './LeaveWaitlistPanel';
 import { NoRound, RoundHeader, StudentLoadState } from './RoundHeader';
@@ -69,10 +70,18 @@ export const MyRegistrationPage = () => {
   const panelOpen = panel !== undefined;
 
   const headingRef = useRef<HTMLHeadingElement>(null);
-  const cancelRef = useRef<HTMLButtonElement>(null);
   const promotedRef = useRef<HTMLParagraphElement>(null);
-  // A poll can remove the leave button while it has focus (the seat came, the round closed).
+  const adminChangeRef = useRef<HTMLParagraphElement>(null);
+  // A poll can remove the leave button while it has focus (the seat came, an admin removed the
+  // entry, the round closed), and the cancel button (an admin removed the seat, the round closed).
+  // The notice that explains why comes first: an admin's, else the promotion's.
   const { element: leaveRef, ref: leaveButtonRef } = useFocusRescue<HTMLButtonElement>([
+    adminChangeRef,
+    promotedRef,
+    headingRef,
+  ]);
+  const { element: cancelRef, ref: cancelButtonRef } = useFocusRescue<HTMLButtonElement>([
+    adminChangeRef,
     promotedRef,
     headingRef,
   ]);
@@ -91,7 +100,7 @@ export const MyRegistrationPage = () => {
       (preferred ?? button ?? noticeRef.current ?? headingRef.current)?.focus();
     }
     lastPanel.current = panel;
-  }, [leaveRef, panel, panelOpen, succeeded]);
+  }, [cancelRef, leaveRef, panel, panelOpen, succeeded]);
 
   const writeState = (kind: Target['kind']) => ({
     pending: mutation.isPending,
@@ -138,13 +147,14 @@ export const MyRegistrationPage = () => {
               </p>
             )}
           </div>
+          <AdminChangeNotice ref={adminChangeRef} adminChange={data.adminChange} round={round} />
           <PromotedNotice ref={promotedRef} registration={registration} />
 
           {registration ? (
             <HeldClubCard registration={registration}>
               {panel?.kind === 'cancel' ? null : round.status === 'open' ? (
                 <Button
-                  ref={cancelRef}
+                  ref={cancelButtonRef}
                   variant="outline"
                   className="w-full sm:w-auto"
                   disabled={mutation.isPending}

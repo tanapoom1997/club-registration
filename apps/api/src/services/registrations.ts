@@ -1,11 +1,12 @@
 import { ERROR_CODES } from '@club-registration/shared';
-import type { StudentRegistration } from '@club-registration/shared';
+import type { StudentAdminChange, StudentRegistration } from '@club-registration/shared';
 import type pg from 'pg';
 import { dbNow, isPgError, PG_ERROR_CODES } from '../db.js';
 import { AppError } from '../errors.js';
 import { lockRound, lockRoundOfClub } from './round-lock.js';
 import { moveRegistration, releaseSeat } from './seats.js';
 import {
+  findAdminChange,
   findRegistration,
   findStudentGrade,
   roundSelectionOrder,
@@ -109,6 +110,29 @@ export type RegistrationResult = {
   // Students the request's freed seat promoted off a waitlist, in order (ids only, for the log).
   promotions: Promotion[];
 };
+
+// The outcomes that wrote the student's own event in this transaction. After one, the latest event
+// of the student in the round is that event or a waitlist_promote its freed seat caused (nothing
+// else writes under the round lock before the commit), so the reads' adminChange (student-round.ts
+// findAdminChange) is null without a query: the hot path keeps its statement count, as register's
+// promotedFromWaitlist: false does. Every other outcome (a replayed key, a club already held or
+// waited for) wrote nothing, so the latest event may still be an admin's and is read.
+const OWN_EVENT_OUTCOMES: ReadonlySet<RegistrationOutcome> = new Set([
+  REGISTRATION_OUTCOMES.registered,
+  REGISTRATION_OUTCOMES.cancelled,
+  REGISTRATION_OUTCOMES.changed,
+  REGISTRATION_OUTCOMES.waitlisted,
+  REGISTRATION_OUTCOMES.leftWaitlist,
+]);
+
+// The adminChange of a student write's answer (README Phase 4, P3), read in the write's own
+// transaction, after its promotions, so it agrees with the registration or entry beside it.
+export const adminChangeAfter = async (
+  db: pg.PoolClient,
+  studentId: number,
+  { outcome, roundId }: { outcome: RegistrationOutcome; roundId: number },
+): Promise<StudentAdminChange | null> =>
+  OWN_EVENT_OUTCOMES.has(outcome) ? null : await findAdminChange(db, roundId, studentId);
 
 // Throws (queue_required) when the student may not take a seat in the round now. Called under the
 // round lock, inside the request's transaction, only once the round is known to be open.

@@ -1,6 +1,7 @@
 import type {
   QueueTicket,
   SessionUser,
+  StudentAdminChange,
   StudentClub,
   StudentRegistration,
   StudentRound,
@@ -104,6 +105,23 @@ export const waitlistFor = (
   joinedAt,
 });
 
+// What an admin did last (README Phase 4, P3), at 09:20 Thai time on the fixture round's day.
+export const ADMIN_CHANGE_AT = '2026-12-01T02:20:00.000Z';
+const refOf = ({ id, clubCode, name }: StudentClub) => ({ id, clubCode, name });
+export const adminChangeFor = (
+  kind: StudentAdminChange['kind'],
+  club: StudentClub,
+  fromClub?: StudentClub,
+): StudentAdminChange =>
+  kind === 'moved'
+    ? {
+        kind,
+        club: refOf(club),
+        fromClub: refOf(fromClub ?? club),
+        at: ADMIN_CHANGE_AT,
+      }
+    : { kind, club: refOf(club), at: ADMIN_CHANGE_AT };
+
 export const apiError = (status: number, code: string) => () =>
   Response.json({ code, message: code }, { status });
 
@@ -121,6 +139,8 @@ export type StudentState = {
   round: StudentRound | null;
   registration: StudentRegistration | null;
   waitlist: StudentWaitlist | null;
+  // The server's rule: what an admin did last, until the student's own next write clears it.
+  adminChange: StudentAdminChange | null;
   clubs: StudentClub[];
   // The student's latest queue ticket, and the one a join gives when there is no live ticket.
   ticket: QueueTicket | null;
@@ -174,6 +194,7 @@ export const mockStudentApi = (
     round: roundFixture(),
     registration: null,
     waitlist: null,
+    adminChange: null,
     clubs: CLUBS,
     ticket: null,
     // Let in at once, as with the default max_active, so the club list shows straight away.
@@ -181,6 +202,11 @@ export const mockStudentApi = (
     ...initial,
   };
   const queueAnswer = () => Response.json({ round: state.round, ticket: state.ticket });
+  // A write's answer: the state after it, adminChange included (null once the student acted).
+  const registrationAnswer = () =>
+    Response.json({ registration: state.registration, adminChange: state.adminChange });
+  const waitlistAnswer = () =>
+    Response.json({ waitlist: state.waitlist, adminChange: state.adminChange });
   const fetchMock = mockApi({
     'GET /api/auth/me': () => Response.json({ user: STUDENT }),
     [`GET ${CLUBS_PATH}`]: () =>
@@ -190,6 +216,7 @@ export const mockStudentApi = (
             round: state.round,
             registration: state.registration,
             waitlist: state.waitlist,
+            adminChange: state.adminChange,
             clubs: state.round ? state.clubs : [],
           }),
     [`GET ${ROUND_PATH}`]: () =>
@@ -197,6 +224,7 @@ export const mockStudentApi = (
         round: state.round,
         registration: state.registration,
         waitlist: state.waitlist,
+        adminChange: state.adminChange,
       }),
     [`POST ${REGISTER_PATH}`]: (init) => {
       if (outOfTurn(state)) return queueRequired();
@@ -205,8 +233,9 @@ export const mockStudentApi = (
         if (!seatFree(club)) return apiError(409, 'club_full')();
         state.registration = registrationFor(club);
         state.clubs = withSeatChange(state.clubs, club.id, 1);
+        state.adminChange = null;
       }
-      return Response.json({ registration: state.registration });
+      return registrationAnswer();
     },
     [`PUT ${REGISTER_PATH}`]: (init) => {
       if (outOfTurn(state)) return queueRequired();
@@ -218,8 +247,9 @@ export const mockStudentApi = (
         state.clubs = withSeatChange(state.clubs, state.registration.club.id, -1);
         state.clubs = withSeatChange(state.clubs, club.id, 1);
         state.registration = registrationFor(club, '2026-12-01T02:00:00.000Z');
+        state.adminChange = null;
       }
-      return Response.json({ registration: state.registration });
+      return registrationAnswer();
     },
     [`POST ${WAITLIST_PATH}`]: (init) => {
       if (outOfTurn(state)) return queueRequired();
@@ -232,21 +262,24 @@ export const mockStudentApi = (
         }
         state.waitlist = waitlistFor(club, club.waitlistCount + 1, '2026-12-01T02:30:00.000Z');
         state.clubs = withWaiterChange(state.clubs, club.id, 1);
+        state.adminChange = null;
       }
-      return Response.json({ waitlist: state.waitlist });
+      return waitlistAnswer();
     },
     [`POST ${LEAVE_PATH}`]: () => {
       if (!state.waitlist) return apiError(409, 'not_waitlisted')();
       state.clubs = withWaiterChange(state.clubs, state.waitlist.club.id, -1);
       state.waitlist = null;
-      return Response.json({ waitlist: null });
+      state.adminChange = null;
+      return waitlistAnswer();
     },
     [`POST ${CANCEL_PATH}`]: () => {
       if (state.registration) {
         state.clubs = withSeatChange(state.clubs, state.registration.club.id, -1);
         state.registration = null;
+        state.adminChange = null;
       }
-      return Response.json({ registration: null });
+      return registrationAnswer();
     },
     // The queue as the API keeps it: a join answers the live ticket or makes the next one (only
     // while the round is open), a heartbeat needs a live ticket, done ends it. In a round without

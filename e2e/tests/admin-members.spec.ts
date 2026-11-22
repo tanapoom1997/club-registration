@@ -5,6 +5,8 @@ import {
   ADMIN_FROM_CLUB,
   ADMIN_TO_CLUB,
   ADMIN_WAITLIST_CLUB,
+  NOTICE_FROM_CLUB,
+  NOTICE_TO_CLUB,
   STUDENTS,
 } from '../fixtures.js';
 import { logIn, queryDatabase } from './helpers.js';
@@ -133,5 +135,59 @@ test('an admin removes a student from a waitlist', async ({ browser, page }) => 
   expect(await eventsOf(student.loginId)).toEqual([
     { event_type: 'waitlist_join', from_club_id: null, actor: student.loginId },
     { event_type: 'waitlist_leave', from_club_id: null, actor: ADMIN.loginId },
+  ]);
+});
+
+// README Phase 4, P3: the student learns from their own pages what an admin did, and the notice
+// goes once they act themselves.
+test('a student sees that an admin moved them, until they act themselves', async ({
+  browser,
+  page,
+}) => {
+  const student = STUDENTS.movedByAdmin;
+  await logIn(page, ADMIN, /\/admin$/);
+  const from = await assign(page, NOTICE_FROM_CLUB, student.loginId);
+  await expectNotice(
+    from,
+    `บันทึกแล้ว: ${student.loginId} ${student.fullName} อยู่ในชุมนุม ${clubLabel(NOTICE_FROM_CLUB)}`,
+  );
+  const to = await assign(page, NOTICE_TO_CLUB, student.loginId);
+  await expectNotice(
+    to,
+    `บันทึกแล้ว: ${student.loginId} ${student.fullName} อยู่ในชุมนุม ${clubLabel(NOTICE_TO_CLUB)}`,
+  );
+
+  const studentContext = await browser.newContext();
+  const studentPage = await studentContext.newPage();
+  try {
+    await logIn(studentPage, student, /\/student$/);
+    await studentPage.goto('/student/my-registration');
+    const moved = `ผู้ดูแลระบบย้ายคุณจากชุมนุม ${clubLabel(NOTICE_FROM_CLUB)} ไปชุมนุม ${clubLabel(NOTICE_TO_CLUB)} เมื่อ`;
+    const notice = studentPage.getByRole('status').filter({ hasText: moved });
+    await expect(notice).toBeVisible();
+    await expect(notice).not.toContainText(ADMIN.loginId);
+    await expect(notice).not.toContainText(ADMIN.fullName);
+    await expect(
+      studentPage.getByRole('heading', { name: 'ชุมนุมของฉัน' }).locator('..'),
+    ).toContainText(clubLabel(NOTICE_TO_CLUB));
+
+    await studentPage.getByRole('button', { name: 'ยกเลิกชุมนุมนี้' }).click();
+    await studentPage
+      .getByRole('alertdialog')
+      .getByRole('button', { name: 'ยืนยัน ยกเลิกชุมนุม' })
+      .click();
+    await expect(studentPage.getByText(/^ยกเลิกชุมนุมแล้ว/)).toBeVisible();
+    await expect(studentPage.getByText(/^ผู้ดูแลระบบ/)).toHaveCount(0);
+    await studentPage.reload();
+    await expect(studentPage.getByText('ยังไม่ได้ลงชุมนุม')).toBeVisible();
+    await expect(studentPage.getByText(/^ผู้ดูแลระบบ/)).toHaveCount(0);
+  } finally {
+    await studentContext.close();
+  }
+
+  expect((await eventsOf(student.loginId)).map(({ event_type: type }) => type)).toEqual([
+    'admin_assign',
+    'admin_assign',
+    'cancel',
   ]);
 });

@@ -195,11 +195,13 @@ export type {
   RoundExportParams,
 } from './export.js';
 export {
+  ADMIN_CHANGE_KINDS,
   cancelRegistrationRequestSchema,
   changeRegistrationRequestSchema,
   joinWaitlistRequestSchema,
   leaveWaitlistRequestSchema,
   registerRequestSchema,
+  studentAdminChangeSchema,
   studentClubRefSchema,
   studentClubSchema,
   studentClubsResponseSchema,
@@ -212,11 +214,13 @@ export {
   studentWaitlistSchema,
 } from './student.js';
 export type {
+  AdminChangeKind,
   CancelRegistrationRequest,
   ChangeRegistrationRequest,
   JoinWaitlistRequest,
   LeaveWaitlistRequest,
   RegisterRequest,
+  StudentAdminChange,
   StudentClub,
   StudentClubRef,
   StudentClubsResponse,

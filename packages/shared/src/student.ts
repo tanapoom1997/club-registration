@@ -52,6 +52,31 @@ export const studentWaitlistSchema = z.object({
 });
 export type StudentWaitlist = z.infer<typeof studentWaitlistSchema>;
 
+// What an admin last did to the student's seat or waitlist place in the round, while it is still
+// the latest thing that happened to them there (README Phase 4, P3): the system sends no other
+// notification, so the page tells the student. Never who did it: no admin name, id or login, and
+// clubs only as the student already sees them. Gone (null) once the student does anything
+// themselves, and a promotion off a waitlist stays promotedFromWaitlist's alone.
+//   assigned: seated in `club` without holding one before
+//   moved: moved from `fromClub` to `club` (only this kind has a fromClub)
+//   removed: taken out of `club`, so the student holds no seat in the round
+//   waitlist_removed: taken off `club`'s waitlist
+export const ADMIN_CHANGE_KINDS = Object.freeze([
+  'assigned',
+  'moved',
+  'removed',
+  'waitlist_removed',
+] as const);
+const adminChangeFields = { club: studentClubRefSchema, at: z.iso.datetime() };
+export const studentAdminChangeSchema = z.discriminatedUnion('kind', [
+  z.object({ kind: z.literal('assigned'), ...adminChangeFields }),
+  z.object({ kind: z.literal('moved'), ...adminChangeFields, fromClub: studentClubRefSchema }),
+  z.object({ kind: z.literal('removed'), ...adminChangeFields }),
+  z.object({ kind: z.literal('waitlist_removed'), ...adminChangeFields }),
+]);
+export type StudentAdminChange = z.infer<typeof studentAdminChangeSchema>;
+export type AdminChangeKind = StudentAdminChange['kind'];
+
 // Advisors are names only. Their phone, email and LINE ID are personal data that ~2,500 students
 // would see, so they stay on admin routes (docs/security.md).
 export const studentClubSchema = z.object({
@@ -70,11 +95,12 @@ export const studentClubSchema = z.object({
 export type StudentClub = z.infer<typeof studentClubSchema>;
 
 // round null = the student's grade has no round at all; that is a normal state, not an error, and
-// registration and waitlist are then null too.
+// registration, waitlist and adminChange are then null too.
 export const studentRoundResponseSchema = z.object({
   round: studentRoundSchema.nullable(),
   registration: studentRegistrationSchema.nullable(),
   waitlist: studentWaitlistSchema.nullable(),
+  adminChange: studentAdminChangeSchema.nullable(),
 });
 export type StudentRoundResponse = z.infer<typeof studentRoundResponseSchema>;
 
@@ -127,14 +153,18 @@ export type LeaveWaitlistRequest = z.infer<typeof leaveWaitlistRequestSchema>;
 // leaving), and a replayed key with the entry now, like the registration writes.
 export const studentWaitlistResponseSchema = z.object({
   waitlist: studentWaitlistSchema.nullable(),
+  adminChange: studentAdminChangeSchema.nullable(),
 });
 export type StudentWaitlistResponse = z.infer<typeof studentWaitlistResponseSchema>;
 
 // Every registration write answers with the student's registration in the round as it stands
 // after the request, promotions off a waitlist in the same transaction included (null after a
 // cancel, unless the cancel's cascade promoted the student into the club they waited for). A
-// replayed key answers with the state now, not a copy of the first reply.
+// replayed key answers with the state now, not a copy of the first reply. Every student write
+// (registration and waitlist alike) carries adminChange as the reads have it after the request, so
+// the page that puts the answer into its cached reads keeps the two in step.
 export const studentRegistrationResponseSchema = z.object({
   registration: studentRegistrationSchema.nullable(),
+  adminChange: studentAdminChangeSchema.nullable(),
 });
 export type StudentRegistrationResponse = z.infer<typeof studentRegistrationResponseSchema>;

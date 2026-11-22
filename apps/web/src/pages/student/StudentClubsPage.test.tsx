@@ -292,7 +292,7 @@ describe('student clubs page', () => {
             refuse = false;
             return apiError(429, 'rate_limited')();
           }
-          return Response.json({ registration: registrationFor(CHESS) });
+          return Response.json({ registration: registrationFor(CHESS), adminChange: null });
         },
       },
     );
@@ -575,7 +575,7 @@ describe('student clubs page', () => {
               refuse = false;
               return apiError(429, 'rate_limited')();
             }
-            return Response.json({ registration: registrationFor(CHESS) });
+            return Response.json({ registration: registrationFor(CHESS), adminChange: null });
           },
         },
       );
@@ -619,7 +619,7 @@ describe('student clubs page', () => {
             // MUSIC, and MUSIC's freed seat went to A in the same transaction.
             api.state.registration = promoted;
             api.state.waitlist = null;
-            return Response.json({ registration: promoted });
+            return Response.json({ registration: promoted, adminChange: null });
           },
         },
       );

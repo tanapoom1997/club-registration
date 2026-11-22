@@ -11,6 +11,7 @@ import {
   studentRoundResponseSchema,
   studentWaitlistResponseSchema,
 } from '@club-registration/shared';
+import type { StudentAdminChange } from '@club-registration/shared';
 import type { FastifyReply, FastifyRequest } from 'fastify';
 import type { FastifyPluginAsyncZod } from 'fastify-type-provider-zod';
 import type pg from 'pg';
@@ -19,6 +20,7 @@ import type { AuthGuard } from '../auth/session.js';
 import { withTransaction } from '../db.js';
 import { AppError } from '../errors.js';
 import {
+  adminChangeAfter,
   cancelRegistration,
   changeRegistration,
   registerForClub,
@@ -78,17 +80,21 @@ export const studentRoutes =
     };
 
     // Ids and the outcome only: never a student, club or advisor name. Promotions a freed seat
-    // caused are logged as ids too (student, club, club left), and their count.
+    // caused are logged as ids too (student, club, club left), and their count. Every answer
+    // carries adminChange (README Phase 4, P3), read in the write's transaction; it is not logged.
     const runLogged = async <T extends RegistrationResult | WaitlistResult>(
       request: FastifyRequest,
       action: 'register' | 'change' | 'cancel' | 'waitlist join' | 'waitlist leave',
       requestedClubId: number | null,
       work: (client: pg.PoolClient) => Promise<T>,
-    ): Promise<T> => {
+    ): Promise<T & { adminChange: StudentAdminChange | null }> => {
       const studentId = requireAuthUser(request).id;
-      let result: T;
+      let result: T & { adminChange: StudentAdminChange | null };
       try {
-        result = await withTransaction(pool, work);
+        result = await withTransaction(pool, async (client) => {
+          const done = await work(client);
+          return { ...done, adminChange: await adminChangeAfter(client, studentId, done) };
+        });
       } catch (error) {
         if (error instanceof AppError) {
           request.log.info(
@@ -155,7 +161,7 @@ export const studentRoutes =
       async (request) => {
         const { clubId, idempotencyKey } = request.body;
         const studentId = requireAuthUser(request).id;
-        const { registration } = await runLogged(
+        const { registration, adminChange } = await runLogged(
           request,
           'register',
           clubId,
@@ -166,7 +172,7 @@ export const studentRoutes =
               requireAdmittedTicket(studentId, queue),
             ),
         );
-        return { registration };
+        return { registration, adminChange };
       },
     );
 
@@ -184,7 +190,7 @@ export const studentRoutes =
       async (request) => {
         const { clubId, idempotencyKey } = request.body;
         const studentId = requireAuthUser(request).id;
-        const { registration } = await runLogged(
+        const { registration, adminChange } = await runLogged(
           request,
           'change',
           clubId,
@@ -195,7 +201,7 @@ export const studentRoutes =
               requireAdmittedTicket(studentId, queue),
             ),
         );
-        return { registration };
+        return { registration, adminChange };
       },
     );
 
@@ -211,13 +217,13 @@ export const studentRoutes =
       async (request) => {
         const { idempotencyKey } = request.body;
         const studentId = requireAuthUser(request).id;
-        const { registration } = await runLogged(
+        const { registration, adminChange } = await runLogged(
           request,
           'cancel',
           null,
           async (client) => await cancelRegistration(client, { studentId, idempotencyKey }),
         );
-        return { registration };
+        return { registration, adminChange };
       },
     );
 
@@ -235,7 +241,7 @@ export const studentRoutes =
       async (request) => {
         const { clubId, idempotencyKey } = request.body;
         const studentId = requireAuthUser(request).id;
-        const { waitlist } = await runLogged(
+        const { waitlist, adminChange } = await runLogged(
           request,
           'waitlist join',
           clubId,
@@ -246,7 +252,7 @@ export const studentRoutes =
               requireAdmittedTicket(studentId, queue),
             ),
         );
-        return { waitlist };
+        return { waitlist, adminChange };
       },
     );
 
@@ -262,13 +268,13 @@ export const studentRoutes =
       async (request) => {
         const { idempotencyKey } = request.body;
         const studentId = requireAuthUser(request).id;
-        const { waitlist } = await runLogged(
+        const { waitlist, adminChange } = await runLogged(
           request,
           'waitlist leave',
           null,
           async (client) => await leaveWaitlist(client, { studentId, idempotencyKey }),
         );
-        return { waitlist };
+        return { waitlist, adminChange };
       },
     );
   };

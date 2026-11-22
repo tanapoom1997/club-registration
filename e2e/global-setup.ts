@@ -20,6 +20,8 @@ import {
   CHANGE_TO_CLUB,
   DATABASE_URL_ENV,
   EVENT_LOG_CLUB,
+  NOTICE_FROM_CLUB,
+  NOTICE_TO_CLUB,
   FULL_CLUB,
   GRADE,
   ONE_SEAT_CLUB,
@@ -131,6 +133,7 @@ const seed = async (databaseUrl: string): Promise<void> => {
       { account: STUDENTS.seatedByAdmin, mustChange: false, seatNo: 7 },
       { account: STUDENTS.removedFromWaitlist, mustChange: false, seatNo: 8 },
       { account: STUDENTS.inEventLog, mustChange: false, seatNo: 9 },
+      { account: STUDENTS.movedByAdmin, mustChange: false, seatNo: 10 },
     ];
     for (const { account, mustChange, seatNo } of students) {
       const id = await insertUser(account, 'student', mustChange);
@@ -157,6 +160,8 @@ const seed = async (databaseUrl: string): Promise<void> => {
       ADMIN_TO_CLUB,
       ADMIN_WAITLIST_CLUB,
       EVENT_LOG_CLUB,
+      NOTICE_FROM_CLUB,
+      NOTICE_TO_CLUB,
     ]) {
       const inserted = await client.query<{ id: number }>(
         `INSERT INTO clubs (round_id, club_code, name, capacity) VALUES ($1, $2, $3, $4)

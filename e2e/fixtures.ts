@@ -70,6 +70,11 @@ export const STUDENTS = Object.freeze({
     password: 'e2e-student-i-fictional',
     fullName: 'ด.ช.สมมติ ในประวัติ',
   },
+  movedByAdmin: {
+    loginId: 'e2e-student-r',
+    password: 'e2e-student-r-fictional',
+    fullName: 'ด.ญ.สมมติ ผู้ดูแลย้ายให้',
+  },
 } satisfies Record<string, Account>);
 
 export const OPEN_CLUB = { code: 'E2E01', name: 'ชุมนุมสมมติ ดนตรี', capacity: 5 };
@@ -84,6 +89,10 @@ export const CHANGE_TO_CLUB = { code: 'E2E05', name: 'ชุมนุมสม�
 export const ADMIN_FROM_CLUB = { code: 'E2E06', name: 'ชุมนุมสมมติ จัดให้', capacity: 2 };
 export const ADMIN_TO_CLUB = { code: 'E2E07', name: 'ชุมนุมสมมติ ย้ายไป', capacity: 2 };
 export const ADMIN_WAITLIST_CLUB = { code: 'E2E08', name: 'ชุมนุมสมมติ คิวรอ', capacity: 0 };
+// The student's notice of an admin change (README Phase 4, P3): seated in one by the admin, then
+// moved to the other. Clubs of their own, so the member-list scenario's seat counts stay exact.
+export const NOTICE_FROM_CLUB = { code: 'E2E12', name: 'ชุมนุมสมมติ ก่อนย้าย', capacity: 2 };
+export const NOTICE_TO_CLUB = { code: 'E2E13', name: 'ชุมนุมสมมติ หลังย้าย', capacity: 2 };
 // The event log page: a student registers here, then the admin finds the event by their code.
 export const EVENT_LOG_CLUB = { code: 'E2E09', name: 'ชุมนุมสมมติ ประวัติ', capacity: 2 };
 export const ADVISOR_NAME = 'ครูสมมติ ใจดี';

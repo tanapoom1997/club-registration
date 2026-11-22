@@ -106,9 +106,15 @@ describe('auth routes', () => {
     mockApi({
       'GET /api/auth/me': () => Response.json({ user: STUDENT }),
       'GET /api/student/clubs': () =>
-        Response.json({ round: null, registration: null, waitlist: null, clubs: [] }),
+        Response.json({
+          round: null,
+          registration: null,
+          waitlist: null,
+          adminChange: null,
+          clubs: [],
+        }),
       'GET /api/student/round': () =>
-        Response.json({ round: null, registration: null, waitlist: null }),
+        Response.json({ round: null, registration: null, waitlist: null, adminChange: null }),
     });
 
     renderAt(path);
