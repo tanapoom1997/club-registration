@@ -24,7 +24,9 @@ const CLUB_LIST = 'รายการชุมนุม';
 const ADMITTED_LINE = 'ถึงคิวของคุณแล้ว เลือกชุมนุมได้ถึง 08:15 น.';
 const RELEASE_BUTTON = 'เสร็จแล้ว ปล่อยคิว';
 const REJOIN_BUTTON = 'เข้าคิวใหม่';
-const KEEP_OPEN = 'อย่าปิดหรือสลับไปหน้าอื่นนาน ระบบอาจถือว่าออกจากคิว';
+// U1: how long is too long, and what is lost (the place) and kept (a club already chosen).
+const KEEP_OPEN =
+  'เปิดหน้านี้ค้างไว้และอย่าให้จอดับ ถ้าสลับไปแอปอื่นหรือล็อกจอนานราว 1 นาที จะหลุดจากคิวและต้องเข้าคิวใหม่ต่อท้าย (ถ้าลงชุมนุมไว้แล้ว ชุมนุมนั้นยังอยู่)';
 
 const queueCard = () => screen.getByRole('region', { name: 'คิวเลือกชุมนุม' });
 const queueStatus = () => within(queueCard()).getByRole('status');

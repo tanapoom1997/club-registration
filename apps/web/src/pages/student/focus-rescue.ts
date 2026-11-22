@@ -14,6 +14,9 @@ import type { RefObject } from 'react';
 // component it is unmounting. The check waits for the passive effect, which runs after the
 // children's, so a confirmation panel that took focus in the same commit (opening the leave
 // confirmation removes its button on purpose) keeps it.
+//
+// One ref may go on many elements (every item of the club list, which a filter or a poll can
+// remove several of at once): any of them that had focus counts. `element` then means nothing.
 export const useFocusRescue = <T extends HTMLElement>(
   fallbacks: readonly RefObject<HTMLElement | null>[],
 ) => {
@@ -23,7 +26,7 @@ export const useFocusRescue = <T extends HTMLElement>(
     element.current = node;
     return () => {
       element.current = null;
-      lostFocus.current = node?.contains(document.activeElement) ?? false;
+      lostFocus.current ||= node?.contains(document.activeElement) ?? false;
     };
   }, []);
 

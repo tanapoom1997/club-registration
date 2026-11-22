@@ -6,6 +6,7 @@ import { Button } from '@/components/ui/button';
 import { alertVariants } from '@/components/ui/alert';
 import { cn } from '@/lib/utils';
 import { fetchStudentRound } from '@/lib/api';
+import { useWakeLock } from '@/lib/wake-lock';
 import { AdminChangeNotice } from './AdminChangeNotice';
 import { HeldClubCard } from './HeldClubCard';
 import { LeaveWaitlistPanel } from './LeaveWaitlistPanel';
@@ -66,6 +67,8 @@ export const MyRegistrationPage = () => {
   const waitlist = data?.waitlist;
   // A student who came here from the clubs page (to cancel, say) keeps their place in the queue.
   const turn = useQueueKeepalive(round);
+  // The keepalive only keeps the place while its heartbeats go out, which a sleeping phone stops.
+  useWakeLock(turn.kind !== 'none');
   const panel = mutation.isSuccess ? undefined : target;
   const panelOpen = panel !== undefined;
 

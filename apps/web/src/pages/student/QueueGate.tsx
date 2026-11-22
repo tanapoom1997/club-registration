@@ -86,7 +86,7 @@ const QueueBody = ({ queue, registration, actionRef }: QueueBodyProps) => {
               เข้าคิวใหม่
             </Button>
             <Link
-              className="text-sm font-medium text-primary underline underline-offset-4"
+              className="inline-flex min-h-11 items-center text-sm font-medium text-primary underline underline-offset-4 sm:min-h-0"
               to={MY_REGISTRATION_PATH}
             >
               ดูผลของฉัน

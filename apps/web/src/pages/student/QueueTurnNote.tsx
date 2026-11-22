@@ -40,8 +40,11 @@ export const QueueTurnNote = ({ turn }: { turn: QueueTurn }) => {
         </>
       )}
       {live && (
+        <p className="text-sm font-medium text-warning-foreground">{QUEUE_MESSAGES.keepOpen}</p>
+      )}
+      {live && (
         <Link
-          className="text-sm font-medium text-primary underline underline-offset-4"
+          className="inline-flex min-h-11 items-center text-sm font-medium text-primary underline underline-offset-4 sm:min-h-0"
           to={CLUBS_PATH}
         >
           {turn.kind === 'admitted' ? QUEUE_MESSAGES.toClubs : QUEUE_MESSAGES.backToClubs}

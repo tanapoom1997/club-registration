@@ -156,9 +156,14 @@ export const QUEUE_MESSAGES = Object.freeze({
   waitingHelp:
     'เมื่อถึงคิว หน้านี้จะแสดงรายการชุมนุมให้เลือกเอง ไม่ต้องโหลดใหม่ เปิดหน้านี้ค้างไว้ ผลของคิวแสดงที่หน้านี้เท่านั้น ไม่มีแจ้งทางอื่น',
   admittedHelp: 'ลงหรือย้ายชุมนุมได้จนถึงเวลานี้ เลือกเสร็จแล้วกด "เสร็จแล้ว ปล่อยคิว" เพื่อให้คนถัดไปได้เข้า',
-  keepOpen: 'อย่าปิดหรือสลับไปหน้าอื่นนาน ระบบอาจถือว่าออกจากคิว',
+  // Said with the time it takes (the API's idle timeout, 60 s by default): a phone left to sleep,
+  // locked or switched to another app stops the heartbeats (U1). The page asks the browser to keep
+  // the screen on (useWakeLock), which not every phone grants.
+  keepOpen:
+    'เปิดหน้านี้ค้างไว้และอย่าให้จอดับ ถ้าสลับไปแอปอื่นหรือล็อกจอนานราว 1 นาที จะหลุดจากคิวและต้องเข้าคิวใหม่ต่อท้าย (ถ้าลงชุมนุมไว้แล้ว ชุมนุมนั้นยังอยู่)',
   connectionLost: 'เชื่อมต่อระบบไม่ได้ชั่วคราว กำลังลองใหม่ ถ้าหลุดนานเกิน 1 นาทีอาจต้องเข้าคิวใหม่',
-  expiredHelp: 'หน้านี้ไม่ได้ติดต่อระบบนานเกินไป (เช่น ปิดหรือสลับไปหน้าอื่นนาน) หรือครบเวลาที่ให้เลือกชุมนุมแล้ว',
+  expiredHelp:
+    'หน้านี้ไม่ได้ติดต่อระบบนานเกินไป (เช่น ปิดหน้า จอดับ ล็อกจอ หรือสลับไปแอปอื่นนานราว 1 นาที) หรือครบเวลาที่ให้เลือกชุมนุมแล้ว',
   // After the turn ended (expired or released): only a student who holds a club is told it stays.
   heldKept: (club: StudentClubRef) =>
     `ชุมนุม ${club.clubCode} ${club.name} ที่ลงไว้ยังอยู่ ถ้าจะเลือกใหม่ กดเข้าคิวใหม่ (ต่อท้ายคิว)`,
