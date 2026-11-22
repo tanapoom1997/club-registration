@@ -414,6 +414,57 @@ describe('admin club members panel', () => {
     expect(screen.queryByRole('region', { name: /^รายชื่อชุมนุม/ })).toBeNull();
   });
 
+  // README Phase 4, P4c (U6): the panel opens below a table that may be long.
+  it('scrolls the panel into view and focuses its heading, then gives focus back on close', async () => {
+    mockMembersApi();
+    const scroll = vi.spyOn(Element.prototype, 'scrollIntoView');
+    renderAt('/admin/clubs');
+    await openTable();
+    const opener = screen.getByRole('button', { name: 'รายชื่อชุมนุม A100' });
+
+    fireEvent.click(opener);
+
+    const panel = panelOf(CHESS);
+    const heading = within(panel).getByRole('heading', { name: /^รายชื่อชุมนุม A100/ });
+    expect(document.activeElement).toBe(heading);
+    expect(scroll).toHaveBeenCalledWith({ behavior: 'smooth', block: 'start' });
+    expect(scroll.mock.contexts).toEqual([heading]);
+
+    fireEvent.click(within(panel).getByRole('button', { name: 'ปิด' }));
+
+    expect(screen.queryByRole('region', { name: /^รายชื่อชุมนุม/ })).toBeNull();
+    expect(document.activeElement).toBe(opener);
+  });
+
+  it('focuses the other club panel when the admin opens another one', async () => {
+    mockMembersApi();
+    renderAt('/admin/clubs');
+    await openMembers(CHESS);
+    const opener = screen.getByRole('button', { name: 'รายชื่อชุมนุม B200' });
+
+    fireEvent.click(opener);
+
+    const panel = panelOf(MUSIC);
+    expect(document.activeElement).toBe(
+      within(panel).getByRole('heading', { name: /^รายชื่อชุมนุม B200/ }),
+    );
+    fireEvent.click(within(panel).getByRole('button', { name: 'ปิด' }));
+    expect(document.activeElement).toBe(opener);
+  });
+
+  it('leaves focus on the round picker that closed the panel', async () => {
+    mockMembersApi(roundFixture(), [roundFixture({ id: 2, grade: 2, status: 'upcoming' })]);
+    renderAt('/admin/clubs');
+    await openMembers(CHESS);
+    const picker = screen.getByLabelText('รอบลงทะเบียน');
+    picker.focus();
+
+    fireEvent.change(picker, { target: { value: '2' } });
+
+    expect(await screen.findByText(/รอบนี้ยังไม่มีชุมนุม/)).toBeTruthy();
+    expect(document.activeElement).toBe(picker);
+  });
+
   it('seats a student by login ID, normalised, and refreshes the lists and the table counts', async () => {
     const { fetchMock } = mockMembersApi();
     renderAt('/admin/clubs');

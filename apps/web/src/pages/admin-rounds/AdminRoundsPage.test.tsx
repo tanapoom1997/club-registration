@@ -515,3 +515,165 @@ describe('admin rounds page', () => {
     expect(await screen.findByRole('button', { name: 'แก้ไขรอบ 2569/1 ม.1' })).toBeTruthy();
   });
 });
+
+// README Phase 4, P4c: the editor opens below the table (U6) and the confirmations take focus,
+// close on Escape and give focus back (U12).
+describe('admin rounds page focus', () => {
+  afterEach(() => {
+    cleanup();
+    vi.unstubAllGlobals();
+  });
+
+  const escape = (element: HTMLElement) => fireEvent.keyDown(element, { key: 'Escape' });
+
+  it('brings the editor into view with focus on its heading, again on a second click', async () => {
+    const round = roundFixture();
+    mockRoundsApi([round]);
+    const scroll = vi.spyOn(Element.prototype, 'scrollIntoView');
+    renderAt('/admin/rounds');
+
+    const form = await openEditor(round);
+
+    const heading = screen.getByRole('heading', { name: 'แก้ไขรอบ 2569/1 ม.1' });
+    expect(document.activeElement).toBe(heading);
+    expect(scroll).toHaveBeenCalledTimes(1);
+    expect(scroll.mock.contexts[0]).toBe(heading);
+    expect(scroll).toHaveBeenCalledWith({ behavior: 'smooth', block: 'start' });
+
+    // The admin tabbed on, then clicked the same button again: the editor comes back into view.
+    within(form).getByLabelText('เวลาเปิด (เวลาไทย)').focus();
+    fireEvent.click(screen.getByRole('button', { name: 'แก้ไขรอบ 2569/1 ม.1' }));
+
+    expect(document.activeElement).toBe(heading);
+    expect(scroll).toHaveBeenCalledTimes(2);
+  });
+
+  it('jumps instead of scrolling smoothly when the admin asked for reduced motion', async () => {
+    const round = roundFixture();
+    mockRoundsApi([round]);
+    vi.spyOn(window, 'matchMedia').mockImplementation(
+      (query) => ({ matches: query === '(prefers-reduced-motion: reduce)' }) as MediaQueryList,
+    );
+    const scroll = vi.spyOn(Element.prototype, 'scrollIntoView');
+    renderAt('/admin/rounds');
+
+    await openEditor(round);
+
+    expect(scroll).toHaveBeenCalledWith({ behavior: 'auto', block: 'start' });
+  });
+
+  it('gives focus back to the edit button when the editor closes or saves', async () => {
+    const round = roundFixture();
+    mockRoundsApi([round]);
+    renderAt('/admin/rounds');
+    const editButton = await screen.findByRole('button', { name: 'แก้ไขรอบ 2569/1 ม.1' });
+
+    let form = await openEditor(round);
+    fireEvent.click(within(form).getByRole('button', { name: 'ปิด' }));
+
+    expect(screen.queryByRole('form', { name: 'แก้ไขรอบ 2569/1 ม.1' })).toBeNull();
+    expect(document.activeElement).toBe(editButton);
+
+    form = await openEditor(round);
+    fireEvent.click(within(form).getByRole('button', { name: 'บันทึกการแก้ไข' }));
+
+    await waitFor(() =>
+      expect(screen.queryByRole('form', { name: 'แก้ไขรอบ 2569/1 ม.1' })).toBeNull(),
+    );
+    expect(document.activeElement).toBe(editButton);
+  });
+
+  it('moves focus into the delete confirmation, closes it on Escape and returns to the button', async () => {
+    const round = roundFixture();
+    const fetchMock = mockRoundsApi([round]);
+    renderAt('/admin/rounds');
+    const deleteButton = await screen.findByRole('button', { name: 'ลบรอบ 2569/1 ม.1' });
+
+    fireEvent.click(deleteButton);
+
+    const dialog = screen.getByRole('alertdialog', { name: 'ลบรอบ 2569/1 ม.1 ใช่หรือไม่' });
+    expect(document.activeElement).toBe(dialog);
+
+    escape(dialog);
+
+    expect(screen.queryByRole('alertdialog')).toBeNull();
+    expect(document.activeElement).toBe(deleteButton);
+    expect(fetchCalls(fetchMock, 'DELETE', '/api/admin/rounds/1')).toHaveLength(0);
+  });
+
+  it('takes focus again when another round is chosen while a delete is being confirmed', async () => {
+    const first = roundFixture();
+    const second = roundFixture({ id: 2, grade: 2 });
+    mockRoundsApi([first, second]);
+    renderAt('/admin/rounds');
+    fireEvent.click(await screen.findByRole('button', { name: 'ลบรอบ 2569/1 ม.1' }));
+    screen.getByLabelText('กรองตามภาคเรียน').focus();
+
+    fireEvent.click(screen.getByRole('button', { name: 'ลบรอบ 2569/1 ม.2' }));
+
+    expect(document.activeElement).toBe(
+      screen.getByRole('alertdialog', { name: 'ลบรอบ 2569/1 ม.2 ใช่หรือไม่' }),
+    );
+  });
+
+  it('moves focus to the page heading once the round and its delete button are gone', async () => {
+    mockRoundsApi([roundFixture()]);
+    renderAt('/admin/rounds');
+    fireEvent.click(await screen.findByRole('button', { name: 'ลบรอบ 2569/1 ม.1' }));
+
+    fireEvent.click(screen.getByRole('button', { name: 'ยืนยันลบ' }));
+
+    await screen.findByText('ยังไม่มีรอบลงทะเบียน');
+    expect(document.activeElement).toBe(
+      screen.getByRole('heading', { name: 'รอบลงทะเบียน', level: 1 }),
+    );
+  });
+
+  it('moves focus into the confirmation of an open round, which Escape closes back to save', async () => {
+    const round = roundFixture({ status: 'open' });
+    const fetchMock = mockRoundsApi([round]);
+    renderAt('/admin/rounds');
+    const form = await openEditor(round);
+    fireEvent.click(within(form).getByRole('button', { name: 'บันทึกการแก้ไข' }));
+
+    const dialog = within(form).getByRole('alertdialog');
+    expect(document.activeElement).toBe(dialog);
+
+    escape(dialog);
+
+    expect(within(form).queryByRole('alertdialog')).toBeNull();
+    expect(document.activeElement).toBe(within(form).getByRole('button', { name: 'บันทึกการแก้ไข' }));
+    expect(fetchCalls(fetchMock, 'PATCH', '/api/admin/rounds/1')).toHaveLength(0);
+  });
+
+  it('ignores Escape while the confirmed save is on its way', async () => {
+    const round = roundFixture({ status: 'open' });
+    let release = () => undefined as void;
+    mockRoundsApi([round], {
+      'PATCH /api/admin/rounds/1': async () => {
+        await new Promise<void>((resolve) => {
+          release = resolve;
+        });
+        return Response.json({ code: 'internal_error', message: 'boom' }, { status: 500 });
+      },
+    });
+    renderAt('/admin/rounds');
+    const form = await openEditor(round);
+    fireEvent.click(within(form).getByRole('button', { name: 'บันทึกการแก้ไข' }));
+    fireEvent.click(within(form).getByRole('button', { name: 'ยืนยันบันทึก' }));
+    const dialog = within(form).getByRole('alertdialog');
+    await within(dialog).findByRole('button', { name: 'กำลังบันทึก…' });
+
+    escape(dialog);
+
+    expect(within(form).getByRole('alertdialog')).toBe(dialog);
+    act(() => release());
+    // A refused save closes the confirmation and gives focus back to the save button.
+    expect(await within(form).findByRole('alert')).toBeTruthy();
+    await waitFor(() =>
+      expect(document.activeElement).toBe(
+        within(form).getByRole('button', { name: 'บันทึกการแก้ไข' }),
+      ),
+    );
+  });
+});

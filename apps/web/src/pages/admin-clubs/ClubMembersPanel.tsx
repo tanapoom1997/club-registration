@@ -7,6 +7,7 @@ import { alertVariants } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader } from '@/components/ui/card';
 import { fetchClubMembers, fetchClubWaitlist } from '@/lib/api';
+import { useRevealPanel } from '@/lib/panel-focus';
 import { refetchWhileOpen } from '@/lib/round-refetch';
 import { cn } from '@/lib/utils';
 import { WritePanel } from '@/components/WritePanel';
@@ -41,12 +42,15 @@ type ClubMembersPanelProps = {
   // The latest copies from the polled clubs list.
   club: AdminClub;
   round: Round;
+  // Changes on every click of the club's list button (useRevealPanel).
+  reveal: number;
   onClose: () => void;
 };
 
 // Writes are offered in every round status: fixing the lists after a round closes is what these
 // endpoints are mostly for (README Phase 2, PR 3a decision 2 and PR 3b decision 1).
-export const ClubMembersPanel = ({ club, round, onClose }: ClubMembersPanelProps) => {
+export const ClubMembersPanel = ({ club, round, reveal, onClose }: ClubMembersPanelProps) => {
+  const headingRef = useRevealPanel<HTMLHeadingElement>(reveal);
   // Same timing as the clubs table above it.
   const refetchInterval = () => refetchWhileOpen(round, CLUBS_POLL_INTERVAL_MS);
   const membersQuery = useQuery({
@@ -160,7 +164,12 @@ export const ClubMembersPanel = ({ club, round, onClose }: ClubMembersPanelProps
     <Card role="region" aria-labelledby="club-members-title">
       <CardHeader className="flex flex-row flex-wrap items-start justify-between gap-3 space-y-0">
         <div className="space-y-1">
-          <h2 id="club-members-title" className="text-base font-bold">
+          <h2
+            ref={headingRef}
+            id="club-members-title"
+            tabIndex={-1}
+            className="scroll-mt-6 text-base font-bold focus:outline-none sm:scroll-mt-36"
+          >
             รายชื่อชุมนุม {club.clubCode} {club.name}
           </h2>
           {seats && (

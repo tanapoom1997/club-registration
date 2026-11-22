@@ -1,8 +1,8 @@
-import { useEffect, useRef } from 'react';
-import type { KeyboardEvent, ReactNode } from 'react';
+import type { ReactNode } from 'react';
 import { FormError } from '@/components/FormError';
 import { Button } from '@/components/ui/button';
 import { alertVariants } from '@/components/ui/alert';
+import { useConfirmationFocus } from '@/lib/panel-focus';
 import { cn } from '@/lib/utils';
 
 export type WriteState = {
@@ -34,8 +34,7 @@ type WritePanelProps = {
 
 // The confirmation of a seat write, on the student pages and in the admin's club lists. Inline
 // next to what it acts on rather than a modal, so on a phone it opens where it was tapped. It
-// takes focus when it opens so keyboard and screen reader users land on the question, and Escape
-// closes it like the dismiss button (not while a request is in flight).
+// takes focus and closes on Escape like every inline confirmation (useConfirmationFocus).
 export const WritePanel = ({
   state: { pending, error, canRetry, onConfirm, onRetry, onDismiss },
   label,
@@ -47,16 +46,7 @@ export const WritePanel = ({
   followUp,
   destructive = false,
 }: WritePanelProps) => {
-  const panelRef = useRef<HTMLDivElement>(null);
-  useEffect(() => {
-    panelRef.current?.focus();
-  }, []);
-
-  const handleKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
-    if (event.key !== 'Escape' || pending) return;
-    event.preventDefault();
-    onDismiss();
-  };
+  const { ref, onKeyDown } = useConfirmationFocus<HTMLDivElement>(onDismiss, pending);
 
   // A refused request is settled: the panel only explains why. A new attempt starts from the
   // button again, with a new idempotency key.
@@ -69,11 +59,11 @@ export const WritePanel = ({
     // match tag names (a native <dialog>), not role="alertdialog" on a div, so it is waived here.
     // eslint-disable-next-line jsx-a11y/no-noninteractive-element-interactions
     <div
-      ref={panelRef}
+      ref={ref}
       tabIndex={-1}
       role="alertdialog"
       aria-label={label}
-      onKeyDown={handleKeyDown}
+      onKeyDown={onKeyDown}
       className={cn(alertVariants({ variant: 'warning' }), 'space-y-3 focus-visible:outline-none')}
     >
       {!refused && (

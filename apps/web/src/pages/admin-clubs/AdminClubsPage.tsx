@@ -1,12 +1,13 @@
 import type { AdminClub, Round } from '@club-registration/shared';
 import { skipToken, useQuery } from '@tanstack/react-query';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
 import { Select } from '@/components/ui/select';
 import { fetchRoundClubs, fetchRounds } from '@/lib/api';
+import { useReturnFocus } from '@/lib/panel-focus';
 import { STATUS_DISPLAY, roundOptionLabel } from '@/lib/round-display';
 import { refetchWhileOpen } from '@/lib/round-refetch';
 import { ROUNDS_QUERY_KEY } from '@/pages/admin-rounds/round-ui';
@@ -18,8 +19,9 @@ import { CLUBS_POLL_INTERVAL_MS, CLUBS_QUERY_KEY, preferredRound } from './club-
 // The rounds page lists every term under the same key, so both pages share one cached list.
 const ALL_TERMS = '';
 
-// One club's editor or its member lists, never both: opening one closes the other.
-type OpenPanel = { kind: 'edit' | 'members'; clubId: number };
+// One club's editor or its member lists, never both: opening one closes the other. `reveal` counts
+// the clicks, so a second click on the same button brings the open panel back into view.
+type OpenPanel = { kind: 'edit' | 'members'; clubId: number; reveal: number };
 
 const RoundSummary = ({ round }: { round: Round }) => {
   const status = STATUS_DISPLAY[round.status];
@@ -49,6 +51,8 @@ export const AdminClubsPage = () => {
   // An id, not a snapshot, so the editor sees the latest registered count after every poll.
   const [openPanel, setOpenPanel] = useState<OpenPanel>();
   const [saved, setSaved] = useState<string>();
+  // The button that opened the panel, where focus goes back when it closes.
+  const opener = useRef<HTMLButtonElement>(null);
 
   const roundsQuery = useQuery({
     queryKey: [...ROUNDS_QUERY_KEY, ALL_TERMS],
@@ -81,17 +85,17 @@ export const AdminClubsPage = () => {
     setSaved(undefined);
   };
 
-  const open =
-    (kind: OpenPanel['kind']) =>
-    ({ id }: AdminClub) => {
-      setOpenPanel({ kind, clubId: id });
-      setSaved(undefined);
-    };
+  const open = (kind: OpenPanel['kind'], { id }: AdminClub, button: HTMLButtonElement) => {
+    opener.current = button;
+    setOpenPanel((current) => ({ kind, clubId: id, reveal: (current?.reveal ?? 0) + 1 }));
+    setSaved(undefined);
+  };
 
   const rounds = roundsQuery.data ?? [];
   const clubs = clubsQuery.data?.clubs ?? [];
   const shownClub = clubs.find(({ id }) => id === openPanel?.clubId);
   const closePanel = () => setOpenPanel(undefined);
+  useReturnFocus(shownClub !== undefined && openPanel !== undefined, [opener]);
 
   return (
     <section className="space-y-6">
@@ -169,7 +173,11 @@ export const AdminClubsPage = () => {
               </Link>
             </p>
           ) : (
-            <ClubsTable clubs={clubs} onEdit={open('edit')} onShowMembers={open('members')} />
+            <ClubsTable
+              clubs={clubs}
+              onEdit={(club, button) => open('edit', club, button)}
+              onShowMembers={(club, button) => open('members', club, button)}
+            />
           )}
         </div>
       )}
@@ -179,6 +187,7 @@ export const AdminClubsPage = () => {
         <EditClubForm
           key={shownClub.id}
           club={shownClub}
+          reveal={openPanel.reveal}
           onSaved={(club) => {
             setOpenPanel(undefined);
             setSaved(`บันทึกชุมนุม ${club.clubCode} แล้ว`);
@@ -192,6 +201,7 @@ export const AdminClubsPage = () => {
           key={shownClub.id}
           club={shownClub}
           round={clubsQuery.data.round}
+          reveal={openPanel.reveal}
           onClose={closePanel}
         />
       )}

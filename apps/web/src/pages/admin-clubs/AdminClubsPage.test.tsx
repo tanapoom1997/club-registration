@@ -286,6 +286,46 @@ describe('admin clubs page', () => {
     });
   });
 
+  // README Phase 4, P4c (U6): the editor opens below a table that may be long.
+  it('brings the editor into view with focus on its heading, and back to the button on close', async () => {
+    mockClubsApi(roundFixture());
+    const scroll = vi.spyOn(Element.prototype, 'scrollIntoView');
+    renderAt('/admin/clubs');
+    await openTable();
+    const opener = screen.getByRole('button', { name: 'แก้ไขชุมนุม A100' });
+
+    const form = openEditor('A100');
+
+    const heading = screen.getByRole('heading', { name: 'แก้ไขชุมนุม A100' });
+    expect(document.activeElement).toBe(heading);
+    expect(scroll.mock.contexts).toEqual([heading]);
+
+    // A second click on the same button, after the admin moved on, brings it back into view.
+    within(form).getByLabelText('ชื่อชุมนุม').focus();
+    fireEvent.click(opener);
+    expect(document.activeElement).toBe(heading);
+    expect(scroll).toHaveBeenCalledTimes(2);
+
+    fireEvent.click(within(form).getByRole('button', { name: 'ปิด' }));
+
+    expect(screen.queryByRole('form', { name: 'แก้ไขชุมนุม A100' })).toBeNull();
+    expect(document.activeElement).toBe(opener);
+  });
+
+  it('gives focus back to the edit button after a save', async () => {
+    mockClubsApi(roundFixture());
+    renderAt('/admin/clubs');
+    await openTable();
+    const opener = screen.getByRole('button', { name: 'แก้ไขชุมนุม A100' });
+    const form = openEditor('A100');
+
+    fireEvent.change(within(form).getByLabelText('จำนวนรับ'), { target: { value: '35' } });
+    fireEvent.click(within(form).getByRole('button', { name: 'บันทึกการแก้ไข' }));
+
+    await screen.findByText('บันทึกชุมนุม A100 แล้ว');
+    expect(document.activeElement).toBe(opener);
+  });
+
   it('saves a new name and description', async () => {
     const fetchMock = mockClubsApi(roundFixture());
     renderAt('/admin/clubs');

@@ -27,10 +27,13 @@ const Advisors = ({ advisors }: { advisors: readonly ClubAdvisor[] }) =>
     </ul>
   );
 
+// The button is passed along so focus can go back to it when the panel it opened closes.
+type ClubAction = (club: AdminClub, opener: HTMLButtonElement) => void;
+
 type ClubsTableProps = {
   clubs: readonly AdminClub[];
-  onEdit: (club: AdminClub) => void;
-  onShowMembers: (club: AdminClub) => void;
+  onEdit: ClubAction;
+  onShowMembers: ClubAction;
 };
 
 // Names, descriptions and advisor details are rendered as text nodes only: they come from admin
@@ -77,7 +80,7 @@ export const ClubsTable = ({ clubs, onEdit, onShowMembers }: ClubsTableProps) =>
                 variant="outline"
                 className="px-3 py-1"
                 aria-label={`รายชื่อชุมนุม ${club.clubCode}`}
-                onClick={() => onShowMembers(club)}
+                onClick={(event) => onShowMembers(club, event.currentTarget)}
               >
                 รายชื่อ
               </Button>
@@ -85,7 +88,7 @@ export const ClubsTable = ({ clubs, onEdit, onShowMembers }: ClubsTableProps) =>
                 variant="outline"
                 className="px-3 py-1"
                 aria-label={`แก้ไขชุมนุม ${club.clubCode}`}
-                onClick={() => onEdit(club)}
+                onClick={(event) => onEdit(club, event.currentTarget)}
               >
                 แก้ไข
               </Button>

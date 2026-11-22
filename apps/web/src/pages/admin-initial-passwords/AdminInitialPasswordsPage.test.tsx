@@ -285,4 +285,69 @@ describe('admin initial passwords page', () => {
 
     expect(issueButton()).toHaveProperty('disabled', true);
   });
+
+  // README Phase 4, P4c (U12): the confirmation behaves like the student ones.
+  describe('focus', () => {
+    const statusApi = (extra: Parameters<typeof mockApi>[0] = {}) =>
+      mockApi({
+        'GET /api/auth/me': () => Response.json({ user: ADMIN }),
+        'GET /api/admin/students/password-status': () => Response.json({ classrooms: STATUS }),
+        ...extra,
+      });
+
+    it('moves focus into the confirmation, closes it on Escape and returns to the button', async () => {
+      const fetchMock = statusApi();
+      await openPage();
+
+      fireEvent.click(issueButton());
+
+      const dialog = screen.getByRole('alertdialog', { name: 'ยืนยันการออกรหัสผ่าน' });
+      expect(document.activeElement).toBe(dialog);
+
+      fireEvent.keyDown(dialog, { key: 'Escape' });
+
+      expect(screen.queryByRole('alertdialog')).toBeNull();
+      // A new button: the confirmation took the place of the one that was clicked.
+      expect(document.activeElement).toBe(issueButton());
+      expect(issueCalls(fetchMock)).toHaveLength(0);
+    });
+
+    it('moves focus to the notice of what was issued', async () => {
+      statusApi({ [`POST ${ISSUE_PATH}`]: () => fileResponse(30) });
+      await openPage();
+      fireEvent.click(issueButton());
+
+      fireEvent.click(screen.getByRole('button', { name: 'ยืนยัน ออกรหัสผ่าน' }));
+
+      const notice = await screen.findByText(/ออกรหัสผ่านให้ 30 คนแล้ว/);
+      await waitFor(() => expect(document.activeElement).toBe(notice));
+    });
+
+    it('returns focus to the button after a refusal', async () => {
+      statusApi({
+        [`POST ${ISSUE_PATH}`]: () =>
+          Response.json({ code: 'rate_limited', message: 'x' }, { status: 429 }),
+      });
+      await openPage();
+      fireEvent.click(issueButton());
+
+      fireEvent.click(screen.getByRole('button', { name: 'ยืนยัน ออกรหัสผ่าน' }));
+
+      await screen.findByRole('alert');
+      await waitFor(() => expect(document.activeElement).toBe(issueButton()));
+    });
+
+    it('leaves focus on the choice that closed the confirmation', async () => {
+      statusApi();
+      await openPage();
+      fireEvent.click(issueButton());
+      const classroom = screen.getByLabelText('ห้อง');
+      classroom.focus();
+
+      chooseClassroom2();
+
+      expect(screen.queryByRole('alertdialog')).toBeNull();
+      expect(document.activeElement).toBe(classroom);
+    });
+  });
 });

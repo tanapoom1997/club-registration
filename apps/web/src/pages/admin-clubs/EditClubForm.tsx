@@ -10,6 +10,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { ApiError, updateClub } from '@/lib/api';
+import { useRevealPanel } from '@/lib/panel-focus';
 import { useSetSession } from '@/lib/session';
 import { ROUNDS_QUERY_KEY } from '@/pages/admin-rounds/round-ui';
 import { CLUBS_QUERY_KEY, clubErrorMessage } from './club-ui';
@@ -35,11 +36,14 @@ const changesFrom = (initial: ClubValues, values: ClubValues) => ({
 type EditClubFormProps = {
   // The latest copy from the polled list, so the registered count shown here stays current.
   club: AdminClub;
+  // Changes on every click of the club's edit button (useRevealPanel).
+  reveal: number;
   onSaved: (club: AdminClub) => void;
   onClose: () => void;
 };
 
-export const EditClubForm = ({ club, onSaved, onClose }: EditClubFormProps) => {
+export const EditClubForm = ({ club, reveal, onSaved, onClose }: EditClubFormProps) => {
+  const headingRef = useRevealPanel<HTMLHeadingElement>(reveal);
   const [initial] = useState<ClubValues>(() => valuesOf(club));
   const [values, setValues] = useState<ClubValues>(initial);
   const [validationError, setValidationError] = useState<string>();
@@ -82,7 +86,12 @@ export const EditClubForm = ({ club, onSaved, onClose }: EditClubFormProps) => {
   return (
     <Card>
       <CardHeader>
-        <CardTitle id="edit-club-title" className="text-base">
+        <CardTitle
+          ref={headingRef}
+          id="edit-club-title"
+          tabIndex={-1}
+          className="scroll-mt-6 text-base focus:outline-none sm:scroll-mt-36"
+        >
           {title}
         </CardTitle>
         <p className="text-sm text-muted-foreground">
