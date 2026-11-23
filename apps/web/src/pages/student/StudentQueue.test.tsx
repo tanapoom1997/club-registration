@@ -374,6 +374,15 @@ describe('student queue on the clubs page', () => {
       expect(screen.getByRole('button', { name: RELEASE_BUTTON })).toBeTruthy();
     });
 
+    // X2: on a phone the search bar stays on screen while the queue card scrolls away.
+    it('repeats when the turn ends in the search bar above the list', async () => {
+      await openAdmitted();
+
+      const search = screen.getByRole('search', { name: 'ค้นหาชุมนุม' });
+      expect(within(search).getByText(/^เลือกชุมนุมได้ถึง/).textContent).toBe('เลือกชุมนุมได้ถึง 08:15 น.');
+      expect(search.dataset.stickyFilter).toBe('deadline');
+    });
+
     it('releases the turn, says so and sends no more heartbeats', async () => {
       vi.useFakeTimers({ shouldAdvanceTime: true });
       const { fetchMock } = await openAdmitted();

@@ -76,6 +76,11 @@ body {
   html:has([data-sticky-filter]) {
     scroll-padding-top: 5.5rem;
   }
+
+  /* One more line in the bar while a turn is held: when it ends (X2). */
+  html:has([data-sticky-filter='deadline']) {
+    scroll-padding-top: 7rem;
+  }
 }
 
 ::selection {
