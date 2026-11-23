@@ -12,6 +12,11 @@ const displayFormat = new Intl.DateTimeFormat('th-TH', {
   timeStyle: 'short',
 });
 
+const dateFormat = new Intl.DateTimeFormat('th-TH', {
+  timeZone: THAI_TIME_ZONE,
+  dateStyle: 'medium',
+});
+
 const timeFormat = new Intl.DateTimeFormat('th-TH', {
   timeZone: THAI_TIME_ZONE,
   hour: '2-digit',
@@ -21,6 +26,9 @@ const timeFormat = new Intl.DateTimeFormat('th-TH', {
 
 // Thai date and time (Buddhist year), whatever timezone the viewer's computer is set to.
 export const formatThaiDateTime = (iso: string): string => displayFormat.format(new Date(iso));
+
+// Thai date only (Buddhist year), for a narrow column that puts the time on its own line.
+export const formatThaiDate = (iso: string): string => dateFormat.format(new Date(iso));
 
 // Thai time of day only (HH:MM), for a deadline within the same day.
 export const formatThaiTime = (iso: string): string => timeFormat.format(new Date(iso));

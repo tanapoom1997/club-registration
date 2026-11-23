@@ -7,6 +7,9 @@ export const PHONE_QUERY = '(max-width: 39.99rem)';
 // Below Tailwind's md (48rem): a phone, or a tablet held upright, too narrow for a wide table.
 export const BELOW_MD_QUERY = '(max-width: 47.99rem)';
 
+// Below Tailwind's lg (64rem): too narrow for a table of ten or more columns.
+export const BELOW_LG_QUERY = '(max-width: 63.99rem)';
+
 // Whether the media query matches now, following changes (a turned phone, a resized window).
 export const useMediaQuery = (query: string): boolean => {
   const subscribe = useCallback(
