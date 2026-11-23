@@ -108,6 +108,24 @@ describe('admin export page', () => {
     vi.restoreAllMocks();
   });
 
+  it('says why the download is off until a round is chosen (V4)', async () => {
+    mockApi(baseApi);
+    renderAt('/admin/export');
+    const round = await screen.findByLabelText('รอบลงทะเบียน');
+
+    expect((downloadButton() as HTMLButtonElement).disabled).toBe(true);
+    expect(downloadButton().getAttribute('aria-describedby')).not.toBeNull();
+    const hint = document.getElementById(downloadButton().getAttribute('aria-describedby') ?? '');
+    expect(hint?.textContent).toBe('เลือกรอบลงทะเบียนด้านบนก่อน จึงจะดาวน์โหลดได้');
+
+    fireEvent.change(round, { target: { value: '1' } });
+    await screen.findByLabelText('ขอบเขต');
+
+    expect((downloadButton() as HTMLButtonElement).disabled).toBe(false);
+    expect(downloadButton().getAttribute('aria-describedby')).toBeNull();
+    expect(screen.queryByText('เลือกรอบลงทะเบียนด้านบนก่อน จึงจะดาวน์โหลดได้')).toBeNull();
+  });
+
   it('downloads every club of the chosen round by default', async () => {
     const fetchMock = mockApi({
       ...baseApi,
