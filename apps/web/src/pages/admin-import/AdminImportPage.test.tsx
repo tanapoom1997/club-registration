@@ -6,6 +6,7 @@ import type {
 } from '@club-registration/shared';
 import { cleanup, fireEvent, screen, within } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import { BELOW_MD_QUERY } from '@/lib/media-query';
 import { mockApi, renderAt } from '@/test-support/render-app';
 
 const ADMIN: SessionUser = {
@@ -309,5 +310,53 @@ describe('admin import page', () => {
     expect(
       screen.getByRole('link', { name: 'ดาวน์โหลดไฟล์ตัวอย่าง (template)' }).getAttribute('href'),
     ).toBe('/api/admin/import/template');
+  });
+});
+
+describe('admin import page on a phone or an upright tablet (X1)', () => {
+  afterEach(() => {
+    cleanup();
+    vi.unstubAllGlobals();
+    vi.restoreAllMocks();
+  });
+
+  // jsdom has no viewport: this says "narrower than md" to the page, as a phone's browser would.
+  const onPhone = () => {
+    const real = window.matchMedia.bind(window);
+    vi.spyOn(window, 'matchMedia').mockImplementation((query) => ({
+      ...real(query),
+      matches: query === BELOW_MD_QUERY,
+    }));
+  };
+
+  it('lists each error as a card with where it is and what is wrong, and no error table', async () => {
+    onPhone();
+    const wholeFile = { sheet: null, row: null, column: null, message: 'ไม่พบชีต students' };
+    mockApi({
+      'GET /api/auth/me': () => Response.json({ user: ADMIN }),
+      'GET /api/admin/rounds': () => Response.json({ rounds: ROUNDS }),
+      'POST /api/admin/import/preview': () =>
+        Response.json({ ...PREVIEW, errors: [...PREVIEW.errors, wholeFile], errorCount: 3 }),
+    });
+    renderAt('/admin/import');
+    await screen.findByLabelText('ภาคเรียน');
+    chooseFile(xlsxFile());
+
+    submit();
+
+    const list = await screen.findByRole('list', { name: 'รายการข้อผิดพลาด' });
+    expect(screen.queryByRole('table', { name: 'รายการข้อผิดพลาด' })).toBeNull();
+    expect(
+      within(list)
+        .getAllByRole('listitem')
+        .map((card) => card.textContent),
+    ).toEqual([
+      'นักเรียน (students)แถว 14คอลัมน์ ชั้นชั้นต้องเป็น 1–6 (หรือ ม.1–ม.6)',
+      'ครูที่ปรึกษา (advisors)แถว 3คอลัมน์ อีเมลอีเมลไม่ถูกต้อง',
+      // An error about the whole file has no row or column to point at.
+      'ทั้งไฟล์ไม่พบชีต students',
+    ]);
+    // The summary of three numbers per sheet fits a phone, so it stays a table.
+    expect(screen.getByRole('table', { name: 'สรุปผลการตรวจสอบ' })).toBeTruthy();
   });
 });
