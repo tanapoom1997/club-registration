@@ -4,6 +4,9 @@ import { useCallback, useSyncExternalStore } from 'react';
 // rather than restyle the same elements. max-width rather than the range syntax for older Safari.
 export const PHONE_QUERY = '(max-width: 39.99rem)';
 
+// Below Tailwind's md (48rem): a phone, or a tablet held upright, too narrow for a wide table.
+export const BELOW_MD_QUERY = '(max-width: 47.99rem)';
+
 // Whether the media query matches now, following changes (a turned phone, a resized window).
 export const useMediaQuery = (query: string): boolean => {
   const subscribe = useCallback(
