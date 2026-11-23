@@ -15,6 +15,7 @@ import { deleteRound, fetchRounds } from '@/lib/api';
 import { useReturnFocus } from '@/lib/panel-focus';
 import { STATUS_DISPLAY, gradeLabel } from '@/lib/round-display';
 import { formatThaiDateTime } from '@/lib/thai-time';
+import { cn } from '@/lib/utils';
 import { CreateRoundBatchForm, CreateRoundForm } from './CreateRoundForms';
 import { EditRoundForm } from './EditRoundForm';
 import {
@@ -27,6 +28,7 @@ import {
 } from './round-ui';
 
 const roundName = ({ term, grade }: Round) => `${term} ${gradeLabel(grade)}`;
+const CREATE_FORMS_ID = 'create-round-forms';
 
 // The button is passed along so focus can go back to it when what it opened closes.
 type RoundAction = (round: Round, opener: HTMLButtonElement) => void;
@@ -169,6 +171,15 @@ export const AdminRoundsPage = () => {
 
   const rounds = roundsQuery.data ?? [];
   const editing = rounds.find(({ id }) => id === editingId);
+  // The create forms are folded away behind a button (V3): rounds are made once a term, and on a
+  // phone the two forms doubled the page under the list the admin comes to check. They start open
+  // only while there is no round at all, where creating one is the only thing to do, and stay open
+  // after that first round is made, so its success message does not vanish with them.
+  const [createOpen, setCreateOpen] = useState<boolean>();
+  const noRoundsYet = roundsQuery.isSuccess && rounds.length === 0 && termFilter === '';
+  // Set while rendering (React's pattern for state that follows other state), not in an effect.
+  if (noRoundsYet && createOpen === undefined) setCreateOpen(true);
+  const showCreate = createOpen ?? noRoundsYet;
   useReturnFocus(editing !== undefined, [editOpener]);
   // A deleted round's button is gone with its row, so focus goes to the page heading instead.
   useReturnFocus(deleting !== undefined, [deleteOpener, headingRef]);
@@ -176,14 +187,43 @@ export const AdminRoundsPage = () => {
   return (
     <section className="space-y-6">
       <div className="space-y-1">
-        <h1 ref={headingRef} tabIndex={-1} className="text-2xl font-bold focus:outline-none">
-          รอบลงทะเบียน
-        </h1>
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <h1 ref={headingRef} tabIndex={-1} className="text-2xl font-bold focus:outline-none">
+            รอบลงทะเบียน
+          </h1>
+          <Button
+            variant={showCreate ? 'outline' : 'primary'}
+            aria-expanded={showCreate}
+            aria-controls={CREATE_FORMS_ID}
+            onClick={() => setCreateOpen(!showCreate)}
+          >
+            สร้างรอบใหม่
+            <svg
+              aria-hidden="true"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              className={cn('size-4 transition-transform', showCreate && 'rotate-180')}
+            >
+              <path d="m6 9 6 6 6-6" />
+            </svg>
+          </Button>
+        </div>
         <p className="max-w-prose text-sm text-muted-foreground">
           1 รอบต่อชั้นต่อภาคเรียน เวลาทั้งหมดเป็นเวลาประเทศไทย สถานะคำนวณจากเวลาของเซิร์ฟเวอร์
           จำนวนรอคิวและได้คิวแล้วอัปเดตเองทุก {ROUNDS_POLL_INTERVAL_MS / 1000} วินาทีระหว่างที่มีรอบเปิดอยู่
         </p>
       </div>
+
+      {showCreate && (
+        <div id={CREATE_FORMS_ID} className="grid gap-4 md:grid-cols-2">
+          <CreateRoundForm />
+          <CreateRoundBatchForm />
+        </div>
+      )}
 
       {/* One row at every width: on a phone the button stays beside the field it applies. */}
       <form className="max-w-sm space-y-1.5" onSubmit={handleFilter}>
@@ -238,11 +278,6 @@ export const AdminRoundsPage = () => {
           onDone={() => setEditTarget(undefined)}
         />
       )}
-
-      <div className="grid gap-4 md:grid-cols-2">
-        <CreateRoundForm />
-        <CreateRoundBatchForm />
-      </div>
     </section>
   );
 };
