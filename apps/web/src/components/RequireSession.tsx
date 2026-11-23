@@ -1,7 +1,8 @@
 import type { Role } from '@club-registration/shared';
-import { Navigate, Outlet } from 'react-router';
+import { Navigate, Outlet, useLocation } from 'react-router';
 import { Button } from '@/components/ui/button';
 import { homePathFor, useSession } from '@/lib/session';
+import type { LoginState } from '@/lib/session';
 
 type RequireSessionProps = {
   role?: Role;
@@ -14,6 +15,7 @@ export const RequireSession = ({
   allowPendingPasswordChange = false,
 }: RequireSessionProps) => {
   const { data: user, isPending, isError, refetch } = useSession();
+  const { pathname } = useLocation();
 
   if (isPending) {
     return <p className="p-6 text-center text-muted-foreground">กำลังโหลด…</p>;
@@ -28,7 +30,12 @@ export const RequireSession = ({
       </div>
     );
   }
-  if (!user) return <Navigate to="/login" replace />;
+  if (!user) {
+    // The path only, never the query: nothing private belongs in a URL, and the login page checks
+    // it is one of the user's own pages before going back to it.
+    const state: LoginState = { from: pathname };
+    return <Navigate to="/login" replace state={state} />;
+  }
   if (user.mustChangePassword && !allowPendingPasswordChange) {
     return <Navigate to="/change-password" replace />;
   }

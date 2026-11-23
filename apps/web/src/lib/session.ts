@@ -27,6 +27,25 @@ export const hasMenuPage = (role: Role): boolean => homePathFor(role) === `/${ro
 export const landingPathFor = (user: SessionUser): string =>
   user.mustChangePassword ? '/change-password' : homePathFor(user.role);
 
+// The router state RequireSession leaves on the way to /login: the page that asked for a session,
+// so logging in again (an expired session, a bookmarked link) goes back to it (Y1).
+export type LoginState = { from: string };
+
+const fromOf = (state: unknown): string | undefined =>
+  typeof state === 'object' && state !== null && 'from' in state && typeof state.from === 'string'
+    ? state.from
+    : undefined;
+
+// Only a page of the user's own role: never another role's page (a shared computer, a link meant
+// for someone else), and never anything that is not a plain path inside this site. A pending
+// password change still comes first.
+export const returnPathFor = (user: SessionUser, state: unknown): string => {
+  const from = fromOf(state);
+  const ownArea = `/${user.role}`;
+  const isOwnPage = from !== undefined && (from === ownArea || from.startsWith(`${ownArea}/`));
+  return !user.mustChangePassword && isOwnPage ? from : landingPathFor(user);
+};
+
 export const useLogout = () => {
   const queryClient = useQueryClient();
   const navigate = useNavigate();

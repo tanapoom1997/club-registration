@@ -24,7 +24,8 @@ type ClubFilterBarProps = {
 // the screen while the list scrolls under it (V1): a round can have 30+ clubs in one column, and a
 // student whose turn is running should not have to scroll back up to search. It stays inside the
 // list's own box, so it leaves with the list. data-sticky-filter makes room for it in what the
-// browser scrolls into view (index.css). From sm up the header is the sticky part instead.
+// browser scrolls into view (index.css). On a screen wide and tall enough the header is the
+// sticky part instead; a phone on its side counts as compact too (Y2, index.css).
 export const ClubFilterBar = ({
   filter,
   onChange,
@@ -40,7 +41,7 @@ export const ClubFilterBar = ({
       role="search"
       aria-label={CLUB_FILTER_MESSAGES.searchLabel}
       data-sticky-filter={turn === undefined ? '' : 'deadline'}
-      className="space-y-2 max-sm:sticky max-sm:top-0 max-sm:z-10 max-sm:-mx-4 max-sm:border-b max-sm:border-border max-sm:bg-background/95 max-sm:px-4 max-sm:py-2 max-sm:backdrop-blur-md"
+      className="space-y-2 compact:sticky compact:top-0 compact:z-10 compact:-mx-4 compact:border-b compact:border-border compact:bg-background/95 compact:px-4 compact:py-2 compact:backdrop-blur-md"
     >
       <div className="flex flex-wrap items-center gap-2">
         <div className="relative min-w-40 flex-1">
@@ -94,10 +95,10 @@ export const ClubFilterBar = ({
       </div>
       {/* The turn's end, repeated where a phone still shows it once the queue card above has
           scrolled away (X2): the time is fixed from when the turn began, and a student reading
-          club after club loses track of it. Phone only: from sm up the bar does not stick. Not a
+          club after club loses track of it. Only where the bar sticks (compact, index.css). Not a
           live region; the queue card's status line announces the turn. */}
       {turn && (
-        <p className="text-xs text-muted-foreground sm:hidden">
+        <p className="text-xs text-muted-foreground tall:hidden">
           {turn.until} <span className="font-semibold text-foreground">{turn.time}</span>
         </p>
       )}
