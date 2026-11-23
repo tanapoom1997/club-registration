@@ -218,10 +218,10 @@ describe('student queue on the clubs page', () => {
       const beats = callsTo(fetchMock, 'POST', QUEUE_HEARTBEAT_PATH).length;
       expect(beats).toBeGreaterThan(0);
 
-      // The home page, which has nothing of the queue (the result page keeps the ticket alive:
-      // MyRegistrationPage.test.tsx).
+      // The password change, which has nothing of the queue (the result page keeps the ticket
+      // alive: MyRegistrationPage.test.tsx).
       await act(async () => {
-        await router.navigate('/student');
+        await router.navigate('/change-password');
       });
       await advance(60_000);
       expect(callsTo(fetchMock, 'POST', QUEUE_HEARTBEAT_PATH)).toHaveLength(beats);

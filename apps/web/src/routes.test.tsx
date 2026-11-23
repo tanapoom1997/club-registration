@@ -204,14 +204,20 @@ describe('auth routes', () => {
     expect(screen.getAllByRole('heading', { level: 1 })).toHaveLength(1);
   });
 
-  it('shows a student only the student menu on the student home', async () => {
-    mockApi({ 'GET /api/auth/me': () => Response.json({ user: STUDENT }) });
+  it('sends a student from /student on to the club list, with only the student menu', async () => {
+    mockApi({
+      'GET /api/auth/me': () => Response.json({ user: STUDENT }),
+      'GET /api/student/clubs': () => Response.json({ ...NO_ROUND, clubs: [] }),
+    });
 
-    renderAt('/student');
+    const router = renderAt('/student');
 
-    expect(await screen.findByRole('heading', { name: `สวัสดี ${STUDENT.fullName}` })).toBeTruthy();
+    expect(await screen.findByRole('heading', { level: 1, name: 'ชุมนุมในชั้นของฉัน' })).toBeTruthy();
+    expect(router.state.location.pathname).toBe('/student/clubs');
+    expect(screen.queryByRole('heading', { name: `สวัสดี ${STUDENT.fullName}` })).toBeNull();
     const nav = screen.getByRole('navigation', { name: 'เมนูหลัก' });
     expect(nav.textContent).toContain('ชุมนุมในชั้นของฉัน');
+    expect(nav.textContent).not.toContain('หน้าแรก');
     expect(nav.textContent).not.toContain('นำเข้า Excel');
   });
 
@@ -241,12 +247,15 @@ describe('auth routes', () => {
   });
 
   it('redirects a student who opens an admin page back to the student home', async () => {
-    mockApi({ 'GET /api/auth/me': () => Response.json({ user: STUDENT }) });
+    mockApi({
+      'GET /api/auth/me': () => Response.json({ user: STUDENT }),
+      'GET /api/student/clubs': () => Response.json({ ...NO_ROUND, clubs: [] }),
+    });
 
     const router = renderAt('/admin/import');
 
-    await screen.findByRole('heading', { name: `สวัสดี ${STUDENT.fullName}` });
-    expect(router.state.location.pathname).toBe('/student');
+    await screen.findByRole('heading', { level: 1, name: 'ชุมนุมในชั้นของฉัน' });
+    expect(router.state.location.pathname).toBe('/student/clubs');
   });
 
   it('lets a user stuck on the forced password change log out instead', async () => {
@@ -283,11 +292,11 @@ describe('auth routes', () => {
 
   it('logs out through the API and returns to the login page', async () => {
     const fetchMock = mockApi({
-      'GET /api/auth/me': () => Response.json({ user: STUDENT }),
+      'GET /api/auth/me': () => Response.json({ user: ADMIN }),
       'POST /api/auth/logout': () => new Response(null, { status: 204 }),
     });
-    const router = renderAt('/student');
-    await screen.findByRole('heading', { name: `สวัสดี ${STUDENT.fullName}` });
+    const router = renderAt('/admin');
+    await screen.findByRole('heading', { name: `สวัสดี ${ADMIN.fullName}` });
 
     fireEvent.click(screen.getByRole('button', { name: 'ออกจากระบบ' }));
 

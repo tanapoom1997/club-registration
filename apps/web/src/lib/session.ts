@@ -15,14 +15,17 @@ export const useSetSession = () => {
   };
 };
 
-export const homePathFor = (role: Role): string => `/${role}`;
+// A student's home is the club list, the one thing they come for (on registration day, their
+// place in the queue): with two pages, a menu page of its own only cost them a tap, so /student
+// sends them on to it (U3). The admin's home is the menu page with every page they can open.
+export const homePathFor = (role: Role): string =>
+  role === 'student' ? '/student/clubs' : `/${role}`;
 
-// Where a login lands. A student lands on the club list, the one thing they come for (on
-// registration day, their place in the queue); /student stays as the menu page.
-export const landingPathFor = (user: SessionUser): string => {
-  if (user.mustChangePassword) return '/change-password';
-  return user.role === 'student' ? '/student/clubs' : homePathFor(user.role);
-};
+// Whether /<role> is a page of its own rather than a redirect to the role's home.
+export const hasMenuPage = (role: Role): boolean => homePathFor(role) === `/${role}`;
+
+export const landingPathFor = (user: SessionUser): string =>
+  user.mustChangePassword ? '/change-password' : homePathFor(user.role);
 
 export const useLogout = () => {
   const queryClient = useQueryClient();

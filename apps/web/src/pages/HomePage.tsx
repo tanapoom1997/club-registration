@@ -3,6 +3,7 @@ import { Link } from 'react-router';
 import { Card, CardHeader, CardTitle } from '@/components/ui/card';
 import { useSession } from '@/lib/session';
 import { MENUS } from '@/navigation';
+import { RoundsOverview } from '@/pages/admin-home/RoundsOverview';
 
 export const HomePage = ({ role }: { role: Role }) => {
   const { data: user } = useSession();
@@ -13,6 +14,7 @@ export const HomePage = ({ role }: { role: Role }) => {
         <h1 className="text-2xl font-bold">สวัสดี {user?.fullName}</h1>
         <p className="text-muted-foreground">เลือกเมนูที่ต้องการ</p>
       </div>
+      {role === 'admin' && <RoundsOverview />}
       <ul className="grid gap-3 sm:grid-cols-2">
         {MENUS[role].map((item) => (
           <li key={item.path}>
