@@ -1,6 +1,7 @@
 import type { AdminClub, Round, SessionUser } from '@club-registration/shared';
 import { act, cleanup, fireEvent, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import { BELOW_MD_QUERY } from '@/lib/media-query';
 import { mockApi, renderAt } from '@/test-support/render-app';
 import { CLUBS_POLL_INTERVAL_MS } from './club-ui';
 
@@ -452,5 +453,81 @@ describe('admin clubs page', () => {
 
     expect(fetchCalls(fetchMock, 'GET', CLUBS_PATH)).toHaveLength(2);
     expect(screen.getByText('ปิดแล้ว')).toBeTruthy();
+  });
+});
+
+describe('admin clubs page on a phone or an upright tablet (W1)', () => {
+  afterEach(() => {
+    cleanup();
+    vi.unstubAllGlobals();
+    vi.restoreAllMocks();
+  });
+
+  // jsdom has no viewport: this says "narrower than md" to the page, as a phone's browser would.
+  const onPhone = () => {
+    const real = window.matchMedia.bind(window);
+    vi.spyOn(window, 'matchMedia').mockImplementation((query) => ({
+      ...real(query),
+      matches: query === BELOW_MD_QUERY,
+    }));
+  };
+
+  const cardOf = async (clubCode: string) => {
+    const list = await screen.findByRole('list', { name: 'รายการชุมนุม' });
+    return within(list).getByText(clubCode).closest('li') as HTMLElement;
+  };
+
+  it('shows one card per club with seats, advisors and its buttons, and no table', async () => {
+    onPhone();
+    mockClubsApi(roundFixture());
+    renderAt('/admin/clubs');
+
+    const chess = await cardOf('A100');
+
+    expect(screen.queryByRole('table')).toBeNull();
+    // Advisors are a list inside each card, so count only the cards themselves.
+    expect(screen.getByRole('list', { name: 'รายการชุมนุม' }).children).toHaveLength(CLUBS.length);
+    expect(chess.textContent).toContain('ชุมนุมหมากรุกสมมติ');
+    expect(chess.textContent).toContain('12 / 30เหลือ 18');
+    expect(chess.textContent).toContain('ครูสมมติ ใจดี');
+    expect(chess.textContent).toContain('080-000-0001');
+    expect(within(chess).getByText(/เล่น <b>หมากรุก<\/b>/)).toBeTruthy();
+    expect(chess.querySelector('b')).toBeNull();
+    expect(within(chess).getByRole('button', { name: 'รายชื่อชุมนุม A100' })).toBeTruthy();
+    expect(within(chess).getByRole('button', { name: 'แก้ไขชุมนุม A100' })).toBeTruthy();
+    const music = await cardOf('B200');
+    expect(music.textContent).toContain('ยังไม่มีครู');
+    expect(music.textContent).toContain('เต็ม');
+  });
+
+  it('edits a club from its card and gives focus back to the card button', async () => {
+    onPhone();
+    const fetchMock = mockClubsApi(roundFixture());
+    renderAt('/admin/clubs');
+    const opener = within(await cardOf('A100')).getByRole('button', { name: 'แก้ไขชุมนุม A100' });
+
+    const form = openEditor('A100');
+    fireEvent.change(within(form).getByLabelText('จำนวนรับ'), { target: { value: '35' } });
+    fireEvent.click(within(form).getByRole('button', { name: 'บันทึกการแก้ไข' }));
+
+    await screen.findByText('บันทึกชุมนุม A100 แล้ว');
+    expect(bodyOf(fetchCalls(fetchMock, 'PATCH', '/api/admin/clubs/11')[0]?.[1])).toEqual({
+      capacity: 35,
+    });
+    await waitFor(async () => expect((await cardOf('A100')).textContent).toContain('12 / 35'));
+    expect(document.activeElement).toBe(opener);
+  });
+
+  it('opens the member lists from a card', async () => {
+    onPhone();
+    mockClubsApi(roundFixture());
+    renderAt('/admin/clubs');
+
+    fireEvent.click(within(await cardOf('A100')).getByRole('button', { name: 'รายชื่อชุมนุม A100' }));
+
+    const panel = screen.getByRole('region', { name: 'รายชื่อชุมนุม A100 ชุมนุมหมากรุกสมมติ' });
+    expect(document.activeElement).toBe(
+      within(panel).getByRole('heading', { name: /^รายชื่อชุมนุม A100/ }),
+    );
   });
 });
