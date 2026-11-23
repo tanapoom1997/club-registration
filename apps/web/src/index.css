@@ -26,29 +26,34 @@
     'Anuphan Variable', system-ui, -apple-system, 'Segoe UI', 'Noto Sans Thai', sans-serif;
   --radius-lg: 0.75rem;
   --shadow-card: 0 1px 2px rgb(15 23 42 / 0.04), 0 4px 16px -4px rgb(15 23 42 / 0.06);
-  --shadow-card-hover: 0 2px 4px rgb(15 23 42 / 0.04), 0 12px 32px -8px rgb(79 70 229 / 0.18);
+  /* Tinted from --primary so the hover glow follows the theme colour instead of a fixed value. */
+  --shadow-card-hover:
+    0 2px 4px rgb(15 23 42 / 0.04),
+    0 12px 32px -8px color-mix(in oklch, var(--primary) 20%, transparent);
 }
 
 /*
  * Light theme only: the school asked for a white background, and following the OS dark mode made
  * the site look different on every student's phone. Text colours keep at least 4.5:1 on white.
- * --input, the edge of a field, keeps at least 3:1 (WCAG 1.4.11): 3.37 on white, 3.09 on muted.
+ * --input, the edge of a field, keeps at least 3:1 (WCAG 1.4.11): 3.36 on white, 3.08 on muted.
+ * The accent is a deep navy with low chroma so it reads calm on phones: white on --primary is
+ * 9.3:1, --primary on --primary-soft 8.3:1, white on --brand 5.3:1.
  */
 :root {
   color-scheme: light;
   --background: oklch(1 0 0);
-  --foreground: oklch(0.21 0.034 265);
+  --foreground: oklch(0.24 0.035 258);
   --card: oklch(1 0 0);
-  --card-foreground: oklch(0.21 0.034 265);
-  --muted: oklch(0.97 0.007 265);
-  --muted-foreground: oklch(0.48 0.03 265);
-  --border: oklch(0.92 0.012 265);
-  --input: oklch(0.64 0.02 265);
-  --primary: oklch(0.51 0.23 277);
+  --card-foreground: oklch(0.24 0.035 258);
+  --muted: oklch(0.97 0.008 255);
+  --muted-foreground: oklch(0.48 0.03 258);
+  --border: oklch(0.92 0.012 255);
+  --input: oklch(0.64 0.02 258);
+  --primary: oklch(0.4 0.12 258);
   --primary-foreground: oklch(1 0 0);
-  --primary-soft: oklch(0.96 0.025 277);
-  --brand: oklch(0.56 0.25 300);
-  --ring: oklch(0.62 0.2 277);
+  --primary-soft: oklch(0.96 0.018 255);
+  --brand: oklch(0.52 0.11 232);
+  --ring: oklch(0.58 0.12 255);
   --success: oklch(0.96 0.045 163);
   --success-foreground: oklch(0.47 0.11 163);
   --warning: oklch(0.97 0.05 85);
