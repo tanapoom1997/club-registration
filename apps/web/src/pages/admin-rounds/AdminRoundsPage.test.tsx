@@ -30,6 +30,8 @@ const roundFixture = (overrides: Partial<Round> = {}): Round => ({
 });
 
 // The app always sends JSON bodies as strings (see lib/api.ts).
+const CREATE_TOGGLE = 'สร้างรอบใหม่';
+
 const bodyOf = (init: RequestInit | undefined): unknown =>
   typeof init?.body === 'string' ? JSON.parse(init.body) : undefined;
 
@@ -381,12 +383,52 @@ describe('admin rounds page', () => {
     expect(fetchCalls(fetchMock, 'PATCH', '/api/admin/rounds/1')).toHaveLength(0);
   });
 
+  it('folds the create forms behind a button once rounds exist (V3)', async () => {
+    mockRoundsApi([roundFixture()]);
+    renderAt('/admin/rounds');
+    await rowOf(roundFixture());
+    const toggle = screen.getByRole('button', { name: CREATE_TOGGLE });
+    expect(toggle.getAttribute('aria-expanded')).toBe('false');
+    expect(screen.queryByRole('form', { name: 'สร้างรอบ' })).toBeNull();
+
+    fireEvent.click(toggle);
+
+    expect(toggle.getAttribute('aria-expanded')).toBe('true');
+    const forms = document.getElementById(toggle.getAttribute('aria-controls') ?? '');
+    expect(forms?.contains(screen.getByRole('form', { name: 'สร้างรอบ' }))).toBe(true);
+    expect(screen.getByRole('form', { name: 'สร้างครบทุกชั้น' })).toBeTruthy();
+
+    fireEvent.click(toggle);
+
+    expect(toggle.getAttribute('aria-expanded')).toBe('false');
+    expect(screen.queryByRole('form', { name: 'สร้างรอบ' })).toBeNull();
+  });
+
+  it('opens the create forms while there is no round, and keeps them open after the first', async () => {
+    mockRoundsApi([]);
+    renderAt('/admin/rounds');
+    await screen.findByText('ยังไม่มีรอบลงทะเบียน');
+    expect(screen.getByRole('button', { name: CREATE_TOGGLE }).getAttribute('aria-expanded')).toBe(
+      'true',
+    );
+    const form = screen.getByRole('form', { name: 'สร้างรอบ' });
+
+    fireEvent.change(within(form).getByLabelText('ภาคเรียน'), { target: { value: '2569/2' } });
+    fillTimes(form, '2027-05-10T08:30', '2027-05-10T15:00');
+    fireEvent.click(within(form).getByRole('button', { name: 'สร้างรอบ' }));
+
+    await screen.findByRole('button', { name: 'แก้ไขรอบ 2569/2 ม.1' });
+    expect(screen.getByRole('form', { name: 'สร้างรอบ' })).toBe(form);
+    expect(within(form).getByRole('status')).toBeTruthy();
+  });
+
   it('has one h1, with the forms and the editor as level 2 headings under it', async () => {
     const round = roundFixture();
     mockRoundsApi([round]);
     renderAt('/admin/rounds');
 
     await openEditor(round);
+    fireEvent.click(screen.getByRole('button', { name: CREATE_TOGGLE }));
 
     expect(screen.getAllByRole('heading', { level: 1 }).map((h) => h.textContent)).toEqual([
       'รอบลงทะเบียน',

@@ -17,7 +17,11 @@ type ClubFilterBarProps = {
 };
 
 // One row on a phone too: the list starts as high as it can (U4). The label is visually hidden
-// but names the field; the placeholder only says what to type.
+// but names the field; the placeholder only says what to type. On a phone it sticks to the top of
+// the screen while the list scrolls under it (V1): a round can have 30+ clubs in one column, and a
+// student whose turn is running should not have to scroll back up to search. It stays inside the
+// list's own box, so it leaves with the list. data-sticky-filter makes room for it in what the
+// browser scrolls into view (index.css). From sm up the header is the sticky part instead.
 export const ClubFilterBar = ({
   filter,
   onChange,
@@ -27,7 +31,12 @@ export const ClubFilterBar = ({
   const searchId = useId();
   const seatsName = useId();
   return (
-    <div role="search" aria-label={CLUB_FILTER_MESSAGES.searchLabel} className="space-y-2">
+    <div
+      role="search"
+      aria-label={CLUB_FILTER_MESSAGES.searchLabel}
+      data-sticky-filter=""
+      className="space-y-2 max-sm:sticky max-sm:top-0 max-sm:z-10 max-sm:-mx-4 max-sm:border-b max-sm:border-border max-sm:bg-background/95 max-sm:px-4 max-sm:py-2 max-sm:backdrop-blur-md"
+    >
       <div className="flex flex-wrap items-center gap-2">
         <div className="relative min-w-40 flex-1">
           <Label htmlFor={searchId} className="sr-only">

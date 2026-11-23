@@ -11,6 +11,7 @@ import type {
 import { cleanup, fireEvent, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { renderAt } from '@/test-support/render-app';
+import { PHONE_QUERY } from '@/lib/media-query';
 import { formatThaiDateTime } from '@/lib/thai-time';
 import { EVENT_TYPE_LABELS } from './event-ui';
 
@@ -576,5 +577,58 @@ describe('AdminEventsPage', () => {
       expect(eventQueries.filter((params) => params.has('before'))).toHaveLength(1);
       expect(eventQueries).toHaveLength(2);
     });
+  });
+});
+
+describe('AdminEventsPage on a phone (V2)', () => {
+  afterEach(() => {
+    cleanup();
+    vi.unstubAllGlobals();
+  });
+
+  // jsdom has no viewport: this says "narrower than sm" to the page, as a phone's browser would.
+  const onPhone = () => {
+    const real = window.matchMedia.bind(window);
+    vi.spyOn(window, 'matchMedia').mockImplementation((query) => ({
+      ...real(query),
+      matches: query === PHONE_QUERY,
+    }));
+  };
+
+  const cards = async () =>
+    within(await screen.findByRole('list', { name: 'ประวัติการลงทะเบียน' })).getAllByRole('listitem');
+
+  it('shows one card per event with every field, and no table to scroll sideways', async () => {
+    onPhone();
+    await openPage();
+
+    const [promotion] = await cards();
+    expect(screen.queryByRole('table')).toBeNull();
+    expect(await cards()).toHaveLength(LOG.length);
+    const card = promotion as HTMLElement;
+    expect(within(card).getByText(EVENT_TYPE_LABELS.waitlist_promote)).toBeTruthy();
+    expect(within(card).getByRole('time').textContent).toBe(
+      formatThaiDateTime(LOG[0]?.createdAt ?? ''),
+    );
+    expect(card.textContent).toContain(S2.fullName);
+    expect(card.textContent).toContain(
+      `จาก ${CLUB_B.clubCode} ${CLUB_B.name} → ${CLUB_A.clubCode}`,
+    );
+    expect(card.textContent).toContain(S1.fullName);
+    expect(card.textContent).toContain('นักเรียนคนอื่น');
+  });
+
+  it('filters by the student from a card, as from a table row', async () => {
+    onPhone();
+    const { eventQueries } = await openPage();
+    const [first] = await cards();
+
+    fireEvent.click(
+      within(first as HTMLElement).getByRole('button', {
+        name: `กรองเฉพาะนักเรียน ${S2.loginId} ${S2.fullName}`,
+      }),
+    );
+
+    await waitFor(() => expect(eventQueries.at(-1)?.get('loginId')).toBe(S2.loginId));
   });
 });

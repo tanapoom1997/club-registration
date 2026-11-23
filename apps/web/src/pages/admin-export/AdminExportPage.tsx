@@ -31,6 +31,7 @@ import {
 } from './export-ui';
 
 const NO_ROUND = '';
+const NO_ROUND_HINT_ID = 'export-no-round-hint';
 const WHOLE_ROUND = '';
 // The rounds page lists every term under the same key, so the pages share one cached list.
 const ALL_TERMS = '';
@@ -284,13 +285,23 @@ export const AdminExportPage = () => {
               ))}
             </fieldset>
 
-            <Button
-              type="submit"
-              className="w-full sm:w-auto"
-              disabled={!scopeChoice || scopeChoice.options.length === 0 || mutation.isPending}
-            >
-              {mutation.isPending ? 'กำลังสร้างไฟล์…' : 'ดาวน์โหลดรายชื่อ'}
-            </Button>
+            {/* Before a round is chosen nothing above says why the button is pale (V4); the
+                other times it is, the loading line, the retry or the empty note above says so. */}
+            <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
+              <Button
+                type="submit"
+                className="w-full sm:w-auto"
+                disabled={!scopeChoice || scopeChoice.options.length === 0 || mutation.isPending}
+                aria-describedby={roundId === undefined ? NO_ROUND_HINT_ID : undefined}
+              >
+                {mutation.isPending ? 'กำลังสร้างไฟล์…' : 'ดาวน์โหลดรายชื่อ'}
+              </Button>
+              {roundId === undefined && (
+                <p id={NO_ROUND_HINT_ID} className="text-sm text-muted-foreground">
+                  เลือกรอบลงทะเบียนด้านบนก่อน จึงจะดาวน์โหลดได้
+                </p>
+              )}
+            </div>
 
             <FormError
               message={mutation.isError ? exportErrorMessage(mutation.error) : undefined}
