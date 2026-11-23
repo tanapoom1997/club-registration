@@ -1,3 +1,4 @@
+import { ROUND_YEAR_MESSAGE } from '@club-registration/shared';
 import type { Round, SessionUser } from '@club-registration/shared';
 import { act, cleanup, fireEvent, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
@@ -317,6 +318,87 @@ describe('admin rounds page', () => {
 
     expect((await within(form).findByRole('alert')).textContent).toBe('เวลาปิดต้องอยู่หลังเวลาเปิด');
     expect(fetchCalls(fetchMock, 'POST', '/api/admin/rounds')).toHaveLength(0);
+  });
+
+  describe('the year of a date field', () => {
+    // The text that describes a field to a screen reader, i.e. the line under it.
+    const hintOf = (field: HTMLElement): string =>
+      (field.getAttribute('aria-describedby') ?? '')
+        .split(' ')
+        .map((id) => document.getElementById(id)?.textContent ?? '')
+        .join(' ');
+
+    it('says the field takes the Christian year while it is empty', async () => {
+      mockRoundsApi([]);
+      renderAt('/admin/rounds');
+      await screen.findByText('ยังไม่มีรอบลงทะเบียน');
+      const form = screen.getByRole('form', { name: 'สร้างรอบ' });
+
+      expect(hintOf(within(form).getByLabelText('เวลาเปิด (เวลาไทย)'))).toBe(
+        'ปีในช่องนี้เป็น ค.ศ. เช่น 2026 (ตรงกับ พ.ศ. 2569)',
+      );
+    });
+
+    it('repeats the chosen time with the Buddhist year under the field', async () => {
+      mockRoundsApi([]);
+      renderAt('/admin/rounds');
+      await screen.findByText('ยังไม่มีรอบลงทะเบียน');
+      const form = screen.getByRole('form', { name: 'สร้างรอบ' });
+
+      fillTimes(form, '2026-12-01T08:00', '2026-12-03T16:30');
+
+      expect(hintOf(within(form).getByLabelText('เวลาเปิด (เวลาไทย)'))).toBe(
+        'ตรงกับ 1 ธ.ค. 2569 08:00 น.',
+      );
+      expect(hintOf(within(form).getByLabelText('เวลาปิด (เวลาไทย)'))).toBe(
+        'ตรงกับ 3 ธ.ค. 2569 16:30 น.',
+      );
+    });
+
+    it('shows the saved time of a round in the editor the same way', async () => {
+      const round = roundFixture();
+      mockRoundsApi([round]);
+      renderAt('/admin/rounds');
+      const form = await openEditor(round);
+
+      expect(hintOf(within(form).getByLabelText('เวลาปิด (เวลาไทย)'))).toBe(
+        'ตรงกับ 1 ธ.ค. 2569 16:00 น.',
+      );
+    });
+
+    it('flags a Buddhist year typed by habit and does not send the round', async () => {
+      const fetchMock = mockRoundsApi([]);
+      renderAt('/admin/rounds');
+      await screen.findByText('ยังไม่มีรอบลงทะเบียน');
+      const form = screen.getByRole('form', { name: 'สร้างรอบ' });
+
+      fireEvent.change(within(form).getByLabelText('ภาคเรียน'), { target: { value: '2569/1' } });
+      fillTimes(form, '2569-12-01T08:00', '2569-12-01T16:00');
+      const opensAt = within(form).getByLabelText('เวลาเปิด (เวลาไทย)');
+
+      expect(hintOf(opensAt)).toBe(ROUND_YEAR_MESSAGE);
+      expect(opensAt.getAttribute('aria-invalid')).toBe('true');
+
+      fireEvent.click(within(form).getByRole('button', { name: 'สร้างรอบ' }));
+
+      expect((await within(form).findByRole('alert')).textContent).toBe(ROUND_YEAR_MESSAGE);
+      expect(fetchCalls(fetchMock, 'POST', '/api/admin/rounds')).toHaveLength(0);
+    });
+
+    it('does not send a Buddhist year from the editor either', async () => {
+      const round = roundFixture();
+      const fetchMock = mockRoundsApi([round]);
+      renderAt('/admin/rounds');
+      const form = await openEditor(round);
+
+      fireEvent.change(within(form).getByLabelText('เวลาปิด (เวลาไทย)'), {
+        target: { value: '2569-12-01T18:00' },
+      });
+      fireEvent.click(within(form).getByRole('button', { name: 'บันทึกการแก้ไข' }));
+
+      expect((await within(form).findByRole('alert')).textContent).toBe(ROUND_YEAR_MESSAGE);
+      expect(fetchCalls(fetchMock, 'PATCH', `/api/admin/rounds/${round.id}`)).toHaveLength(0);
+    });
   });
 
   it('edits an upcoming round straight away', async () => {

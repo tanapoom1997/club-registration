@@ -25,8 +25,25 @@ export const gradeSchema = z
   .min(1, 'ชั้นต้องอยู่ระหว่าง ม.1–ม.6')
   .max(6, 'ชั้นต้องอยู่ระหว่าง ม.1–ม.6');
 
+// The years a round may open or close in, by Thai time. The date field of a browser takes the
+// Christian year while the rest of the site shows the Buddhist one, so an admin who types 2569
+// out of habit means 2026: 543 years off, which these bounds catch before it becomes a round.
+export const ROUND_YEAR_MIN = 2000;
+export const ROUND_YEAR_MAX = 2099;
+export const ROUND_YEAR_MESSAGE = `ปีต้องเป็น ค.ศ. ${ROUND_YEAR_MIN}–${ROUND_YEAR_MAX} (เช่น 2026 ไม่ใช่ พ.ศ. 2569)`;
+const ROUND_TIME_MIN_MS = Date.parse(`${ROUND_YEAR_MIN}-01-01T00:00:00+07:00`);
+const ROUND_TIME_END_MS = Date.parse(`${ROUND_YEAR_MAX + 1}-01-01T00:00:00+07:00`);
+
 // A timezone is required so a time typed in Thailand can never be read as UTC or vice versa.
-const instantSchema = z.iso.datetime({ offset: true, error: 'รูปแบบวันเวลาไม่ถูกต้อง' });
+const instantSchema = z.iso.datetime({ offset: true, error: 'รูปแบบวันเวลาไม่ถูกต้อง' }).refine(
+  (value) => {
+    const ms = Date.parse(value);
+    return ms >= ROUND_TIME_MIN_MS && ms < ROUND_TIME_END_MS;
+  },
+  // abort: a year 543 off also makes "closes after opens" fail or pass by accident; only the
+  // year message is true, so the window check is skipped.
+  { error: ROUND_YEAR_MESSAGE, abort: true },
+);
 
 export const maxActiveSchema = z
   .number({ error: 'จำนวนคนเข้าพร้อมกันต้องเป็นตัวเลข' })

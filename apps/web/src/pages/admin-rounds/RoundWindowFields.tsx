@@ -2,8 +2,46 @@ import { MAX_ACTIVE_LIMIT } from '@club-registration/shared';
 import { CheckboxRow } from '@/components/CheckboxRow';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { QUEUE_SETTING_MESSAGES } from './round-ui';
+import { cn } from '@/lib/utils';
+import { QUEUE_SETTING_MESSAGES, windowTimeHint } from './round-ui';
 import type { WindowValues } from './round-ui';
+
+type TimeFieldProps = {
+  id: string;
+  label: string;
+  value: string;
+  onChange: (value: string) => void;
+};
+
+// A date field with the chosen time repeated under it in Thai form (Buddhist year), so a year
+// typed 543 off shows at once instead of after the round is saved.
+const TimeField = ({ id, label, value, onChange }: TimeFieldProps) => {
+  const hint = windowTimeHint(value);
+  const hintId = `${id}-hint`;
+  return (
+    <div className="space-y-1.5">
+      <Label htmlFor={id}>{label}</Label>
+      <Input
+        id={id}
+        type="datetime-local"
+        value={value}
+        onChange={(event) => onChange(event.target.value)}
+        aria-describedby={hintId}
+        aria-invalid={hint.outOfRange || undefined}
+        required
+      />
+      <p
+        id={hintId}
+        className={cn(
+          'text-sm',
+          hint.outOfRange ? 'font-medium text-destructive' : 'text-muted-foreground',
+        )}
+      >
+        {hint.text}
+      </p>
+    </div>
+  );
+};
 
 type RoundWindowFieldsProps = {
   idPrefix: string;
@@ -20,26 +58,18 @@ export const RoundWindowFields = ({ idPrefix, values, onChange }: RoundWindowFie
     // wide (the editor), not in the two narrow create cards next to each other.
     <div className="@container space-y-4">
       <div className="grid gap-4 @lg:grid-cols-2">
-        <div className="space-y-1.5">
-          <Label htmlFor={`${idPrefix}-opens-at`}>เวลาเปิด (เวลาไทย)</Label>
-          <Input
-            id={`${idPrefix}-opens-at`}
-            type="datetime-local"
-            value={values.opensAt}
-            onChange={(event) => update('opensAt')(event.target.value)}
-            required
-          />
-        </div>
-        <div className="space-y-1.5">
-          <Label htmlFor={`${idPrefix}-closes-at`}>เวลาปิด (เวลาไทย)</Label>
-          <Input
-            id={`${idPrefix}-closes-at`}
-            type="datetime-local"
-            value={values.closesAt}
-            onChange={(event) => update('closesAt')(event.target.value)}
-            required
-          />
-        </div>
+        <TimeField
+          id={`${idPrefix}-opens-at`}
+          label="เวลาเปิด (เวลาไทย)"
+          value={values.opensAt}
+          onChange={update('opensAt')}
+        />
+        <TimeField
+          id={`${idPrefix}-closes-at`}
+          label="เวลาปิด (เวลาไทย)"
+          value={values.closesAt}
+          onChange={update('closesAt')}
+        />
       </div>
       <div className="space-y-1.5">
         <Label htmlFor={`${idPrefix}-max-active`}>{QUEUE_SETTING_MESSAGES.maxActiveLabel}</Label>

@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   MAX_ACTIVE_LIMIT,
+  ROUND_YEAR_MESSAGE,
   TERM_MAX_LENGTH,
   createRoundBatchRequestSchema,
   createRoundRequestSchema,
@@ -95,6 +96,39 @@ describe('createRoundRequestSchema', () => {
 
     expect(result.success).toBe(false);
     expect(result.error?.issues.map(({ path }) => path)).toEqual([['closesAt']]);
+  });
+
+  // The browser's date field takes the Christian year; 2569 is the Buddhist year typed by habit.
+  it.each([
+    ['a Buddhist year in opensAt', { opensAt: '2569-12-01T08:00:00+07:00' }],
+    ['a Buddhist year in closesAt', { closesAt: '2569-12-01T16:00:00+07:00' }],
+    ['the first instant after 2099 in Thai time', { closesAt: '2100-01-01T00:00:00+07:00' }],
+    ['the last instant before 2000 in Thai time', { opensAt: '1999-12-31T23:59:00+07:00' }],
+  ])('refuses %s, with the year message on that field', (_case, change) => {
+    const result = createRoundRequestSchema.safeParse({
+      ...validRound,
+      opensAt: '2026-12-01T08:00:00+07:00',
+      closesAt: '2026-12-01T16:00:00+07:00',
+      ...change,
+    });
+
+    expect(result.error?.issues).toEqual([
+      expect.objectContaining({ message: ROUND_YEAR_MESSAGE, path: Object.keys(change) }),
+    ]);
+  });
+
+  it.each([
+    ['the first instant of 2000 in Thai time', '2000-01-01T00:00:00+07:00'],
+    // 16:59 UTC on the last day of 2099 is 23:59 Thai time, still inside 2099.
+    ['the last minute of 2099 in Thai time, given in UTC', '2099-12-31T16:59:00Z'],
+  ])('accepts %s', (_case, opensAt) => {
+    const result = createRoundRequestSchema.safeParse({
+      ...validRound,
+      opensAt,
+      closesAt: '2099-12-31T23:59:30+07:00',
+    });
+
+    expect(result.success).toBe(true);
   });
 
   it('compares the window as instants, not as text', () => {
@@ -197,6 +231,12 @@ describe('updateRoundRequestSchema', () => {
     const result = updateRoundRequestSchema.safeParse({ closesAt: '2099-12-02T16:00:00+07:00' });
 
     expect(result.success).toBe(true);
+  });
+
+  it('refuses half a window with a Buddhist year', () => {
+    const result = updateRoundRequestSchema.safeParse({ closesAt: '2569-12-02T16:00:00+07:00' });
+
+    expect(result.error?.issues.map(({ message }) => message)).toEqual([ROUND_YEAR_MESSAGE]);
   });
 
   it('refuses a whole window that closes before it opens', () => {
