@@ -171,6 +171,49 @@ describe('auth routes', () => {
     expect(router.state.location.pathname).toBe('/admin');
   });
 
+  // Y1: an expired session or a bookmarked link sends the user to log in, then back.
+  it('returns to the page that sent the user to log in', async () => {
+    mockApi({
+      'GET /api/auth/me': unauthorized,
+      'POST /api/auth/login': () => Response.json({ user: ADMIN }),
+    });
+    const router = renderAt('/admin/events');
+    await screen.findByRole('heading', { name: 'เข้าสู่ระบบ' });
+
+    fillLogin('demo-admin', 'chosen-password');
+
+    await waitFor(() => expect(router.state.location.pathname).toBe('/admin/events'));
+  });
+
+  it("goes to the user's own home, not back to another role's page", async () => {
+    mockApi({
+      'GET /api/auth/me': unauthorized,
+      'POST /api/auth/login': () => Response.json({ user: STUDENT }),
+      'GET /api/student/round': () => Response.json(NO_ROUND),
+    });
+    const router = renderAt('/admin/events');
+    await screen.findByRole('heading', { name: 'เข้าสู่ระบบ' });
+
+    fillLogin('demo1001', 'chosen-password');
+
+    expect(await screen.findByRole('heading', { level: 1, name: 'ชุมนุมในชั้นของฉัน' })).toBeTruthy();
+    expect(router.state.location.pathname).toBe('/student/clubs');
+  });
+
+  it('still takes a user with a pending password change to change it first', async () => {
+    mockApi({
+      'GET /api/auth/me': unauthorized,
+      'POST /api/auth/login': () => Response.json({ user: { ...ADMIN, mustChangePassword: true } }),
+    });
+    const router = renderAt('/admin/events');
+    await screen.findByRole('heading', { name: 'เข้าสู่ระบบ' });
+
+    fillLogin('demo-admin', 'initial-password');
+
+    await screen.findByRole('heading', { name: 'เปลี่ยนรหัสผ่าน' });
+    expect(router.state.location.pathname).toBe('/change-password');
+  });
+
   it('opens the club list for a signed-in student at the site root', async () => {
     mockApi({
       'GET /api/auth/me': () => Response.json({ user: STUDENT }),

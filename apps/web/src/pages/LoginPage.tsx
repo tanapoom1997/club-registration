@@ -2,7 +2,7 @@ import { ERROR_CODES, loginRequestSchema } from '@club-registration/shared';
 import { useMutation } from '@tanstack/react-query';
 import { useState } from 'react';
 import type { FormEvent } from 'react';
-import { Navigate, useNavigate } from 'react-router';
+import { Navigate, useLocation, useNavigate } from 'react-router';
 import { AUTH_FIELD_CLASS, AuthShell } from '@/components/AuthShell';
 import { FormError } from '@/components/FormError';
 import { PasswordInput } from '@/components/PasswordInput';
@@ -11,7 +11,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { advanceOnEnter } from '@/lib/advance-on-enter';
 import { ApiError, login } from '@/lib/api';
-import { landingPathFor, useSession, useSetSession } from '@/lib/session';
+import { returnPathFor, useSession, useSetSession } from '@/lib/session';
 
 const loginErrorMessage = (error: unknown): string => {
   if (error instanceof ApiError && error.code === ERROR_CODES.invalidCredentials) {
@@ -25,6 +25,8 @@ const loginErrorMessage = (error: unknown): string => {
 
 export const LoginPage = () => {
   const navigate = useNavigate();
+  // Router state is untyped; returnPathFor checks its shape before using it.
+  const state: unknown = useLocation().state;
   const setSession = useSetSession();
   const { data: currentUser } = useSession();
   const [loginId, setLoginId] = useState('');
@@ -35,11 +37,11 @@ export const LoginPage = () => {
     mutationFn: login,
     onSuccess: async (user) => {
       setSession(user);
-      await navigate(landingPathFor(user), { replace: true });
+      await navigate(returnPathFor(user, state), { replace: true });
     },
   });
 
-  if (currentUser) return <Navigate to={landingPathFor(currentUser)} replace />;
+  if (currentUser) return <Navigate to={returnPathFor(currentUser, state)} replace />;
 
   const handleSubmit = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
