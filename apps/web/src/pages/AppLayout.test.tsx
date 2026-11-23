@@ -129,8 +129,8 @@ describe('the compact app header (U4)', () => {
     const nav = screen.getByRole('navigation', { name: 'เมนูหลัก' });
     const current = within(nav).getByRole('link', { name: 'ประวัติการลงทะเบียน' });
     expect(current.getAttribute('aria-current')).toBe('page');
-    // Its right edge (5 × 100 + 100) at the row's right edge.
-    expect(scrolled).toHaveBeenCalledWith(300);
+    // Its right edge (5 × 100 + 100) 40 px short of the row's right edge, clear of the arrow fade.
+    expect(scrolled).toHaveBeenCalledWith(340);
   });
 
   it.each([

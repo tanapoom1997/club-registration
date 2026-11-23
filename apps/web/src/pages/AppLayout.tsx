@@ -12,6 +12,9 @@ import { hasMenuPage, homePathFor, useLogout, useSession } from '@/lib/session';
 import { MENUS, ROLE_LABELS } from '@/navigation';
 
 // 44 px tall on a phone (U9), the pill it was from sm up.
+// The width of the menu row's arrow fades (w-10 in ScrollFades).
+const NAV_FADE_PX = 40;
+
 const navLinkClass = ({ isActive }: { isActive: boolean }) =>
   cn(
     'inline-flex min-h-11 shrink-0 items-center rounded-full px-3.5 py-1.5 text-sm whitespace-nowrap transition-colors sm:min-h-0',
@@ -42,7 +45,8 @@ export const AppLayout = ({ role }: { role: Role }) => {
       ? 'หน้าแรก'
       : MENUS[role].find(({ path }) => pathname === `${home}/${path}`)?.label;
   useDocumentTitle(pageName);
-  // The admin's menu is wider than a phone: bring the current page's item into the row's view.
+  // The admin's menu is wider than a phone: bring the current page's item into the row's view,
+  // clear of the arrow fade at the end (X3), which would otherwise cover the item's last letters.
   // Only the row scrolls (never the page), and nothing moves when the item already shows.
   useEffect(() => {
     const nav = navRef.current;
@@ -50,8 +54,8 @@ export const AppLayout = ({ role }: { role: Role }) => {
     if (!nav || !current) return;
     const left = current.offsetLeft;
     const right = left + current.offsetWidth;
-    if (left < nav.scrollLeft || right > nav.scrollLeft + nav.clientWidth) {
-      nav.scrollLeft = right - nav.clientWidth;
+    if (left < nav.scrollLeft || right > nav.scrollLeft + nav.clientWidth - NAV_FADE_PX) {
+      nav.scrollLeft = right - nav.clientWidth + NAV_FADE_PX;
     }
   }, [pathname]);
 
@@ -152,7 +156,7 @@ export const AppLayout = ({ role }: { role: Role }) => {
               </NavLink>
             ))}
           </nav>
-          <ScrollFades {...navEdges} />
+          <ScrollFades {...navEdges} arrows />
         </div>
       </header>
       <main className={cn('mx-auto px-4 py-6 sm:py-8', width)}>
