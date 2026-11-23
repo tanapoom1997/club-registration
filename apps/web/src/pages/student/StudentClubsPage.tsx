@@ -346,6 +346,9 @@ export const StudentClubsPage = () => {
                 onChange={changeFilter}
                 announcement={announcement}
                 searchRef={searchRef}
+                admittedUntil={
+                  queue.view.kind === 'admitted' ? queue.view.admittedUntil : undefined
+                }
               />
             )}
             {/* Not a live region: a poll changes these numbers (the filter's own changes are

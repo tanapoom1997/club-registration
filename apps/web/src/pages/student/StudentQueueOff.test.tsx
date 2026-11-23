@@ -78,6 +78,10 @@ describe('student pages in a round without a queue', () => {
     expect(queueCalls(fetchMock)).toEqual([]);
     expect(queueCard()).toBeNull();
     expect(registerButton().disabled).toBe(false);
+    // No turn, so no time limit in the search bar (X2).
+    const search = screen.getByRole('search', { name: 'ค้นหาชุมนุม' });
+    expect(search.textContent).not.toContain('ได้ถึง');
+    expect(search.dataset.stickyFilter).toBe('');
   });
 
   it('lets the student register without a turn', async () => {

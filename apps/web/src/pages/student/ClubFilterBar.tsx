@@ -4,6 +4,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { CLUB_FILTER_MESSAGES } from './club-filter';
 import type { ClubFilter, SeatFilter } from './club-filter';
+import { admittedParts } from './queue-ui';
 
 const SEAT_FILTERS: readonly SeatFilter[] = Object.freeze(['all', 'free']);
 
@@ -14,6 +15,8 @@ type ClubFilterBarProps = {
   // changes the counts does not talk over the student every 5 s.
   announcement: string;
   searchRef: Ref<HTMLInputElement>;
+  // While the student holds a turn: when it ends (ISO), as on the queue card.
+  admittedUntil?: string | undefined;
 };
 
 // One row on a phone too: the list starts as high as it can (U4). The label is visually hidden
@@ -27,14 +30,16 @@ export const ClubFilterBar = ({
   onChange,
   announcement,
   searchRef,
+  admittedUntil,
 }: ClubFilterBarProps) => {
   const searchId = useId();
+  const turn = admittedUntil === undefined ? undefined : admittedParts(admittedUntil);
   const seatsName = useId();
   return (
     <div
       role="search"
       aria-label={CLUB_FILTER_MESSAGES.searchLabel}
-      data-sticky-filter=""
+      data-sticky-filter={turn === undefined ? '' : 'deadline'}
       className="space-y-2 max-sm:sticky max-sm:top-0 max-sm:z-10 max-sm:-mx-4 max-sm:border-b max-sm:border-border max-sm:bg-background/95 max-sm:px-4 max-sm:py-2 max-sm:backdrop-blur-md"
     >
       <div className="flex flex-wrap items-center gap-2">
@@ -87,6 +92,15 @@ export const ClubFilterBar = ({
           ))}
         </fieldset>
       </div>
+      {/* The turn's end, repeated where a phone still shows it once the queue card above has
+          scrolled away (X2): the time is fixed from when the turn began, and a student reading
+          club after club loses track of it. Phone only: from sm up the bar does not stick. Not a
+          live region; the queue card's status line announces the turn. */}
+      {turn && (
+        <p className="text-xs text-muted-foreground sm:hidden">
+          {turn.until} <span className="font-semibold text-foreground">{turn.time}</span>
+        </p>
+      )}
       {/* Always mounted while the list shows, so the change is announced, politely. */}
       <p role="status" className="sr-only">
         {announcement}
