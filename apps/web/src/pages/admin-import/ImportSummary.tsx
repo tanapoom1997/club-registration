@@ -7,6 +7,7 @@ import type { ReactNode } from 'react';
 import { cn } from '@/lib/utils';
 import { alertVariants } from '@/components/ui/alert';
 import { Table, TableBody, TableCell, TableHead, TableHeader } from '@/components/ui/table';
+import { BELOW_MD_QUERY, useMediaQuery } from '@/lib/media-query';
 
 const SHEET_LABELS: Readonly<Record<ImportSheet, string>> = Object.freeze({
   students: 'นักเรียน (students)',
@@ -64,41 +65,73 @@ export const SummaryTable = ({
   </Table>
 );
 
-const ErrorTable = ({ preview }: { preview: ImportPreviewResponse }) => (
-  <div className="space-y-2">
-    <h3 className={cn(alertVariants({ variant: 'danger' }), 'font-medium')}>
-      พบข้อผิดพลาด {formatCount(preview.errorCount)} รายการ ต้องแก้ไฟล์แล้วอัปโหลดใหม่
-    </h3>
-    {preview.errorCount > preview.errors.length && (
-      <p className="text-sm text-muted-foreground">
-        แสดง {formatCount(preview.errors.length)} รายการแรก
-      </p>
-    )}
-    <Table aria-label="รายการข้อผิดพลาด">
-      <TableHeader>
-        <tr>
-          <TableHead>ชีต</TableHead>
-          <TableHead className="text-right">แถว</TableHead>
-          <TableHead>คอลัมน์</TableHead>
-          <TableHead>ปัญหา</TableHead>
-        </tr>
-      </TableHeader>
-      <TableBody>
-        {preview.errors.map((error, index) => (
-          // The list is static once received, so the index is a stable key.
-          <tr key={index}>
-            <TableCell className="whitespace-nowrap">
-              {error.sheet ? SHEET_LABELS[error.sheet] : 'ทั้งไฟล์'}
-            </TableCell>
-            <TableCell className="text-right">{error.row ?? '–'}</TableCell>
-            <TableCell className="whitespace-nowrap">{error.column ?? '–'}</TableCell>
-            <TableCell>{error.message}</TableCell>
-          </tr>
-        ))}
-      </TableBody>
-    </Table>
-  </div>
+const ERROR_LIST_NAME = 'รายการข้อผิดพลาด';
+
+type ImportError = ImportPreviewResponse['errors'][number];
+
+const sheetText = (error: ImportError) => (error.sheet ? SHEET_LABELS[error.sheet] : 'ทั้งไฟล์');
+
+// Below md, on a phone or an upright tablet (X1): one card per error, where it is, then what is
+// wrong, instead of a table whose "ปัญหา" column (what to fix) sits off screen.
+const ErrorCards = ({ errors }: { errors: readonly ImportError[] }) => (
+  <ul
+    aria-label={ERROR_LIST_NAME}
+    className="divide-y divide-border rounded-2xl border border-border bg-card shadow-card"
+  >
+    {errors.map((error, index) => (
+      // The list is static once received, so the index is a stable key.
+      <li key={index} className="space-y-1 p-4">
+        <p className="flex flex-wrap gap-x-3 gap-y-0.5 text-xs text-muted-foreground">
+          <span>{sheetText(error)}</span>
+          {error.row !== null && <span>แถว {error.row}</span>}
+          {error.column !== null && <span>คอลัมน์ {error.column}</span>}
+        </p>
+        <p className="text-sm break-words">{error.message}</p>
+      </li>
+    ))}
+  </ul>
 );
+
+const ErrorTable = ({ preview }: { preview: ImportPreviewResponse }) => {
+  const narrow = useMediaQuery(BELOW_MD_QUERY);
+  return (
+    <div className="space-y-2">
+      <h3 className={cn(alertVariants({ variant: 'danger' }), 'font-medium')}>
+        พบข้อผิดพลาด {formatCount(preview.errorCount)} รายการ ต้องแก้ไฟล์แล้วอัปโหลดใหม่
+      </h3>
+      {preview.errorCount > preview.errors.length && (
+        <p className="text-sm text-muted-foreground">
+          แสดง {formatCount(preview.errors.length)} รายการแรก
+        </p>
+      )}
+      {narrow ? (
+        <ErrorCards errors={preview.errors} />
+      ) : (
+        <Table aria-label={ERROR_LIST_NAME}>
+          <TableHeader>
+            <tr>
+              <TableHead>ชีต</TableHead>
+              <TableHead className="text-right">แถว</TableHead>
+              <TableHead>คอลัมน์</TableHead>
+              <TableHead>ปัญหา</TableHead>
+            </tr>
+          </TableHeader>
+          <TableBody>
+            {preview.errors.map((error, index) => (
+              // The list is static once received, so the index is a stable key.
+              <tr key={index}>
+                <TableCell className="whitespace-nowrap">{sheetText(error)}</TableCell>
+                <TableCell className="text-right">{error.row ?? '–'}</TableCell>
+                <TableCell className="whitespace-nowrap">{error.column ?? '–'}</TableCell>
+                <TableCell>{error.message}</TableCell>
+              </tr>
+            ))}
+          </TableBody>
+        </Table>
+      )}
+    </div>
+  );
+};
 
 // children is the action area under the summary (the confirm step).
 export const ImportSummary = ({

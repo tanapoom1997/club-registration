@@ -1,6 +1,7 @@
 import type { ClassroomPasswordStatus, SessionUser } from '@club-registration/shared';
 import { cleanup, fireEvent, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { BELOW_MD_QUERY } from '@/lib/media-query';
 import { mockApi, renderAt } from '@/test-support/render-app';
 
 const ADMIN: SessionUser = {
@@ -349,5 +350,41 @@ describe('admin initial passwords page', () => {
       expect(screen.queryByRole('alertdialog')).toBeNull();
       expect(document.activeElement).toBe(classroom);
     });
+  });
+});
+
+describe('admin initial passwords page on a phone or an upright tablet (X4)', () => {
+  afterEach(() => {
+    cleanup();
+    vi.unstubAllGlobals();
+    vi.restoreAllMocks();
+  });
+
+  it('shows one card per classroom with its three counts and when it was last issued', async () => {
+    // jsdom has no viewport: this says "narrower than md" to the page, as a phone's browser would.
+    const real = window.matchMedia.bind(window);
+    vi.spyOn(window, 'matchMedia').mockImplementation((query) => ({
+      ...real(query),
+      matches: query === BELOW_MD_QUERY,
+    }));
+    mockApi({
+      'GET /api/auth/me': () => Response.json({ user: ADMIN }),
+      'GET /api/admin/students/password-status': () => Response.json({ classrooms: STATUS }),
+    });
+    renderAt('/admin/initial-passwords');
+
+    const list = await screen.findByRole('list', { name: 'สถานะรหัสผ่านรายห้อง' });
+
+    expect(screen.queryByRole('table', { name: 'สถานะรหัสผ่านรายห้อง' })).toBeNull();
+    const cards = within(list).getAllByRole('listitem');
+    expect(cards).toHaveLength(STATUS.length);
+    const [first, second] = cards;
+    expect(first?.textContent).toBe(
+      'ม.1 ห้อง 1ยังไม่เคยออกรหัส30ออกแล้ว ยังไม่เปลี่ยน0เปลี่ยนรหัสเองแล้ว0ออกรหัสล่าสุด ยังไม่เคย',
+    );
+    expect(second?.textContent).toContain('ยังไม่เคยออกรหัส2ออกแล้ว ยังไม่เปลี่ยน25เปลี่ยนรหัสเองแล้ว8');
+    expect(within(second!).getByRole('time').getAttribute('datetime')).toBe(
+      '2026-11-10T03:00:00.000Z',
+    );
   });
 });
