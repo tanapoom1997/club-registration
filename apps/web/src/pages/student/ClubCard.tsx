@@ -7,6 +7,7 @@ import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 import { WritePanel } from '@/components/WritePanel';
 import type { FollowUp, WriteState } from '@/components/WritePanel';
+import { ClubDescription } from './ClubDescription';
 import type { ClubOffer, ClubWriteKind } from './student-ui';
 
 export type ClubWrite = WriteState & { kind: ClubWriteKind; followUp?: FollowUp | undefined };
@@ -166,9 +167,7 @@ export const ClubCard = ({
         {club.advisorNames.length === 0 ? 'ยังไม่ระบุ' : club.advisorNames.join(', ')}
       </p>
       {club.description !== '' && (
-        <p className="text-sm break-words whitespace-pre-line text-muted-foreground">
-          {club.description}
-        </p>
+        <ClubDescription description={club.description} clubLabel={clubLabel(club)} />
       )}
 
       {write ? (
