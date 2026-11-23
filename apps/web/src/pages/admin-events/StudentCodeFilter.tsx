@@ -53,7 +53,7 @@ export const StudentCodeFilter = ({
         </Button>
       </div>
       <p id="events-login-id-help" className="max-w-prose text-sm text-muted-foreground">
-        พิมพ์ตัวใหญ่หรือตัวเล็กก็ได้ หรือกดรหัสนักเรียนในตารางเพื่อดูเฉพาะคนนั้น
+        พิมพ์ตัวใหญ่หรือตัวเล็กก็ได้ หรือกดรหัสนักเรียนในประวัติด้านล่างเพื่อดูเฉพาะคนนั้น
       </p>
       <FormError message={error} />
     </form>
