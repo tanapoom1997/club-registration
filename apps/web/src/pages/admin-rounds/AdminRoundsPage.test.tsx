@@ -1,6 +1,7 @@
 import type { Round, SessionUser } from '@club-registration/shared';
 import { act, cleanup, fireEvent, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import { BELOW_LG_QUERY } from '@/lib/media-query';
 import { mockApi, renderAt } from '@/test-support/render-app';
 import { ROUNDS_POLL_INTERVAL_MS } from './round-ui';
 
@@ -607,9 +608,12 @@ describe('admin rounds page focus', () => {
   it('jumps instead of scrolling smoothly when the admin asked for reduced motion', async () => {
     const round = roundFixture();
     mockRoundsApi([round]);
-    vi.spyOn(window, 'matchMedia').mockImplementation(
-      (query) => ({ matches: query === '(prefers-reduced-motion: reduce)' }) as MediaQueryList,
-    );
+    // Spread from the real one: the page also subscribes to a width query for its layout.
+    const real = window.matchMedia.bind(window);
+    vi.spyOn(window, 'matchMedia').mockImplementation((query) => ({
+      ...real(query),
+      matches: query === '(prefers-reduced-motion: reduce)',
+    }));
     const scroll = vi.spyOn(Element.prototype, 'scrollIntoView');
     renderAt('/admin/rounds');
 
@@ -731,5 +735,93 @@ describe('admin rounds page focus', () => {
         within(form).getByRole('button', { name: 'บันทึกการแก้ไข' }),
       ),
     );
+  });
+});
+
+describe('admin rounds page on a phone or a tablet (W3)', () => {
+  afterEach(() => {
+    cleanup();
+    vi.unstubAllGlobals();
+    vi.restoreAllMocks();
+  });
+
+  // jsdom has no viewport: this says "narrower than lg" to the page, as a tablet's browser would.
+  const onTablet = () => {
+    const real = window.matchMedia.bind(window);
+    vi.spyOn(window, 'matchMedia').mockImplementation((query) => ({
+      ...real(query),
+      matches: query === BELOW_LG_QUERY,
+    }));
+  };
+
+  const OPEN = roundFixture({
+    id: 1,
+    status: 'open',
+    maxActive: null,
+    clubCount: 8,
+    totalCapacity: 111,
+    totalRegistered: 25,
+    queueWaiting: 3,
+    queueAdmitted: 7,
+  });
+  const EMPTY = roundFixture({ id: 2, grade: 3 });
+
+  const cardOf = async (name: string) =>
+    (await screen.findByRole('button', { name: `แก้ไขรอบ ${name}` })).closest('li') as HTMLElement;
+
+  it('shows one card per round with times, seats, queue and its buttons, and no table', async () => {
+    onTablet();
+    mockRoundsApi([OPEN, EMPTY]);
+    renderAt('/admin/rounds');
+
+    const open = await cardOf('2569/1 ม.1');
+
+    expect(screen.queryByRole('table')).toBeNull();
+    expect(screen.getByRole('list', { name: 'รายการรอบลงทะเบียน' }).children).toHaveLength(2);
+    expect(open.textContent).toContain('เปิดอยู่');
+    expect(open.textContent).toContain('1 ธ.ค. 2569 08:00');
+    expect(open.textContent).toContain('1 ธ.ค. 2569 16:00');
+    expect(open.textContent).toContain('ลงแล้ว 25 / 111 คน');
+    expect(open.textContent).toContain('8 ชุมนุม');
+    expect(open.textContent).toContain('เข้าพร้อมกันไม่มีคิว');
+    expect(open.textContent).toContain('รอคิว3');
+    expect(open.textContent).toContain('ได้คิวแล้ว7');
+    // A round with clubs cannot be deleted, so it offers no delete button.
+    expect(within(open).queryByRole('button', { name: /^ลบรอบ/ })).toBeNull();
+    const empty = await cardOf('2569/1 ม.3');
+    expect(empty.textContent).toContain('ยังไม่มีชุมนุมในรอบนี้');
+    expect(empty.textContent).toContain('เข้าพร้อมกัน150');
+    expect(within(empty).getByRole('button', { name: 'ลบรอบ 2569/1 ม.3' })).toBeTruthy();
+  });
+
+  it('edits a round from its card and gives focus back to the card button', async () => {
+    onTablet();
+    mockRoundsApi([OPEN, EMPTY]);
+    renderAt('/admin/rounds');
+    const editButton = within(await cardOf('2569/1 ม.3')).getByRole('button', {
+      name: 'แก้ไขรอบ 2569/1 ม.3',
+    });
+
+    const form = await openEditor(EMPTY);
+    fireEvent.click(within(form).getByRole('button', { name: 'ปิด' }));
+
+    expect(screen.queryByRole('form', { name: 'แก้ไขรอบ 2569/1 ม.3' })).toBeNull();
+    expect(document.activeElement).toBe(editButton);
+  });
+
+  it('deletes an empty round from its card after the admin confirms', async () => {
+    onTablet();
+    const fetchMock = mockRoundsApi([OPEN, EMPTY]);
+    renderAt('/admin/rounds');
+
+    fireEvent.click(
+      within(await cardOf('2569/1 ม.3')).getByRole('button', { name: 'ลบรอบ 2569/1 ม.3' }),
+    );
+    fireEvent.click(screen.getByRole('button', { name: 'ยืนยันลบ' }));
+
+    await waitFor(() =>
+      expect(screen.getByRole('list', { name: 'รายการรอบลงทะเบียน' }).children).toHaveLength(1),
+    );
+    expect(fetchCalls(fetchMock, 'DELETE', '/api/admin/rounds/2')).toHaveLength(1);
   });
 });
