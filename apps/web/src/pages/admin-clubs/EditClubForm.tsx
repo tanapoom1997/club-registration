@@ -94,14 +94,14 @@ export const EditClubForm = ({ club, reveal, onSaved, onClose }: EditClubFormPro
         >
           {title}
         </CardTitle>
-        <p className="text-sm text-muted-foreground">
+        <p className="max-w-prose text-sm text-muted-foreground">
           รหัสชุมนุมเปลี่ยนไม่ได้ ลดจำนวนรับได้ไม่ต่ำกว่าจำนวนที่ลงแล้ว (ตอนนี้ลงแล้ว {club.registered} คน)
         </p>
       </CardHeader>
       <CardContent>
         <form
           aria-labelledby="edit-club-title"
-          className="space-y-4"
+          className="max-w-2xl space-y-4"
           onSubmit={handleSubmit}
           noValidate
         >

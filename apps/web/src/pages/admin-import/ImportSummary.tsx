@@ -4,6 +4,8 @@ import type {
   ImportSheet,
 } from '@club-registration/shared';
 import type { ReactNode } from 'react';
+import { cn } from '@/lib/utils';
+import { alertVariants } from '@/components/ui/alert';
 import { Table, TableBody, TableCell, TableHead, TableHeader } from '@/components/ui/table';
 
 const SHEET_LABELS: Readonly<Record<ImportSheet, string>> = Object.freeze({
@@ -16,7 +18,9 @@ const formatCount = (count: number) => count.toLocaleString('th-TH');
 
 const CountsRow = ({ label, counts }: { label: string; counts: ImportChangeCounts }) => (
   <tr>
-    <TableHead scope="row">{label}</TableHead>
+    <TableHead scope="row" className="whitespace-normal">
+      {label}
+    </TableHead>
     <TableCell className="text-right">{formatCount(counts.create)}</TableCell>
     <TableCell className="text-right">{formatCount(counts.update)}</TableCell>
     <TableCell className="text-right">{formatCount(counts.unchanged)}</TableCell>
@@ -31,7 +35,9 @@ export const SummaryTable = ({
   preview: Pick<ImportPreviewResponse, 'students' | 'clubs' | 'advisors'>;
   label: string;
 }) => (
-  <Table aria-label={label}>
+  // Narrow enough for a phone: three short numbers per row fit without scrolling sideways, with
+  // the row labels wrapping and tighter cells below sm.
+  <Table aria-label={label} className="min-w-0 max-sm:[&_td]:px-2.5 max-sm:[&_th]:px-2.5">
     <TableHeader>
       <tr>
         <TableHead>ข้อมูล</TableHead>
@@ -44,7 +50,9 @@ export const SummaryTable = ({
       <CountsRow label={SHEET_LABELS.students} counts={preview.students} />
       <CountsRow label={SHEET_LABELS.clubs} counts={preview.clubs} />
       <tr>
-        <TableHead scope="row">{SHEET_LABELS.advisors}</TableHead>
+        <TableHead scope="row" className="whitespace-normal">
+          {SHEET_LABELS.advisors}
+        </TableHead>
         <TableCell colSpan={3}>
           แทนที่รายชื่อครูของ {formatCount(preview.advisors.clubsReplaced)} ชุมนุม
           {preview.advisors.clubsUnchanged > 0 &&
@@ -58,7 +66,7 @@ export const SummaryTable = ({
 
 const ErrorTable = ({ preview }: { preview: ImportPreviewResponse }) => (
   <div className="space-y-2">
-    <h3 className="font-medium text-destructive">
+    <h3 className={cn(alertVariants({ variant: 'danger' }), 'font-medium')}>
       พบข้อผิดพลาด {formatCount(preview.errorCount)} รายการ ต้องแก้ไฟล์แล้วอัปโหลดใหม่
     </h3>
     {preview.errorCount > preview.errors.length && (
@@ -100,7 +108,10 @@ export const ImportSummary = ({
   preview: ImportPreviewResponse;
   children: ReactNode;
 }) => (
-  <section className="space-y-4" aria-labelledby="import-result-title">
+  <section
+    className="space-y-4 rounded-2xl border border-border bg-card p-4 shadow-card sm:p-6"
+    aria-labelledby="import-result-title"
+  >
     <div className="space-y-1">
       <h2 id="import-result-title" className="text-lg font-semibold">
         ผลการตรวจสอบ (ยังไม่ได้บันทึกข้อมูล)
@@ -112,7 +123,7 @@ export const ImportSummary = ({
     </div>
     <SummaryTable preview={preview} label="สรุปผลการตรวจสอบ" />
     {preview.errorCount === 0 ? (
-      <p role="status" className="text-sm text-success-foreground">
+      <p role="status" className={cn(alertVariants({ variant: 'success' }), 'font-medium')}>
         ไม่พบข้อผิดพลาด
       </p>
     ) : (

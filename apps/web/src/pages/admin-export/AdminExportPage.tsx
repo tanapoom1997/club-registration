@@ -147,7 +147,7 @@ export const AdminExportPage = () => {
     <section className="space-y-6">
       <div className="space-y-2">
         <h1 className="text-2xl font-bold">ส่งออกรายชื่อ</h1>
-        <p className="text-sm text-muted-foreground">
+        <p className="max-w-prose text-sm text-muted-foreground">
           เลือกรอบ มุมมอง ขอบเขต และรูปแบบ แล้วดาวน์โหลดเป็นไฟล์ Excel หรือ PDF ไปส่งต่อให้ครู
           ไฟล์มีชื่อนักเรียนแต่ไม่มีเบอร์โทร อีเมล หรือ LINE ของครู กรุณาส่งผ่านช่องทางของโรงเรียนและอย่าโพสต์ในที่สาธารณะ
         </p>
@@ -174,7 +174,7 @@ export const AdminExportPage = () => {
           ก่อน
         </p>
       ) : (
-        <Card className="max-w-xl p-6">
+        <Card className="max-w-xl p-4 sm:p-6">
           <form aria-label="ส่งออกรายชื่อ" className="space-y-5" onSubmit={handleSubmit} noValidate>
             <div className="space-y-1.5">
               <Label htmlFor="export-round">รอบลงทะเบียน</Label>
@@ -208,7 +208,7 @@ export const AdminExportPage = () => {
                   <input
                     type="radio"
                     name="export-view"
-                    className="mt-1"
+                    className="mt-0.5 size-5 shrink-0 accent-primary"
                     value={value}
                     checked={view === value}
                     onChange={() => choose(() => setView(value))}
@@ -272,7 +272,7 @@ export const AdminExportPage = () => {
                   <input
                     type="radio"
                     name="export-format"
-                    className="mt-1"
+                    className="mt-0.5 size-5 shrink-0 accent-primary"
                     value={value}
                     checked={format === value}
                     onChange={() => {
@@ -292,6 +292,7 @@ export const AdminExportPage = () => {
 
             <Button
               type="submit"
+              className="w-full sm:w-auto"
               disabled={!scopeChoice || scopeChoice.options.length === 0 || mutation.isPending}
             >
               {mutation.isPending ? 'กำลังสร้างไฟล์…' : 'ดาวน์โหลดรายชื่อ'}

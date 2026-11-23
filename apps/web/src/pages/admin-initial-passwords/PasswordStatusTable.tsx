@@ -10,14 +10,15 @@ export const PasswordStatusTable = ({
 }: {
   classrooms: readonly ClassroomPasswordStatus[];
 }) => (
-  <Table aria-label="สถานะรหัสผ่านรายห้อง">
+  // The count headers wrap, so a phone scrolls sideways less far.
+  <Table aria-label="สถานะรหัสผ่านรายห้อง" className="min-w-xl">
     <TableHeader>
       <tr>
         <TableHead>ชั้น</TableHead>
         <TableHead>ห้อง</TableHead>
-        <TableHead className="text-right">ยังไม่เคยออกรหัส</TableHead>
-        <TableHead className="text-right">ออกแล้ว ยังไม่เปลี่ยน</TableHead>
-        <TableHead className="text-right">เปลี่ยนรหัสเองแล้ว</TableHead>
+        <TableHead className="text-right whitespace-normal">ยังไม่เคยออกรหัส</TableHead>
+        <TableHead className="text-right whitespace-normal">ออกแล้ว ยังไม่เปลี่ยน</TableHead>
+        <TableHead className="text-right whitespace-normal">เปลี่ยนรหัสเองแล้ว</TableHead>
         <TableHead>ออกรหัสล่าสุด</TableHead>
       </tr>
     </TableHeader>

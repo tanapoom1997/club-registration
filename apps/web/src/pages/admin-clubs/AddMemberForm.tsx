@@ -55,7 +55,7 @@ export const AddMemberForm = ({ clubCode, pending, error, onSubmit }: AddMemberF
           {pending ? 'กำลังบันทึก…' : 'เพิ่มเข้าชุมนุม'}
         </Button>
       </div>
-      <p id="add-member-help" className="text-sm text-muted-foreground">
+      <p id="add-member-help" className="max-w-prose text-sm text-muted-foreground">
         เพิ่มได้เฉพาะนักเรียนชั้นเดียวกับรอบ ถ้านักเรียนถือชุมนุมอื่นในรอบนี้อยู่ ระบบจะย้ายมาชุมนุมนี้
         (ได้ที่ใหม่ก่อนจึงออกจากที่เดิม) และถ้ารอชุมนุมนี้อยู่ ชื่อจะออกจากรายชื่อรอ ชุมนุมที่เต็มต้องเพิ่มจำนวนรับก่อนด้วยปุ่ม
         "แก้ไข"

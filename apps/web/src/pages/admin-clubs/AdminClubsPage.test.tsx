@@ -208,7 +208,8 @@ describe('admin clubs page', () => {
     const cells = within(chess)
       .getAllByRole('cell')
       .map((cell) => cell.textContent);
-    expect(cells.slice(3, 6)).toEqual(['30', '12', '18']);
+    // One seats column: registered / capacity, then what is left.
+    expect(cells[3]).toBe('12 / 30เหลือ 18');
     const music = rowOf(table, 'B200');
     expect(music.textContent).toContain('ยังไม่มีครู');
     expect(music.textContent).toContain('เต็ม');
@@ -282,7 +283,7 @@ describe('admin clubs page', () => {
       const cells = within(rowOf(screen.getByRole('table'), 'A100'))
         .getAllByRole('cell')
         .map((cell) => cell.textContent);
-      expect(cells.slice(3, 6)).toEqual(['35', '12', '23']);
+      expect(cells[3]).toBe('12 / 35เหลือ 23');
     });
   });
 

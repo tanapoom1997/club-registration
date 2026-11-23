@@ -1,6 +1,7 @@
 import type { StudentClub, StudentRegistration, StudentWaitlist } from '@club-registration/shared';
 import { useEffect, useId, useRef } from 'react';
 import type { ReactNode } from 'react';
+import { SeatMeter } from '@/components/SeatMeter';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
@@ -140,29 +141,25 @@ export const ClubCard = ({
         held ? 'border-success-foreground ring-2 ring-success-foreground/20' : 'border-border',
       )}
     >
-      <div className="flex items-start justify-between gap-3">
-        <div className="min-w-0 space-y-1">
-          <p className="text-sm text-muted-foreground">{club.clubCode}</p>
-          <h3 id={headingId} className="font-semibold break-words">
-            {club.name}
-          </h3>
-          {held && <Badge variant="success">ชุมนุมของฉัน</Badge>}
-          {waiting && <Badge variant="warning">รออยู่ ลำดับที่ {waiting.position}</Badge>}
-        </div>
-        <div className="shrink-0 text-right">
-          {club.remaining === 0 ? (
-            <Badge variant="warning">เต็ม</Badge>
-          ) : (
-            <p className="text-sm">
-              เหลือ <span className="text-xl font-bold text-primary">{club.remaining}</span> ที่
-            </p>
-          )}
-          <p className="text-xs text-muted-foreground">รับ {club.capacity} คน</p>
-          {club.waitlistCount > 0 && (
-            <p className="text-xs text-warning-foreground">มีคนรอ {club.waitlistCount} คน</p>
-          )}
-        </div>
+      {/* The name gets the card's full width (long Thai names wrapped beside the seat count on a
+          phone); the seats sit on their own row under it. */}
+      <div className="min-w-0 space-y-1">
+        <p className="text-sm text-muted-foreground">{club.clubCode}</p>
+        <h3 id={headingId} className="font-semibold break-words">
+          {club.name}
+        </h3>
+        {(held || waiting) && (
+          <div className="flex flex-wrap gap-1.5">
+            {held && <Badge variant="success">ชุมนุมของฉัน</Badge>}
+            {waiting && <Badge variant="warning">รออยู่ ลำดับที่ {waiting.position}</Badge>}
+          </div>
+        )}
       </div>
+      <SeatMeter
+        capacity={club.capacity}
+        remaining={club.remaining}
+        waitlistCount={club.waitlistCount}
+      />
 
       <p className="text-sm">
         <span className="text-muted-foreground">ครูที่ปรึกษา: </span>

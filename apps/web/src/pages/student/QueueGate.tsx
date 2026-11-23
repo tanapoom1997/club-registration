@@ -5,15 +5,25 @@ import { Link } from 'react-router';
 import { FormError } from '@/components/FormError';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
+import { cn } from '@/lib/utils';
 import { useFocusRescue } from './focus-rescue';
 import { QUEUE_MESSAGES, queueHeadline, showsClubs } from './queue-ui';
-import type { Queue } from './queue-ui';
+import { AdmittedHeadline, KeepOpenWarning, queueCardClass } from './QueueText';
+import type { Queue, QueueView } from './queue-ui';
 
 const MY_REGISTRATION_PATH = '/student/my-registration';
 
 const Note = ({ children }: { children: ReactNode }) => (
   <p className="text-sm text-muted-foreground">{children}</p>
 );
+
+// The live line's content; admitted sets the deadline apart (AdmittedHeadline).
+const Headline = ({ view }: { view: QueueView }) =>
+  view.kind === 'admitted' ? (
+    <AdmittedHeadline admittedUntil={view.admittedUntil} />
+  ) : (
+    queueHeadline(view)
+  );
 
 type QueueBodyProps = {
   queue: Queue;
@@ -48,7 +58,7 @@ const QueueBody = ({ queue, registration, actionRef }: QueueBodyProps) => {
             ลำดับที่ <span className="text-4xl font-bold text-primary">{view.position}</span>
           </p>
           <p className="text-sm">{QUEUE_MESSAGES.waitingHelp}</p>
-          <p className="text-sm font-medium text-warning-foreground">{QUEUE_MESSAGES.keepOpen}</p>
+          <KeepOpenWarning />
           {lost}
         </>
       );
@@ -56,7 +66,7 @@ const QueueBody = ({ queue, registration, actionRef }: QueueBodyProps) => {
       return (
         <>
           <Note>{QUEUE_MESSAGES.admittedHelp}</Note>
-          <p className="text-sm font-medium text-warning-foreground">{QUEUE_MESSAGES.keepOpen}</p>
+          <KeepOpenWarning />
           {lost}
           <Button
             ref={actionRef}
@@ -122,7 +132,12 @@ export const QueueGate = ({ queue, registration, headingRef, children }: QueueGa
   return (
     <>
       {view.kind !== 'off' && (
-        <Card className="space-y-3 p-5" aria-label="คิวเลือกชุมนุม" role="region">
+        <Card
+          // The student's turn is the moment the whole page exists for: it gets the main colour.
+          className={cn('space-y-3 p-5', queueCardClass(view.kind === 'admitted'))}
+          aria-label="คิวเลือกชุมนุม"
+          role="region"
+        >
           {/* Always mounted while the card is, so a screen reader hears each transition. */}
           <p
             ref={statusRef}
@@ -130,7 +145,7 @@ export const QueueGate = ({ queue, registration, headingRef, children }: QueueGa
             tabIndex={-1}
             className="text-lg font-semibold focus:outline-none"
           >
-            {queueHeadline(view)}
+            <Headline view={view} />
           </p>
           <QueueBody queue={queue} registration={registration} actionRef={actionRef} />
         </Card>

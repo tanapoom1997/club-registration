@@ -125,6 +125,20 @@ describe('admin rounds page', () => {
       expect(cells(await rowOf(unqueued)).slice(7, 10)).toEqual([NO_QUEUE, '0', '4']);
     });
 
+    it('names the no-queue box by its label alone, with the help as its description', async () => {
+      const round = roundFixture();
+      mockRoundsApi([round]);
+      renderAt('/admin/rounds');
+
+      const form = await openEditor(round);
+
+      const box = within(form).getByRole('checkbox', { name: NO_QUEUE });
+      const helpId = box.getAttribute('aria-describedby');
+      expect(helpId === null ? null : document.getElementById(helpId)?.textContent).toBe(
+        'นักเรียนเลือกชุมนุมได้ทันทีโดยไม่ต้องรอคิว และไม่จำกัดจำนวนคนที่เลือกพร้อมกัน',
+      );
+    });
+
     it('refreshes the counts every 10 seconds while a round is open', async () => {
       vi.useFakeTimers({ shouldAdvanceTime: true });
       const round = roundFixture({ status: 'open' });

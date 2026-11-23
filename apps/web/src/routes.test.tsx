@@ -71,6 +71,34 @@ describe('auth routes', () => {
     expect(fetchMock.mock.calls.filter(([input]) => input === '/api/auth/login')).toEqual([]);
   });
 
+  it('moves on to the empty password field when Enter is pressed in the login ID', async () => {
+    const fetchMock = mockApi({ 'GET /api/auth/me': unauthorized });
+    renderAt('/login');
+    await screen.findByRole('heading', { name: 'เข้าสู่ระบบ' });
+    const loginId = screen.getByLabelText('รหัสนักเรียน / รหัสผู้ใช้');
+    fireEvent.change(loginId, { target: { value: 'demo1001' } });
+    loginId.focus();
+
+    const notPrevented = fireEvent.keyDown(loginId, { key: 'Enter' });
+
+    expect(notPrevented).toBe(false);
+    expect(document.activeElement).toBe(screen.getByLabelText('รหัสผ่าน'));
+    expect(fetchMock.mock.calls.filter(([input]) => input === '/api/auth/login')).toEqual([]);
+  });
+
+  it('leaves Enter to submit once the fields after it are filled', async () => {
+    mockApi({ 'GET /api/auth/me': unauthorized });
+    renderAt('/login');
+    await screen.findByRole('heading', { name: 'เข้าสู่ระบบ' });
+    const loginId = screen.getByLabelText('รหัสนักเรียน / รหัสผู้ใช้');
+    fireEvent.change(loginId, { target: { value: 'demo1001' } });
+    fireEvent.change(screen.getByLabelText('รหัสผ่าน'), { target: { value: 'a-password' } });
+
+    const notPrevented = fireEvent.keyDown(loginId, { key: 'Enter' });
+
+    expect(notPrevented).toBe(true);
+  });
+
   it('shows an error when the credentials are wrong', async () => {
     mockApi({
       'GET /api/auth/me': unauthorized,

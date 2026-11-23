@@ -2,6 +2,7 @@ import type { AdminClub, Round } from '@club-registration/shared';
 import { skipToken, useQuery } from '@tanstack/react-query';
 import { useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router';
+import { SeatBar } from '@/components/SeatMeter';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
@@ -31,6 +32,14 @@ const RoundSummary = ({ round }: { round: Round }) => {
       <span>
         {round.clubCount} ชุมนุม · ลงแล้ว {round.totalRegistered} / รับ {round.totalCapacity}
       </span>
+      {/* No clubs yet means no seats: an empty round is not a full one. */}
+      {round.totalCapacity > 0 && (
+        <SeatBar
+          className="w-32"
+          capacity={round.totalCapacity}
+          remaining={round.totalCapacity - round.totalRegistered}
+        />
+      )}
       {round.status === 'open' && (
         <span className="text-muted-foreground">
           รอบนี้เปิดอยู่ ตัวเลขอัปเดตอัตโนมัติทุก {CLUBS_POLL_INTERVAL_MS / 1000} วินาที
@@ -101,7 +110,7 @@ export const AdminClubsPage = () => {
     <section className="space-y-6">
       <div className="space-y-1">
         <h1 className="text-2xl font-bold">ชุมนุม</h1>
-        <p className="text-sm text-muted-foreground">
+        <p className="max-w-prose text-sm text-muted-foreground">
           ดูจำนวนรับ จำนวนที่ลงแล้ว และครูที่ปรึกษาของแต่ละชุมนุมในรอบ แก้ชื่อ รายละเอียด และจำนวนรับได้ ปุ่ม "รายชื่อ"
           ดูสมาชิกและรายชื่อรอ เพิ่ม ย้าย หรือนำนักเรียนออกแทนได้ทุกสถานะของรอบ เพิ่มหรือลบชุมนุมและครูทำผ่านการนำเข้า
           Excel

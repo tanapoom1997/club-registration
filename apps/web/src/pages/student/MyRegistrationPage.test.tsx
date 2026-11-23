@@ -69,7 +69,7 @@ describe('student my-registration page', () => {
     await openPage();
 
     const empty = screen.getByText('ยังไม่ได้ลงชุมนุม').parentElement as HTMLElement;
-    expect(within(empty).getByRole('link', { name: 'ชุมนุมในชั้นของฉัน' }).getAttribute('href')).toBe(
+    expect(within(empty).getByRole('link', { name: 'ไปเลือกชุมนุม' }).getAttribute('href')).toBe(
       '/student/clubs',
     );
     expect(screen.queryByRole('button', { name: CANCEL_BUTTON })).toBeNull();
@@ -303,6 +303,15 @@ describe('student my-registration page', () => {
       );
       const link = within(region).getByRole('link', { name: 'ไปเลือกชุมนุม' });
       expect(link.getAttribute('href')).toBe('/student/clubs');
+    });
+
+    it('offers one way to choose a club during the turn, not a second one in the no-club card', async () => {
+      mockStudentApi({ ticket: ADMITTED });
+      await openPage();
+      await screen.findByRole('region', { name: TURN });
+
+      expect(screen.getByText('ยังไม่ได้ลงชุมนุม')).toBeTruthy();
+      expect(screen.getAllByRole('link', { name: 'ไปเลือกชุมนุม' })).toHaveLength(1);
     });
 
     it('stops and shows nothing once the ticket ends', async () => {

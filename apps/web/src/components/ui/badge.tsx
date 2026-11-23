@@ -11,11 +11,15 @@ const badgeVariants = cva(
         success: 'bg-success text-success-foreground ring-success-foreground/20',
         warning: 'bg-warning text-warning-foreground ring-warning-foreground/20',
         neutral: 'bg-muted text-muted-foreground ring-border',
+        info: 'bg-primary-soft text-primary ring-primary/20',
+        danger: 'bg-destructive/10 text-destructive ring-destructive/20',
       },
     },
     defaultVariants: { variant: 'neutral' },
   },
 );
+
+export type BadgeVariant = NonNullable<VariantProps<typeof badgeVariants>['variant']>;
 
 type BadgeProps = ComponentProps<'span'> & VariantProps<typeof badgeVariants>;
 

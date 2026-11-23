@@ -1,7 +1,7 @@
 import type { AdminClub, ClubAdvisor } from '@club-registration/shared';
-import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Table, TableBody, TableCell, TableHead, TableHeader } from '@/components/ui/table';
+import { ClubSeats } from './ClubSeats';
 
 const contactsOf = ({ phone, email, lineId }: ClubAdvisor): string =>
   [phone, email, lineId === null ? null : `LINE ${lineId}`]
@@ -39,15 +39,13 @@ type ClubsTableProps = {
 // Names, descriptions and advisor details are rendered as text nodes only: they come from admin
 // input and the Excel file, so they must never reach the page as HTML.
 export const ClubsTable = ({ clubs, onEdit, onShowMembers }: ClubsTableProps) => (
-  <Table aria-label="รายการชุมนุม">
+  <Table aria-label="รายการชุมนุม" className="min-w-3xl">
     <TableHeader>
       <tr>
         <TableHead>รหัส</TableHead>
         <TableHead>ชุมนุม</TableHead>
         <TableHead>ครูที่ปรึกษา</TableHead>
-        <TableHead className="text-right">รับ</TableHead>
-        <TableHead className="text-right">ลงแล้ว</TableHead>
-        <TableHead className="text-right">เหลือ</TableHead>
+        <TableHead className="whitespace-nowrap">ลงแล้ว / รับ</TableHead>
         <TableHead>
           <span className="sr-only">จัดการ</span>
         </TableHead>
@@ -68,10 +66,12 @@ export const ClubsTable = ({ clubs, onEdit, onShowMembers }: ClubsTableProps) =>
           <TableCell>
             <Advisors advisors={club.advisors} />
           </TableCell>
-          <TableCell className="text-right">{club.capacity}</TableCell>
-          <TableCell className="text-right">{club.registered}</TableCell>
-          <TableCell className="text-right">
-            {club.remaining === 0 ? <Badge variant="warning">เต็ม</Badge> : club.remaining}
+          <TableCell>
+            <ClubSeats
+              capacity={club.capacity}
+              registered={club.registered}
+              remaining={club.remaining}
+            />
           </TableCell>
           {/* Thai has no spaces between words, so a narrow cell would break "รายชื่อ" in two. */}
           <TableCell className="whitespace-nowrap">

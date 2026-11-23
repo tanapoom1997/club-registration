@@ -9,7 +9,7 @@ export const HeldClubCard = ({
   registration: { club, registeredAt },
   children,
 }: HeldClubCardProps) => (
-  <Card className="space-y-2 border-success-foreground bg-linear-to-br from-success to-card p-5 ring-2 ring-success-foreground/15">
+  <Card className="space-y-2 border-success-foreground bg-linear-to-br from-success to-card p-4 ring-2 ring-success-foreground/15 sm:p-5">
     <h2 className="text-sm font-medium text-success-foreground">ชุมนุมของฉัน</h2>
     <p className="text-lg font-semibold break-words">
       {club.clubCode} {club.name}

@@ -3,11 +3,13 @@ import type { Round, UpdateRoundRequest } from '@club-registration/shared';
 import { useRef, useState } from 'react';
 import type { FormEvent } from 'react';
 import { FormError } from '@/components/FormError';
+import { alertVariants } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { updateRound } from '@/lib/api';
 import { useRevealPanel, useReturnFocus } from '@/lib/panel-focus';
 import { isoToThaiInput } from '@/lib/thai-time';
+import { cn } from '@/lib/utils';
 import { ConfirmPanel } from '@/components/ConfirmPanel';
 import { RoundWindowFields } from './RoundWindowFields';
 import { gradeLabel } from '@/lib/round-display';
@@ -91,7 +93,7 @@ export const EditRoundForm = ({ round, reveal, onDone }: EditRoundFormProps) => 
       <CardContent>
         <form
           aria-labelledby="edit-round-title"
-          className="space-y-4"
+          className="max-w-3xl space-y-4"
           onSubmit={handleSubmit}
           noValidate
         >
@@ -99,7 +101,7 @@ export const EditRoundForm = ({ round, reveal, onDone }: EditRoundFormProps) => 
           {/* Mounted always, so a note that appears while the admin types is read out. */}
           <div aria-live="polite" className="space-y-2">
             {notes.map((note) => (
-              <p key={note} className="text-sm font-medium text-warning-foreground">
+              <p key={note} className={cn(alertVariants({ variant: 'warning' }), 'font-medium')}>
                 {note}
               </p>
             ))}

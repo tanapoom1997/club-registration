@@ -138,6 +138,17 @@ describe('change password page', () => {
     expect(screen.getByRole('link', { name: 'กลับหน้าแรก' }).getAttribute('href')).toBe('/admin');
   });
 
+  it('moves Enter on to the next empty password rather than submitting a half-filled form', async () => {
+    const { fetchMock } = await openPage(STUDENT, () => Response.json({ user: STUDENT }));
+    const current = screen.getByLabelText('รหัสผ่านเดิม');
+    fireEvent.change(current, { target: { value: 'initial-password' } });
+
+    fireEvent.keyDown(current, { key: 'Enter' });
+
+    expect(document.activeElement).toBe(screen.getByLabelText(/^รหัสผ่านใหม่/));
+    expect(changeRequests(fetchMock)).toEqual([]);
+  });
+
   // README Phase 4, P4c (U16).
   describe('typing a password on a phone', () => {
     const descriptionOf = (input: HTMLElement) => {

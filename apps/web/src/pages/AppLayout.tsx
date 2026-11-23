@@ -4,7 +4,9 @@ import { Link, NavLink, Outlet, useLocation } from 'react-router';
 import { BrandMark } from '@/components/BrandMark';
 import { FormError } from '@/components/FormError';
 import { Button } from '@/components/ui/button';
+import { ScrollFades } from '@/components/ui/scroll-fades';
 import { cn } from '@/lib/utils';
+import { useScrollEdges } from '@/lib/scroll-edges';
 import { homePathFor, useLogout, useSession } from '@/lib/session';
 import { MENUS, ROLE_LABELS } from '@/navigation';
 
@@ -31,6 +33,7 @@ export const AppLayout = ({ role }: { role: Role }) => {
   const accountId = useId();
   const navRef = useRef<HTMLElement>(null);
   const { pathname } = useLocation();
+  const navEdges = useScrollEdges(navRef);
   // The admin's menu is wider than a phone: bring the current page's item into the row's view.
   // Only the row scrolls (never the page), and nothing moves when the item already shows.
   useEffect(() => {
@@ -63,10 +66,15 @@ export const AppLayout = ({ role }: { role: Role }) => {
             <span className="sr-only sm:not-sr-only">ระบบลงทะเบียนชุมนุม</span>
           </Link>
           <div className="flex min-w-0 flex-1 flex-wrap items-center justify-end gap-2 text-sm sm:flex-none sm:gap-3">
-            {/* basis-0 on a phone: it shares the row with the account button and truncates. */}
-            <span className="min-w-0 flex-1 basis-0 truncate text-right text-muted-foreground sm:flex-none sm:basis-auto sm:overflow-visible sm:text-left sm:whitespace-normal">
-              <span className="font-medium text-foreground">{user?.fullName}</span> ·{' '}
-              {ROLE_LABELS[role]}
+            {/* basis-0 on a phone: it shares the row with the account button and truncates.
+                Name over role, so neither needs a separator; the hidden comma is for screen
+                readers, which would otherwise run the two together. */}
+            <span className="flex min-w-0 flex-1 basis-0 flex-col items-end leading-tight sm:flex-none sm:basis-auto">
+              <span className="w-full truncate text-right font-medium text-foreground">
+                {user?.fullName}
+              </span>
+              <span className="sr-only">, </span>
+              <span className="text-xs text-muted-foreground">{ROLE_LABELS[role]}</span>
             </span>
             <Button
               variant="outline"
@@ -114,24 +122,28 @@ export const AppLayout = ({ role }: { role: Role }) => {
             </div>
           </div>
         </div>
-        <nav
-          ref={navRef}
-          aria-label="เมนูหลัก"
-          className={cn(
-            // py-1: the row scrolls, which clips; this keeps a focus ring whole.
-            'relative mx-auto flex gap-1 overflow-x-auto px-4 py-1 sm:flex-wrap sm:overflow-visible sm:pt-0 sm:pb-3',
-            width,
-          )}
-        >
-          <NavLink to={homePathFor(role)} end className={navLinkClass}>
-            หน้าแรก
-          </NavLink>
-          {MENUS[role].map((item) => (
-            <NavLink key={item.path} to={item.path} className={navLinkClass}>
-              {item.label}
+        {/* The fades show a phone user that the admin's menu row scrolls, and which way; the
+            scrollbar is hidden because they say the same thing without the extra height. */}
+        <div className={cn('relative mx-auto', width)}>
+          <nav
+            ref={navRef}
+            aria-label="เมนูหลัก"
+            className={cn(
+              // py-1: the row scrolls, which clips; this keeps a focus ring whole.
+              'flex gap-1 overflow-x-auto px-4 py-1 [scrollbar-width:none] sm:flex-wrap sm:overflow-visible sm:pt-0 sm:pb-3',
+            )}
+          >
+            <NavLink to={homePathFor(role)} end className={navLinkClass}>
+              หน้าแรก
             </NavLink>
-          ))}
-        </nav>
+            {MENUS[role].map((item) => (
+              <NavLink key={item.path} to={item.path} className={navLinkClass}>
+                {item.label}
+              </NavLink>
+            ))}
+          </nav>
+          <ScrollFades {...navEdges} />
+        </div>
       </header>
       <main className={cn('mx-auto px-4 py-6 sm:py-8', width)}>
         <FormError message={logoutMutation.isError ? 'ออกจากระบบไม่สำเร็จ กรุณาลองใหม่' : undefined} />

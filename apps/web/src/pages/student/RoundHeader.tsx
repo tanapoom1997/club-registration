@@ -3,12 +3,18 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { alertVariants } from '@/components/ui/alert';
+import { useNow } from '@/lib/now';
 import { formatThaiDateTime } from '@/lib/thai-time';
-import { STATUS_DISPLAY, gradeLabel } from '@/lib/round-display';
+import { STATUS_DISPLAY, gradeLabel, roundCountdown } from '@/lib/round-display';
+import { cn } from '@/lib/utils';
 import { isProfileMissing } from './student-ui';
+
+// The countdown is hours at the finest, so a minute's refresh is plenty.
+const COUNTDOWN_REFRESH_MS = 60_000;
 
 export const RoundHeader = ({ round }: { round: StudentRound }) => {
   const status = STATUS_DISPLAY[round.status];
+  const countdown = roundCountdown(round, useNow(COUNTDOWN_REFRESH_MS));
   return (
     <Card className="space-y-2 p-4">
       <div className="flex flex-wrap items-center gap-2">
@@ -17,6 +23,17 @@ export const RoundHeader = ({ round }: { round: StudentRound }) => {
         </h2>
         <Badge variant={status.variant}>{status.label}</Badge>
       </div>
+      {/* Not a live region: it changes once an hour at most and would interrupt reading. */}
+      {countdown && (
+        <p
+          className={cn(
+            'text-sm font-semibold',
+            countdown.withinHour ? 'text-warning-foreground' : 'text-primary',
+          )}
+        >
+          {countdown.text}
+        </p>
+      )}
       <dl className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-1 text-sm">
         <dt className="text-muted-foreground">เปิด</dt>
         <dd>{formatThaiDateTime(round.opensAt)} น.</dd>

@@ -52,7 +52,7 @@ describe('the compact app header (U4)', () => {
   ])('names the user and their role', async (user, role) => {
     await openHome(user);
 
-    expect(header().textContent).toContain(`${user.fullName} · ${role}`);
+    expect(header().textContent).toContain(`${user.fullName}, ${role}`);
   });
 
   it('keeps the system name as the home link, though a phone shows only the mark', async () => {

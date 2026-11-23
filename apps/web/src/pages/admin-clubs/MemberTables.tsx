@@ -33,8 +33,8 @@ const RemoveButton = ({ person, actions }: { person: Person; actions: RowActions
   </div>
 );
 
-// The row, then the confirmation (if open) spanning the whole table below it, so on a phone it
-// opens where the admin tapped.
+// The row, then the confirmation (if open) below it across the table, so on a phone it opens
+// where the admin tapped.
 const PersonRows = ({
   person,
   columns,
@@ -57,8 +57,10 @@ const PersonRows = ({
       </tr>
       {confirmation && (
         <tr>
-          <td colSpan={columns} className="px-4 pb-4">
-            {confirmation}
+          {/* Pinned to the visible part of a table that scrolls sideways on a phone, so the
+              question and its buttons are never cut off past the right edge. */}
+          <td colSpan={columns} className="pb-4">
+            <div className="sticky left-4 w-[calc(100cqw-2rem)]">{confirmation}</div>
           </td>
         </tr>
       )}

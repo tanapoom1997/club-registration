@@ -3,6 +3,7 @@ import { useQuery } from '@tanstack/react-query';
 import { useEffect, useRef, useState } from 'react';
 import type { ReactNode } from 'react';
 import { FormError } from '@/components/FormError';
+import { SeatBar } from '@/components/SeatMeter';
 import { alertVariants } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader } from '@/components/ui/card';
@@ -173,9 +174,12 @@ export const ClubMembersPanel = ({ club, round, reveal, onClose }: ClubMembersPa
             รายชื่อชุมนุม {club.clubCode} {club.name}
           </h2>
           {seats && (
-            <p className="text-sm">
-              รับ {seats.capacity} · ลงแล้ว {seats.registered} · เหลือ {seats.remaining}
-            </p>
+            <div className="max-w-56 space-y-1.5">
+              <p className="text-sm">
+                รับ {seats.capacity} · ลงแล้ว {seats.registered} · เหลือ {seats.remaining}
+              </p>
+              <SeatBar capacity={seats.capacity} remaining={seats.remaining} />
+            </div>
           )}
           {round.status === 'closed' && (
             <p className="text-sm text-muted-foreground">

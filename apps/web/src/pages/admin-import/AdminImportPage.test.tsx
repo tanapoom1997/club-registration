@@ -135,6 +135,24 @@ describe('admin import page', () => {
     expect((body.get('file') as File).name).toBe('import.xlsx');
   });
 
+  it('shows the chosen file in Thai, with the input still named by its label', async () => {
+    mockApi({
+      'GET /api/auth/me': () => Response.json({ user: ADMIN }),
+      'GET /api/admin/rounds': () => Response.json({ rounds: ROUNDS }),
+    });
+    renderAt('/admin/import');
+    await screen.findByLabelText('ภาคเรียน');
+    expect(screen.getByText('เลือกไฟล์')).toBeTruthy();
+
+    chooseFile(xlsxFile('รายชื่อสมมติ.xlsx'));
+
+    expect(screen.getByText('รายชื่อสมมติ.xlsx')).toBeTruthy();
+    expect(screen.getByText('1 KB · กดเพื่อเปลี่ยนไฟล์')).toBeTruthy();
+    expect(screen.queryByText('เลือกไฟล์')).toBeNull();
+    const input = screen.getByLabelText('ไฟล์ Excel (.xlsx)');
+    expect(input.getAttribute('type')).toBe('file');
+  });
+
   it('says so when the file has no errors', async () => {
     mockApi({
       'GET /api/auth/me': () => Response.json({ user: ADMIN }),

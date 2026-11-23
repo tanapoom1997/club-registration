@@ -32,11 +32,12 @@ export const StudentCodeFilter = ({
   return (
     <form aria-label="กรองด้วยรหัสนักเรียน" className="space-y-1.5" onSubmit={handleSubmit} noValidate>
       <Label htmlFor="events-login-id">รหัสนักเรียน</Label>
-      <div className="flex flex-wrap items-center gap-2">
+      {/* One row on a phone too: the field shrinks, its two buttons stay beside it. */}
+      <div className="flex items-center gap-2">
         <Input
           id="events-login-id"
           ref={inputRef}
-          className="max-w-60"
+          className="min-w-0 flex-1 sm:max-w-60"
           autoComplete="off"
           autoCapitalize="none"
           spellCheck={false}
@@ -44,14 +45,14 @@ export const StudentCodeFilter = ({
           value={value}
           onChange={(event) => onChange(event.target.value)}
         />
-        <Button type="submit" variant="outline">
+        <Button type="submit" variant="outline" className="shrink-0">
           กรอง
         </Button>
-        <Button type="button" variant="ghost" onClick={onClear}>
+        <Button type="button" variant="ghost" className="shrink-0" onClick={onClear}>
           ล้างรหัส
         </Button>
       </div>
-      <p id="events-login-id-help" className="text-sm text-muted-foreground">
+      <p id="events-login-id-help" className="max-w-prose text-sm text-muted-foreground">
         พิมพ์ตัวใหญ่หรือตัวเล็กก็ได้ หรือกดรหัสนักเรียนในตารางเพื่อดูเฉพาะคนนั้น
       </p>
       <FormError message={error} />

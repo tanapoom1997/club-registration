@@ -20,13 +20,13 @@ export const WaitlistCard = ({
   round,
   children,
 }: WaitlistCardProps) => (
-  <Card className="space-y-2 border-warning-foreground/40 bg-linear-to-br from-warning to-card p-5 ring-2 ring-warning-foreground/15">
+  <Card className="space-y-2 border-warning-foreground/40 bg-linear-to-br from-warning to-card p-4 ring-2 ring-warning-foreground/15 sm:p-5">
     <h2 className="text-sm font-medium text-warning-foreground">รายชื่อรอของฉัน</h2>
     <p className="text-lg font-semibold break-words">
       {club.clubCode} {club.name}
     </p>
     <p className="text-sm">
-      ลำดับที่ <span className="text-2xl font-bold text-primary">{position}</span>
+      ลำดับที่ <span className="text-2xl font-bold text-warning-foreground">{position}</span>
     </p>
     <p className="text-sm text-muted-foreground">เข้ารายชื่อรอเมื่อ {formatThaiDateTime(joinedAt)} น.</p>
     <p className="text-sm">

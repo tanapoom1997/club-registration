@@ -197,6 +197,7 @@ const bodyRows = async () =>
     .getAllByRole('row')
     .slice(1);
 const cellsOf = (row: HTMLElement) => within(row).getAllByRole('cell');
+const timeOf = (row: HTMLElement) => within(row).getByRole('time').textContent;
 const rowOf = async (id: number) => {
   const index = LOG.findIndex((entry) => entry.id === id);
   const rows = await bodyRows();
@@ -245,18 +246,15 @@ describe('AdminEventsPage', () => {
       expect(within(nav).getByRole('link', { name: /ประวัติการลงทะเบียน/ })).toBeTruthy();
       const rows = await bodyRows();
       expect(rows).toHaveLength(LOG.length);
+      // Columns: the event (what, when, which round), student, club, actor.
       expect(cellsOf(rows[0]!).map((cell) => cell.textContent)).toEqual([
-        formatThaiDateTime(LOG[0]!.createdAt),
-        'ได้ที่จากรายชื่อรอ',
-        '2569/1 ม.1',
+        `ได้ที่จากรายชื่อรอ${formatThaiDateTime(LOG[0]!.createdAt)}2569/1 ม.1`,
         `${S2.loginId}${S2.fullName}ห้อง 1/2 เลขที่ 5`,
         'จาก B200 ชุมนุมดนตรีสมมติ → A100 ชุมนุมหมากรุกสมมติ',
         `${S1.fullName}นักเรียนคนอื่นผู้ที่ทำให้มีที่ว่าง ระบบให้ที่จากรายชื่อรออัตโนมัติ`,
       ]);
       expect(within(rows[0]!).getByRole('time').getAttribute('dateTime')).toBe(LOG[0]!.createdAt);
-      expect(rows.map((row) => cellsOf(row)[0]!.textContent)).toEqual(
-        LOG.map(({ createdAt }) => formatThaiDateTime(createdAt)),
-      );
+      expect(rows.map(timeOf)).toEqual(LOG.map(({ createdAt }) => formatThaiDateTime(createdAt)));
       expect(queryOf(eventQueries[0])).toEqual({});
       expect(screen.getByText(/ห้องและเลขที่เป็นค่าปัจจุบันของนักเรียน/)).toBeTruthy();
     });
@@ -265,24 +263,25 @@ describe('AdminEventsPage', () => {
       await openPage();
 
       const rows = await bodyRows();
-      const labels = rows.map((row) => cellsOf(row)[1]!.textContent);
+      // The event cell starts with the label, then the time and the round.
+      const eventCells = rows.map((row) => cellsOf(row)[0]!.textContent);
 
-      expect(labels).toContain(EVENT_TYPE_LABELS[eventType]);
-      expect(labels).not.toContain(eventType);
+      expect(eventCells.some((text) => text.startsWith(EVENT_TYPE_LABELS[eventType]))).toBe(true);
+      expect(eventCells.join('\n')).not.toContain(eventType);
     });
 
     it('shows the club an event left and the queue a join gave up', async () => {
       await openPage();
 
-      expect(cellsOf(await rowOf(3))[4]!.textContent).toBe(
+      expect(cellsOf(await rowOf(3))[2]!.textContent).toBe(
         'จาก B200 ชุมนุมดนตรีสมมติ → A100 ชุมนุมหมากรุกสมมติ',
       );
-      expect(cellsOf(await rowOf(8))[4]!.textContent).toBe(
+      expect(cellsOf(await rowOf(8))[2]!.textContent).toBe(
         'จากรายชื่อรอ B200 ชุมนุมดนตรีสมมติ → A100 ชุมนุมหมากรุกสมมติ',
       );
-      expect(cellsOf(await rowOf(6))[4]!.textContent).toBe('C300 ชุมนุมวาดภาพสมมติ');
-      expect(cellsOf(await rowOf(1))[2]!.textContent).toBe('2569/1 ม.1');
-      expect(cellsOf(await rowOf(6))[2]!.textContent).toBe('2569/1 ม.2');
+      expect(cellsOf(await rowOf(6))[2]!.textContent).toBe('C300 ชุมนุมวาดภาพสมมติ');
+      expect(within(cellsOf(await rowOf(1))[0]!).getByText('2569/1 ม.1')).toBeTruthy();
+      expect(within(cellsOf(await rowOf(6))[0]!).getByText('2569/1 ม.2')).toBeTruthy();
     });
 
     it('shows a dash for an event without a club', async () => {
@@ -290,17 +289,17 @@ describe('AdminEventsPage', () => {
 
       const rows = await bodyRows();
 
-      expect(cellsOf(rows[1]!)[4]!.textContent).toBe('—');
+      expect(cellsOf(rows[1]!)[2]!.textContent).toBe('—');
     });
 
     it('says who acted: the student themself, an admin, or whoever freed the seat', async () => {
       await openPage();
 
-      expect(cellsOf(await rowOf(1))[5]!.textContent).toBe(`${S1.fullName}นักเรียนคนนี้เอง`);
-      const byAdmin = cellsOf(await rowOf(5))[5]!;
+      expect(cellsOf(await rowOf(1))[3]!.textContent).toBe(`${S1.fullName}นักเรียนคนนี้เอง`);
+      const byAdmin = cellsOf(await rowOf(5))[3]!;
       expect(byAdmin.textContent).toBe(`${ADMIN_ACTOR.fullName}ผู้ดูแลระบบ`);
       // The promotion names the student who cancelled, not the one promoted.
-      const promotion = cellsOf(await rowOf(10))[5]!;
+      const promotion = cellsOf(await rowOf(10))[3]!;
       expect(promotion.textContent).toContain(S1.fullName);
       expect(promotion.textContent).not.toContain(S2.fullName);
       expect(promotion.textContent).toContain('ผู้ที่ทำให้มีที่ว่าง');
@@ -309,7 +308,7 @@ describe('AdminEventsPage', () => {
     it('keeps markup in a name as text', async () => {
       await openPage();
 
-      const studentCell = cellsOf(await rowOf(2))[3]!;
+      const studentCell = cellsOf(await rowOf(2))[1]!;
 
       expect(studentCell.textContent).toContain('นักเรียนสมมติ <i>สอง</i>');
       expect(studentCell.querySelector('i')).toBeNull();
@@ -487,7 +486,7 @@ describe('AdminEventsPage', () => {
       expect(queryOf(eventQueries.at(-1))).toEqual({ before: '3' });
       expect(screen.queryByRole('button', { name: 'โหลดเพิ่ม' })).toBeNull();
       expect(document.activeElement).toBe(done);
-      expect((await bodyRows()).map((row) => cellsOf(row)[0]!.textContent)).toEqual(
+      expect((await bodyRows()).map(timeOf)).toEqual(
         LOG.map(({ createdAt }) => formatThaiDateTime(createdAt)),
       );
       expect(eventQueries).toHaveLength(3);

@@ -5,7 +5,7 @@ import { cn } from '@/lib/utils';
 
 // min-h-11 below sm: a 44 px touch target on a phone (U9) for every button, the admin's row
 // buttons included; from sm up each keeps the height its padding gives, as before.
-const buttonVariants = cva(
+export const buttonVariants = cva(
   'inline-flex min-h-11 items-center justify-center gap-2 rounded-lg px-4 py-2 text-sm font-medium sm:min-h-0 transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 active:scale-[0.98] disabled:pointer-events-none disabled:opacity-50',
   {
     variants: {

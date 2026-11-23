@@ -2,7 +2,8 @@ import type { StudentClubRef } from '@club-registration/shared';
 import { useQuery } from '@tanstack/react-query';
 import { useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router';
-import { Button } from '@/components/ui/button';
+import { Button, buttonVariants } from '@/components/ui/button';
+import { Card } from '@/components/ui/card';
 import { alertVariants } from '@/components/ui/alert';
 import { cn } from '@/lib/utils';
 import { fetchStudentRound } from '@/lib/api';
@@ -174,16 +175,25 @@ export const MyRegistrationPage = () => {
               )}
             </HeldClubCard>
           ) : (
-            <div className="space-y-2 rounded-lg border border-border bg-card p-4">
-              <p className="font-medium">ยังไม่ได้ลงชุมนุม</p>
+            <Card className="space-y-3 p-4 sm:p-5">
+              <p className="font-semibold">ยังไม่ได้ลงชุมนุม</p>
               {round.status === 'closed' ? (
                 <p className="text-sm text-muted-foreground">รอบนี้ปิดแล้ว กรุณาติดต่อครูที่ดูแลการลงทะเบียน</p>
               ) : (
-                <p className="text-sm">
-                  ดูรายการและลงชุมนุมได้ที่หน้า <ClubsLink>ชุมนุมในชั้นของฉัน</ClubsLink>
-                </p>
+                <>
+                  <p className="text-sm text-muted-foreground">
+                    ดูรายการชุมนุม ครูที่ปรึกษา และที่ว่าง แล้วลงชุมนุมที่ต้องการได้ที่หน้าเลือกชุมนุม
+                  </p>
+                  {/* The one thing to do here, so it is the main button, not a link in a sentence;
+                      left out while the queue note above already offers the same button. */}
+                  {turn.kind === 'none' && (
+                    <Link className={cn(buttonVariants(), 'w-full sm:w-auto')} to={CLUBS_PATH}>
+                      ไปเลือกชุมนุม
+                    </Link>
+                  )}
+                </>
               )}
-            </div>
+            </Card>
           )}
           {panel?.kind === 'cancel' && (
             <WritePanel
