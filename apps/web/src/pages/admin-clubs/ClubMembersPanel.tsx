@@ -5,6 +5,7 @@ import type { ReactNode } from 'react';
 import { FormError } from '@/components/FormError';
 import { SeatBar } from '@/components/SeatMeter';
 import { alertVariants } from '@/components/ui/alert';
+import { EmptyState, LoadFailed } from '@/components/StatusBlock';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader } from '@/components/ui/card';
 import { fetchClubMembers, fetchClubWaitlist } from '@/lib/api';
@@ -29,15 +30,6 @@ type RemoveKind = 'removeMember' | 'removeWaiter';
 // The confirmation that is open, with the student named when it opened and the button that
 // opened it (focus goes back there when it closes).
 type Target = { kind: RemoveKind; loginId: string; fullName: string; opener: HTMLButtonElement };
-
-const LoadFailed = ({ what, onRetry }: { what: string; onRetry: () => void }) => (
-  <div className="flex items-center gap-3" role="alert">
-    <p>โหลด{what}ไม่สำเร็จ</p>
-    <Button variant="outline" onClick={onRetry}>
-      ลองใหม่
-    </Button>
-  </div>
-);
 
 type ClubMembersPanelProps = {
   // The latest copies from the polled clubs list.
@@ -223,9 +215,12 @@ export const ClubMembersPanel = ({ club, round, reveal, onClose }: ClubMembersPa
           {membersQuery.isPending ? (
             <p className="text-muted-foreground">กำลังโหลดรายชื่อสมาชิก…</p>
           ) : membersQuery.isError ? (
-            <LoadFailed what="รายชื่อสมาชิก" onRetry={() => void membersQuery.refetch()} />
+            <LoadFailed
+              message="โหลดรายชื่อสมาชิกไม่สำเร็จ"
+              onRetry={() => void membersQuery.refetch()}
+            />
           ) : membersQuery.data.members.length === 0 ? (
-            <p className="text-muted-foreground">ยังไม่มีสมาชิก</p>
+            <EmptyState>ยังไม่มีสมาชิก</EmptyState>
           ) : (
             <MembersTable
               clubCode={club.clubCode}
@@ -242,9 +237,9 @@ export const ClubMembersPanel = ({ club, round, reveal, onClose }: ClubMembersPa
           {waitlistQuery.isPending ? (
             <p className="text-muted-foreground">กำลังโหลดรายชื่อรอ…</p>
           ) : waitlistQuery.isError ? (
-            <LoadFailed what="รายชื่อรอ" onRetry={() => void waitlistQuery.refetch()} />
+            <LoadFailed message="โหลดรายชื่อรอไม่สำเร็จ" onRetry={() => void waitlistQuery.refetch()} />
           ) : waitlistQuery.data.entries.length === 0 ? (
-            <p className="text-muted-foreground">ไม่มีคนรอ</p>
+            <EmptyState>ไม่มีคนรอ</EmptyState>
           ) : (
             <WaitlistTable
               clubCode={club.clubCode}

@@ -9,6 +9,7 @@ import { useState } from 'react';
 import type { FormEvent } from 'react';
 import { Link } from 'react-router';
 import { FormError } from '@/components/FormError';
+import { EmptyState, LoadFailed } from '@/components/StatusBlock';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
 import { Select } from '@/components/ui/select';
@@ -155,14 +156,9 @@ export const AdminImportPage = () => {
       {roundsQuery.isPending ? (
         <p className="text-muted-foreground">กำลังโหลด…</p>
       ) : roundsQuery.isError ? (
-        <div className="flex items-center gap-3" role="alert">
-          <p>โหลดรายการภาคเรียนไม่สำเร็จ</p>
-          <Button variant="outline" onClick={() => void roundsQuery.refetch()}>
-            ลองใหม่
-          </Button>
-        </div>
+        <LoadFailed message="โหลดรายการภาคเรียนไม่สำเร็จ" onRetry={() => void roundsQuery.refetch()} />
       ) : terms.length === 0 ? (
-        <p className="text-muted-foreground">
+        <EmptyState>
           ยังไม่มีรอบลงทะเบียน ให้{' '}
           <Link
             className="font-medium text-primary underline underline-offset-4"
@@ -171,7 +167,7 @@ export const AdminImportPage = () => {
             สร้างรอบ
           </Link>{' '}
           ก่อนนำเข้าชุมนุม
-        </p>
+        </EmptyState>
       ) : (
         <Card className="max-w-md p-4 sm:p-6">
           <form

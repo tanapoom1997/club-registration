@@ -6,6 +6,7 @@ import { ConfirmPanel } from '@/components/ConfirmPanel';
 import { FormError } from '@/components/FormError';
 import { SeatBar } from '@/components/SeatMeter';
 import { Badge } from '@/components/ui/badge';
+import { EmptyState, LoadFailed } from '@/components/StatusBlock';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -219,16 +220,11 @@ export const AdminRoundsPage = () => {
       {roundsQuery.isPending ? (
         <p className="text-muted-foreground">กำลังโหลด…</p>
       ) : roundsQuery.isError ? (
-        <div className="flex items-center gap-3" role="alert">
-          <p>โหลดรายการรอบไม่สำเร็จ</p>
-          <Button variant="outline" onClick={() => void roundsQuery.refetch()}>
-            ลองใหม่
-          </Button>
-        </div>
+        <LoadFailed message="โหลดรายการรอบไม่สำเร็จ" onRetry={() => void roundsQuery.refetch()} />
       ) : rounds.length === 0 ? (
-        <p className="text-muted-foreground">
+        <EmptyState>
           {termFilter === '' ? 'ยังไม่มีรอบลงทะเบียน' : `ไม่มีรอบของภาคเรียน ${termFilter}`}
-        </p>
+        </EmptyState>
       ) : (
         <RoundsTable rounds={rounds} onEdit={startEdit} onDelete={startDelete} />
       )}
