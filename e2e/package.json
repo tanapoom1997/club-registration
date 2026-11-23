@@ -9,7 +9,7 @@
   },
   "devDependencies": {
     "@playwright/test": "1.65.1",
-    "@testcontainers/postgresql": "12.2.1",
+    "@testcontainers/postgresql": "12.2.2",
     "@types/pg": "8.23.1",
     "pg": "8.23.1"
   }
