@@ -8,6 +8,7 @@ import type {
 } from '@club-registration/shared';
 import { act, cleanup, fireEvent, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import { BELOW_MD_QUERY } from '@/lib/media-query';
 import { mockApi, renderAt } from '@/test-support/render-app';
 import type { Handler } from '@/test-support/render-app';
 import {
@@ -866,5 +867,104 @@ describe('admin club members panel', () => {
 
     expect(callsTo(fetchMock, 'GET', membersPath(CHESS.id))).toHaveLength(1);
     expect(callsTo(fetchMock, 'GET', waitlistPath(CHESS.id))).toHaveLength(1);
+  });
+});
+
+describe('admin club members panel on a phone or an upright tablet (W2)', () => {
+  afterEach(() => {
+    cleanup();
+    vi.unstubAllGlobals();
+    vi.restoreAllMocks();
+  });
+
+  // jsdom has no viewport: this says "narrower than md" to the page, as a phone's browser would.
+  const onPhone = () => {
+    const real = window.matchMedia.bind(window);
+    vi.spyOn(window, 'matchMedia').mockImplementation((query) => ({
+      ...real(query),
+      matches: query === BELOW_MD_QUERY,
+    }));
+  };
+
+  const openCards = async (club: ClubBase) => {
+    await screen.findByRole('list', { name: 'รายการชุมนุม' });
+    fireEvent.click(screen.getByRole('button', { name: `รายชื่อชุมนุม ${club.clubCode}` }));
+    const panel = panelOf(club);
+    await within(panel).findByRole('list', { name: `สมาชิกชุมนุม ${club.clubCode}` });
+    await within(panel).findByRole('list', { name: `รายชื่อรอชุมนุม ${club.clubCode}` });
+    return panel;
+  };
+
+  const cardOf = (list: HTMLElement, s: Student) =>
+    within(list).getByText(s.fullName).closest('li') as HTMLElement;
+
+  it('shows one card per member and per waiter with every field, and no table', async () => {
+    onPhone();
+    mockMembersApi();
+    renderAt('/admin/clubs');
+
+    const panel = await openCards(MUSIC);
+
+    expect(within(panel).queryByRole('table')).toBeNull();
+    const members = within(panel).getByRole('list', { name: `สมาชิกชุมนุม ${MUSIC.clubCode}` });
+    expect(members.children).toHaveLength(2);
+    const two = cardOf(members, S2);
+    expect(two.textContent).toContain('demo1002 · ห้อง 1/2 เลขที่ 3');
+    expect(within(two).getByRole('time').getAttribute('datetime')).toBe(SEATED_AT);
+    expect(two.textContent).toContain('ได้จากรายชื่อรอ');
+    // An imported name is text, never markup.
+    expect(two.querySelector('i')).toBeNull();
+    expect(cardOf(members, S4).textContent).toContain('ไม่ทราบ');
+    const waiters = within(panel).getByRole('list', { name: `รายชื่อรอชุมนุม ${MUSIC.clubCode}` });
+    const first = cardOf(waiters, S1);
+    expect(first.textContent).toContain('ลำดับที่ 1');
+    expect(first.textContent).toContain('demo1001 · ห้อง 1/1 เลขที่ 1');
+    expect(within(first).getByRole('time').getAttribute('datetime')).toBe(JOINED_AT);
+    expect(first.textContent).toContain('ถือชุมนุมอยู่: A100 ชุมนุมหมากรุกสมมติ');
+    const second = cardOf(waiters, S5);
+    expect(second.textContent).toContain('ลำดับที่ 2');
+    expect(second.textContent).not.toContain('ถือชุมนุมอยู่');
+  });
+
+  it('asks inside the tapped card before removing a member, then drops the card', async () => {
+    onPhone();
+    const { fetchMock } = mockMembersApi();
+    renderAt('/admin/clubs');
+    const panel = await openCards(MUSIC);
+    const members = within(panel).getByRole('list', { name: `สมาชิกชุมนุม ${MUSIC.clubCode}` });
+    const card = cardOf(members, S4);
+
+    fireEvent.click(removeButton(card, S4));
+
+    const dialog = within(card).getByRole('alertdialog', {
+      name: new RegExp(`^ยืนยันการนำ ${S4.loginId} .* ออกจากชุมนุม `),
+    });
+    expect(document.activeElement).toBe(dialog);
+    fireEvent.click(within(dialog).getByRole('button', { name: 'ยืนยัน นำออกจากชุมนุม' }));
+
+    expect(await notice(panel)).toBe('นำ demo1004 ออกจากชุมนุม B200 ชุมนุมดนตรีสมมติ แล้ว');
+    expect(within(members).queryByText(S4.fullName)).toBeNull();
+    expect(callsTo(fetchMock, 'POST', removePath(MUSIC.id))).toHaveLength(1);
+  });
+
+  it('removes a waiter from a card', async () => {
+    onPhone();
+    const { fetchMock } = mockMembersApi();
+    renderAt('/admin/clubs');
+    const panel = await openCards(MUSIC);
+    const waiters = within(panel).getByRole('list', { name: `รายชื่อรอชุมนุม ${MUSIC.clubCode}` });
+
+    const card = cardOf(waiters, S1);
+    fireEvent.click(removeButton(card, S1));
+    fireEvent.click(
+      within(within(card).getByRole('alertdialog')).getByRole('button', {
+        name: 'ยืนยัน นำออกจากรายชื่อรอ',
+      }),
+    );
+
+    expect(await notice(panel)).toBe('นำ demo1001 ออกจากรายชื่อรอชุมนุม B200 ชุมนุมดนตรีสมมติ แล้ว');
+    expect(within(waiters).queryByText(S1.fullName)).toBeNull();
+    expect(cardOf(waiters, S5).textContent).toContain('ลำดับที่ 1');
+    expect(callsTo(fetchMock, 'POST', unwaitPath(MUSIC.id))).toHaveLength(1);
   });
 });
