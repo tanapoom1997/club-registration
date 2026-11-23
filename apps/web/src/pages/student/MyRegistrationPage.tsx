@@ -115,8 +115,9 @@ export const MyRegistrationPage = () => {
     onDismiss: closeConfirmation,
   });
 
+  // One column of cards: on a wide screen a full-width card spreads a few short lines far apart.
   return (
-    <section className="space-y-4">
+    <section className="max-w-2xl space-y-4">
       <h1 ref={headingRef} tabIndex={-1} className="text-2xl font-bold focus:outline-none">
         ผลของฉัน
       </h1>
