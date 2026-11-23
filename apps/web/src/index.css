@@ -70,6 +70,14 @@ body {
   -moz-osx-font-smoothing: grayscale;
 }
 
+/* The club search sticks to the top of a phone screen (ClubFilterBar): what the browser scrolls
+   into view there (a focused card button, a confirmation panel) stops below it, not under it. */
+@media (width < 40rem) {
+  html:has([data-sticky-filter]) {
+    scroll-padding-top: 5.5rem;
+  }
+}
+
 ::selection {
   background-color: color-mix(in oklch, var(--primary) 20%, transparent);
 }

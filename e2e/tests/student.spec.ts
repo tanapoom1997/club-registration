@@ -69,6 +69,22 @@ test('a student finds a club by name and hides the full ones under "ยังร
   await expect(list.getByRole('article').first()).toBeVisible();
 });
 
+// V1: on a phone the list is one column, so the search sticks to the top while it scrolls.
+test('on a phone the club search stays on screen while the list scrolls', async ({ page }) => {
+  await page.setViewportSize({ width: 360, height: 640 });
+  await logIn(page, STUDENTS.browses, STUDENT_LANDING);
+  const list = page.getByRole('list', { name: 'รายการชุมนุม' });
+  const search = page.getByRole('search', { name: 'ค้นหาชุมนุม' });
+  const lastClub = list.getByRole('article').last();
+
+  await lastClub.scrollIntoViewIfNeeded();
+
+  await expect(lastClub).toBeInViewport();
+  await expect(search).toBeInViewport();
+  await search.getByRole('searchbox', { name: 'ค้นหาชุมนุม' }).fill('ดน ตรี');
+  await expect(list.getByRole('article')).toHaveCount(1);
+});
+
 test('the first login asks for a new password before anything else', async ({ page }) => {
   const student = STUDENTS.firstLogin;
   const newPassword = 'e2e-student-b-chosen';
