@@ -14,13 +14,15 @@ const STUDENT: SessionUser = {
 
 const NO_ROUND = { round: null, registration: null, waitlist: null, adminChange: null };
 
-const openStudentHome = async () => {
+// The result page with no round: the club list, the student's home, would bring in the queue.
+const openStudentPage = async () => {
   mockApi({
     'GET /api/auth/me': () => Response.json({ user: STUDENT }),
     'GET /api/student/round': () => Response.json(NO_ROUND),
+    'GET /api/student/clubs': () => Response.json({ ...NO_ROUND, clubs: [] }),
   });
-  renderAt('/student');
-  return await screen.findByRole('heading', { level: 1, name: `สวัสดี ${STUDENT.fullName}` });
+  renderAt('/student/my-registration');
+  return await screen.findByRole('heading', { level: 1, name: 'ผลของฉัน' });
 };
 
 describe('moving between pages (U2)', () => {
@@ -31,9 +33,9 @@ describe('moving between pages (U2)', () => {
   });
 
   it('names the tab after the page, then the system', async () => {
-    await openStudentHome();
+    await openStudentPage();
 
-    expect(document.title).toBe('หน้าแรก · ลงทะเบียนชุมนุม');
+    expect(document.title).toBe('ผลของฉัน · ลงทะเบียนชุมนุม');
   });
 
   it('names the login page in the tab', async () => {
@@ -46,19 +48,19 @@ describe('moving between pages (U2)', () => {
   });
 
   it('leaves focus alone when the app first opens', async () => {
-    const heading = await openStudentHome();
+    const heading = await openStudentPage();
 
     expect(document.activeElement).not.toBe(heading);
   });
 
   it('moves focus to the new page heading after a menu link, and renames the tab', async () => {
-    await openStudentHome();
+    await openStudentPage();
     const nav = screen.getByRole('navigation', { name: 'เมนูหลัก' });
 
-    fireEvent.click(within(nav).getByRole('link', { name: 'ผลของฉัน' }));
+    fireEvent.click(within(nav).getByRole('link', { name: 'ชุมนุมในชั้นของฉัน' }));
 
-    const heading = await screen.findByRole('heading', { level: 1, name: 'ผลของฉัน' });
+    const heading = await screen.findByRole('heading', { level: 1, name: 'ชุมนุมในชั้นของฉัน' });
     await waitFor(() => expect(document.activeElement).toBe(heading));
-    expect(document.title).toBe('ผลของฉัน · ลงทะเบียนชุมนุม');
+    expect(document.title).toBe('ชุมนุมในชั้นของฉัน · ลงทะเบียนชุมนุม');
   });
 });

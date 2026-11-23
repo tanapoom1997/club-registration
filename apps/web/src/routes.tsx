@@ -7,6 +7,7 @@ import type { RouteObject } from 'react-router';
 import { PageLoadError, PageOutlet } from '@/components/PageOutlet';
 import { RequireSession } from '@/components/RequireSession';
 import { RootRedirect } from '@/components/RootRedirect';
+import { hasMenuPage, homePathFor } from '@/lib/session';
 import { AppLayout } from '@/pages/AppLayout';
 import { ChangePasswordPage } from '@/pages/ChangePasswordPage';
 import { HealthPage } from '@/pages/HealthPage';
@@ -72,7 +73,14 @@ const roleRoutes: RouteObject[] = ROLES.map((role) => ({
           element: <PageOutlet />,
           errorElement: <PageLoadError />,
           children: [
-            { index: true, element: <HomePage role={role} /> },
+            {
+              index: true,
+              element: hasMenuPage(role) ? (
+                <HomePage role={role} />
+              ) : (
+                <Navigate to={homePathFor(role)} replace />
+              ),
+            },
             ...MENUS[role].map((item) => ({
               path: item.path,
               element: PAGES[role][item.path] ?? <PlaceholderPage item={item} />,

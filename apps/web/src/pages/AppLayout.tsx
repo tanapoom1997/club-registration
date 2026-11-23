@@ -8,7 +8,7 @@ import { ScrollFades } from '@/components/ui/scroll-fades';
 import { useDocumentTitle } from '@/lib/page-title';
 import { cn } from '@/lib/utils';
 import { useScrollEdges } from '@/lib/scroll-edges';
-import { homePathFor, useLogout, useSession } from '@/lib/session';
+import { hasMenuPage, homePathFor, useLogout, useSession } from '@/lib/session';
 import { MENUS, ROLE_LABELS } from '@/navigation';
 
 // 44 px tall on a phone (U9), the pill it was from sm up.
@@ -35,7 +35,7 @@ export const AppLayout = ({ role }: { role: Role }) => {
   const navRef = useRef<HTMLElement>(null);
   const { pathname } = useLocation();
   const navEdges = useScrollEdges(navRef);
-  // The menu labels name the pages; the index route is the role's home.
+  // The menu labels name the pages; the index route is the admin's menu page.
   const home = `/${role}`;
   const pageName =
     pathname === home || pathname === `${home}/`
@@ -141,9 +141,11 @@ export const AppLayout = ({ role }: { role: Role }) => {
               'flex gap-1 overflow-x-auto px-4 py-1 [scrollbar-width:none] sm:flex-wrap sm:overflow-visible sm:pt-0 sm:pb-3',
             )}
           >
-            <NavLink to={homePathFor(role)} end className={navLinkClass}>
-              หน้าแรก
-            </NavLink>
+            {hasMenuPage(role) && (
+              <NavLink to={homePathFor(role)} end className={navLinkClass}>
+                หน้าแรก
+              </NavLink>
+            )}
             {MENUS[role].map((item) => (
               <NavLink key={item.path} to={item.path} className={navLinkClass}>
                 {item.label}

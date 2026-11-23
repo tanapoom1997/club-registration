@@ -20,13 +20,22 @@ const ADMIN: SessionUser = {
   mustChangePassword: false,
 };
 
+const NO_ROUND = { round: null, registration: null, waitlist: null, adminChange: null };
+
+// The admin's menu page, or the student's result page with no round (their home, the club list,
+// would bring in the queue, which these tests are not about).
 const openHome = async (user: SessionUser) => {
   const fetchMock = mockApi({
     'GET /api/auth/me': () => Response.json({ user }),
+    'GET /api/student/round': () => Response.json(NO_ROUND),
     'POST /api/auth/logout': () => new Response(null, { status: 204 }),
   });
-  const router = renderAt(`/${user.role}`);
-  await screen.findByRole('heading', { name: `สวัสดี ${user.fullName}` });
+  const student = user.role === 'student';
+  const router = renderAt(student ? '/student/my-registration' : `/${user.role}`);
+  await screen.findByRole('heading', {
+    level: 1,
+    name: student ? 'ผลของฉัน' : `สวัสดี ${user.fullName}`,
+  });
   return { fetchMock, router };
 };
 
@@ -59,7 +68,7 @@ describe('the compact app header (U4)', () => {
     await openHome(STUDENT);
 
     const home = within(header()).getByRole('link', { name: 'ระบบลงทะเบียนชุมนุม' });
-    expect(home.getAttribute('href')).toBe('/student');
+    expect(home.getAttribute('href')).toBe('/student/clubs');
   });
 
   it('puts change password and logout behind the account button, closed at first', async () => {
@@ -124,14 +133,31 @@ describe('the compact app header (U4)', () => {
     expect(scrolled).toHaveBeenCalledWith(300);
   });
 
-  it('keeps one main menu with every page of the role', async () => {
-    await openHome(STUDENT);
+  it.each([
+    [STUDENT, ['ชุมนุมในชั้นของฉัน', 'ผลของฉัน']],
+    [
+      ADMIN,
+      [
+        'หน้าแรก',
+        'รอบลงทะเบียน',
+        'นำเข้า Excel',
+        'ชุมนุม',
+        'ส่งออกรายชื่อ',
+        'ประวัติการลงทะเบียน',
+        'รหัสผ่านเริ่มต้น',
+      ],
+    ],
+  ])(
+    'keeps one main menu with every page of the role (a student has no menu page, U3)',
+    async (user, labels) => {
+      await openHome(user);
 
-    const nav = screen.getByRole('navigation', { name: 'เมนูหลัก' });
-    expect(
-      within(nav)
-        .getAllByRole('link')
-        .map((link) => link.textContent),
-    ).toEqual(['หน้าแรก', 'ชุมนุมในชั้นของฉัน', 'ผลของฉัน']);
-  });
+      const nav = screen.getByRole('navigation', { name: 'เมนูหลัก' });
+      expect(
+        within(nav)
+          .getAllByRole('link')
+          .map((link) => link.textContent),
+      ).toEqual(labels);
+    },
+  );
 });

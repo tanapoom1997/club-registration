@@ -1,6 +1,6 @@
 import { expect, test } from '@playwright/test';
 import { ADMIN, OPEN_CLUB, STUDENTS, TERM } from '../fixtures.js';
-import { STUDENT_HOME, STUDENT_LANDING, logIn } from './helpers.js';
+import { STUDENT_LANDING, logIn } from './helpers.js';
 
 test('a visitor without a session is sent to the login page', async ({ page }) => {
   await page.goto('/student/clubs');
@@ -13,7 +13,7 @@ test('a student who opens an admin page is sent to their own home', async ({ pag
 
   await page.goto('/admin/rounds');
 
-  await expect(page).toHaveURL(STUDENT_HOME);
+  await expect(page).toHaveURL(STUDENT_LANDING);
 });
 
 test('an admin sees the round and its clubs', async ({ page }) => {

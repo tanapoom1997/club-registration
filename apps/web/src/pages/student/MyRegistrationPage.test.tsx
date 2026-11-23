@@ -376,7 +376,7 @@ describe('student my-registration page', () => {
       const beats = callsTo(fetchMock, 'POST', QUEUE_HEARTBEAT_PATH).length;
 
       await act(async () => {
-        await router.navigate('/student');
+        await router.navigate('/change-password');
       });
       await act(async () => {
         await vi.advanceTimersByTimeAsync(60_000);

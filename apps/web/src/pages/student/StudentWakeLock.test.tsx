@@ -110,7 +110,7 @@ describe('keeping the screen on while the student holds a queue ticket', () => {
       await waitFor(() => expect(lock.live()).toHaveLength(1));
 
       await act(async () => {
-        await router.navigate('/student');
+        await router.navigate('/change-password');
       });
 
       await waitFor(() => expect(lock.live()).toHaveLength(0));

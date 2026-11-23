@@ -53,7 +53,19 @@ const signedInAs = (user: SessionUser) =>
   mockApi({
     'GET /api/auth/me': () => Response.json({ user }),
     'GET /api/admin/rounds': () => Response.json({ rounds: [] }),
+    'GET /api/student/clubs': () =>
+      Response.json({
+        round: null,
+        registration: null,
+        waitlist: null,
+        adminChange: null,
+        clubs: [],
+      }),
   });
+
+// A student's home is the club list (U3).
+const studentHome = async () =>
+  await screen.findByRole('heading', { level: 1, name: 'ชุมนุมในชั้นของฉัน' });
 
 describe('lazily loaded pages', () => {
   afterEach(() => {
@@ -90,11 +102,20 @@ describe('lazily loaded pages', () => {
     expect(reload).toHaveBeenCalledOnce();
   });
 
+  // Before the student tests: they land on the club list, and a module loads once per file.
+  it('does not download a student page for an admin sent back to the admin home', async () => {
+    signedInAs(ADMIN);
+    renderAt('/student/clubs');
+
+    await screen.findByRole('heading', { name: `สวัสดี ${ADMIN.fullName}` });
+    expect(pages.studentLoads).toBe(0);
+  });
+
   it('does not download an admin page for a student sent back to the student home', async () => {
     signedInAs(STUDENT);
     renderAt('/admin/import');
 
-    await screen.findByRole('heading', { name: `สวัสดี ${STUDENT.fullName}` });
+    await studentHome();
     expect(pages.importLoads).toBe(0);
   });
 
@@ -102,7 +123,7 @@ describe('lazily loaded pages', () => {
     signedInAs(STUDENT);
     renderAt('/admin/events');
 
-    await screen.findByRole('heading', { name: `สวัสดี ${STUDENT.fullName}` });
+    await studentHome();
     expect(pages.eventsLoads).toBe(0);
   });
 
@@ -113,13 +134,5 @@ describe('lazily loaded pages', () => {
     expect(await screen.findByRole('heading', { level: 1, name: 'ประวัติการลงทะเบียน' })).toBeTruthy();
     expect(pages.eventsLoads).toBe(1);
     expect(fetchMock).toHaveBeenCalledWith('/api/admin/events', { method: 'GET' });
-  });
-
-  it('does not download a student page for an admin sent back to the admin home', async () => {
-    signedInAs(ADMIN);
-    renderAt('/student/clubs');
-
-    await screen.findByRole('heading', { name: `สวัสดี ${ADMIN.fullName}` });
-    expect(pages.studentLoads).toBe(0);
   });
 });
