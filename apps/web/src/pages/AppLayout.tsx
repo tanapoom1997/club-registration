@@ -61,7 +61,7 @@ export const AppLayout = ({ role }: { role: Role }) => {
 
   return (
     <div className="min-h-dvh">
-      <header className="z-10 border-b border-border bg-card/80 backdrop-blur-md sm:sticky sm:top-0">
+      <header className="z-10 border-b border-border bg-card/80 backdrop-blur-md tall:sticky tall:top-0">
         <div
           className={cn(
             // items-start: the mark stays on the first row when the account panel opens under it.

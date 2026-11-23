@@ -2,6 +2,22 @@
 /* Self-hosted so it stays inside the page CSP (font-src 'self') and no student IP goes to a font CDN. */
 @import '@fontsource-variable/anuphan';
 
+/* Which bar sticks to the top of the screen (Y2). A screen at least sm wide and 30rem tall keeps
+   the header in view; anything else is "compact": a phone held upright (narrow) or on its side
+   (short), where a 115px header would take a third of a 390px-tall screen. There the club
+   search sticks instead (V1), one row high. */
+@custom-variant tall {
+  @media (width >= 40rem) and (height >= 30rem) {
+    @slot;
+  }
+}
+
+@custom-variant compact {
+  @media (width < 40rem), (height < 30rem) {
+    @slot;
+  }
+}
+
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
@@ -72,7 +88,7 @@ body {
 
 /* The club search sticks to the top of a phone screen (ClubFilterBar): what the browser scrolls
    into view there (a focused card button, a confirmation panel) stops below it, not under it. */
-@media (width < 40rem) {
+@media (width < 40rem), (height < 30rem) {
   html:has([data-sticky-filter]) {
     scroll-padding-top: 5.5rem;
   }
