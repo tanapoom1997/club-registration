@@ -1,5 +1,5 @@
-import { Suspense } from 'react';
-import { Outlet, useLocation } from 'react-router';
+import { Suspense, useEffect } from 'react';
+import { NavigationType, Outlet, useLocation, useNavigationType } from 'react-router';
 import { Button } from '@/components/ui/button';
 
 // Where the lazily loaded pages render inside the layout. Keyed by path so every navigation gets a
@@ -17,8 +17,29 @@ export const PageOutlet = () => {
       }
     >
       <Outlet />
+      <FocusHeadingOnNavigate />
     </Suspense>
   );
+};
+
+// A single-page app has no page load for a screen reader to announce, and focus stays on the menu
+// link that was clicked. After an in-app navigation (a link, or the redirect after login), focus
+// moves to the new page's h1 so the page that opened is read out and Tab carries on from its top.
+// Not on the first load or Back/Forward (POP): there the browser's own focus is left alone.
+// Inside the Suspense boundary, so it runs once the page itself has rendered, not its fallback.
+const FocusHeadingOnNavigate = () => {
+  const navigationType = useNavigationType();
+  useEffect(() => {
+    if (navigationType === NavigationType.Pop) return;
+    const heading = document.querySelector<HTMLElement>('main h1');
+    if (!heading) return;
+    if (!heading.hasAttribute('tabindex')) {
+      heading.tabIndex = -1;
+      heading.classList.add('focus:outline-none');
+    }
+    heading.focus({ preventScroll: true });
+  }, [navigationType]);
+  return null;
 };
 
 // Route error element for the pages. The usual cause is a page file that no longer exists: a
