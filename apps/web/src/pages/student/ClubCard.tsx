@@ -138,7 +138,9 @@ export const ClubCard = ({
     <article
       aria-labelledby={headingId}
       className={cn(
-        'space-y-3 rounded-2xl border bg-card p-5 shadow-card transition-shadow hover:shadow-card-hover',
+        // A column that fills its grid cell, with the action pushed to the bottom: two cards side by
+        // side have their buttons on one line however long either description is (W4).
+        'flex h-full flex-col gap-3 rounded-2xl border bg-card p-5 shadow-card transition-shadow hover:shadow-card-hover',
         held ? 'border-success-foreground ring-2 ring-success-foreground/20' : 'border-border',
       )}
     >
@@ -170,29 +172,33 @@ export const ClubCard = ({
         <ClubDescription description={club.description} clubLabel={clubLabel(club)} />
       )}
 
-      {write ? (
-        <WritePanel
-          // A follow-up (club_full → waitlist) opens a new confirmation that takes focus again.
-          key={write.kind}
-          state={write}
-          followUp={write.followUp}
-          {...panelText(write.kind, club, registration, waitlist)}
-        />
-      ) : (
-        offer !== 'none' && (
-          <Button
-            ref={actionRef}
-            // Only a first seat is the main action. Once the student holds a club, moving is an
-            // option on every other card, and a wall of solid buttons would push it.
-            variant={offer === 'register' ? 'primary' : 'outline'}
-            className="w-full sm:w-auto"
-            aria-label={`${ACTION_TEXT[offer]} ${clubLabel(club)}`}
-            disabled={!enabled}
-            onClick={() => onStart(offer)}
-          >
-            {ACTION_TEXT[offer]}
-          </Button>
-        )
+      {(write !== undefined || offer !== 'none') && (
+        <div className="mt-auto">
+          {write ? (
+            <WritePanel
+              // A follow-up (club_full → waitlist) opens a new confirmation that takes focus again.
+              key={write.kind}
+              state={write}
+              followUp={write.followUp}
+              {...panelText(write.kind, club, registration, waitlist)}
+            />
+          ) : (
+            offer !== 'none' && (
+              <Button
+                ref={actionRef}
+                // Only a first seat is the main action. Once the student holds a club, moving is an
+                // option on every other card, and a wall of solid buttons would push it.
+                variant={offer === 'register' ? 'primary' : 'outline'}
+                className="w-full sm:w-auto"
+                aria-label={`${ACTION_TEXT[offer]} ${clubLabel(club)}`}
+                disabled={!enabled}
+                onClick={() => onStart(offer)}
+              >
+                {ACTION_TEXT[offer]}
+              </Button>
+            )
+          )}
+        </div>
       )}
     </article>
   );
