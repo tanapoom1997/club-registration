@@ -5,6 +5,7 @@ import { useState } from 'react';
 import type { FormEvent } from 'react';
 import { Link } from 'react-router';
 import { FormError } from '@/components/FormError';
+import { EmptyState, LoadFailed } from '@/components/StatusBlock';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
 import { Select } from '@/components/ui/select';
@@ -156,14 +157,9 @@ export const AdminExportPage = () => {
       {roundsQuery.isPending ? (
         <p className="text-muted-foreground">กำลังโหลด…</p>
       ) : roundsQuery.isError ? (
-        <div className="flex items-center gap-3" role="alert">
-          <p>โหลดรายการรอบไม่สำเร็จ</p>
-          <Button variant="outline" onClick={() => void roundsQuery.refetch()}>
-            ลองใหม่
-          </Button>
-        </div>
+        <LoadFailed message="โหลดรายการรอบไม่สำเร็จ" onRetry={() => void roundsQuery.refetch()} />
       ) : rounds.length === 0 ? (
-        <p className="text-muted-foreground">
+        <EmptyState>
           ยังไม่มีรอบลงทะเบียน ให้{' '}
           <Link
             className="font-medium text-primary underline underline-offset-4"
@@ -172,7 +168,7 @@ export const AdminExportPage = () => {
             สร้างรอบ
           </Link>{' '}
           ก่อน
-        </p>
+        </EmptyState>
       ) : (
         <Card className="max-w-xl p-4 sm:p-6">
           <form aria-label="ส่งออกรายชื่อ" className="space-y-5" onSubmit={handleSubmit} noValidate>
@@ -226,18 +222,16 @@ export const AdminExportPage = () => {
             {roundId === undefined ? null : scopeQuery.isPending ? (
               <p className="text-muted-foreground">กำลังโหลดตัวเลือก…</p>
             ) : scopeQuery.isError || !scopeChoice ? (
-              <div className="flex items-center gap-3" role="alert">
-                <p>โหลดรายการ{view === 'club' ? 'ชุมนุม' : 'ห้อง'}ไม่สำเร็จ</p>
-                <Button type="button" variant="outline" onClick={() => void scopeQuery.refetch()}>
-                  ลองใหม่
-                </Button>
-              </div>
+              <LoadFailed
+                message={`โหลดรายการ${view === 'club' ? 'ชุมนุม' : 'ห้อง'}ไม่สำเร็จ`}
+                onRetry={() => void scopeQuery.refetch()}
+              />
             ) : scopeChoice.options.length === 0 ? (
-              <p className="text-muted-foreground">
+              <EmptyState>
                 {view === 'club'
                   ? 'รอบนี้ยังไม่มีชุมนุม เพิ่มได้จากการนำเข้า Excel'
                   : 'ชั้นของรอบนี้ยังไม่มีนักเรียน เพิ่มได้จากการนำเข้า Excel'}
-              </p>
+              </EmptyState>
             ) : (
               <div className="space-y-1.5">
                 <Label htmlFor="export-scope">ขอบเขต</Label>

@@ -1,12 +1,14 @@
 import type { StudentRound } from '@club-registration/shared';
 import { Badge } from '@/components/ui/badge';
-import { Button } from '@/components/ui/button';
+import { EmptyState, LoadFailed } from '@/components/StatusBlock';
 import { Card } from '@/components/ui/card';
 import { alertVariants } from '@/components/ui/alert';
 import { useNow } from '@/lib/now';
 import { formatThaiDateTime } from '@/lib/thai-time';
 import { STATUS_DISPLAY, gradeLabel, roundCountdown } from '@/lib/round-display';
 import { cn } from '@/lib/utils';
+import { StudentSkeleton } from './StudentSkeleton';
+import type { SkeletonShape } from './StudentSkeleton';
 import { isProfileMissing } from './student-ui';
 
 // The countdown is hours at the finest, so a minute's refresh is plenty.
@@ -44,11 +46,17 @@ export const RoundHeader = ({ round }: { round: StudentRound }) => {
   );
 };
 
-type LoadStateProps = { error: unknown; isPending: boolean; onRetry: () => void };
+type LoadStateProps = {
+  error: unknown;
+  isPending: boolean;
+  onRetry: () => void;
+  // The outline drawn while loading, shaped like what will replace it.
+  skeleton: SkeletonShape;
+};
 
 // What a student page shows before it has any data to render.
-export const StudentLoadState = ({ error, isPending, onRetry }: LoadStateProps) => {
-  if (isPending) return <p className="text-muted-foreground">กำลังโหลด…</p>;
+export const StudentLoadState = ({ error, isPending, onRetry, skeleton }: LoadStateProps) => {
+  if (isPending) return <StudentSkeleton shape={skeleton} />;
   if (isProfileMissing(error)) {
     return (
       <p className={alertVariants({ variant: 'warning' })} role="alert">
@@ -56,18 +64,9 @@ export const StudentLoadState = ({ error, isPending, onRetry }: LoadStateProps) 
       </p>
     );
   }
-  return (
-    <div className="flex flex-wrap items-center gap-3" role="alert">
-      <p>โหลดข้อมูลไม่สำเร็จ</p>
-      <Button variant="outline" onClick={onRetry}>
-        ลองใหม่
-      </Button>
-    </div>
-  );
+  return <LoadFailed message="โหลดข้อมูลไม่สำเร็จ" onRetry={onRetry} />;
 };
 
 export const NoRound = () => (
-  <p className="rounded-md border border-border bg-card p-4 text-muted-foreground">
-    ยังไม่มีรอบลงทะเบียนของชั้นนี้ เมื่อโรงเรียนเปิดรอบแล้วจะแสดงที่หน้านี้
-  </p>
+  <EmptyState>ยังไม่มีรอบลงทะเบียนของชั้นนี้ เมื่อโรงเรียนเปิดรอบแล้วจะแสดงที่หน้านี้</EmptyState>
 );

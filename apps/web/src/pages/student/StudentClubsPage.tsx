@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router';
 import { FormError } from '@/components/FormError';
 import { alertVariants } from '@/components/ui/alert';
+import { EmptyState } from '@/components/StatusBlock';
 import { Button } from '@/components/ui/button';
 import { fetchStudentClubs, fetchStudentRound } from '@/lib/api';
 import { formatThaiDateTime } from '@/lib/thai-time';
@@ -239,6 +240,7 @@ export const StudentClubsPage = () => {
           error={roundQuery.error}
           isPending={roundQuery.isPending}
           onRetry={() => void roundQuery.refetch()}
+          skeleton="clubs-page"
         />
       ) : !round ? (
         <NoRound />
@@ -326,6 +328,7 @@ export const StudentClubsPage = () => {
                 // A queue_required is followed by the queue card's own state, not an error here.
                 isPending={clubsQuery.isPending || isQueueRequired(clubsQuery.error)}
                 onRetry={() => void clubsQuery.refetch()}
+                skeleton="clubs"
               />
             ) : (
               <h2
@@ -336,7 +339,7 @@ export const StudentClubsPage = () => {
                 รายการชุมนุม ({clubs.length})
               </h2>
             )}
-            {clubs?.length === 0 && <p className="text-muted-foreground">รอบนี้ยังไม่มีชุมนุม</p>}
+            {clubs?.length === 0 && <EmptyState>รอบนี้ยังไม่มีชุมนุม</EmptyState>}
             {clubs !== undefined && clubs.length > 0 && (
               <ClubFilterBar
                 filter={filter}

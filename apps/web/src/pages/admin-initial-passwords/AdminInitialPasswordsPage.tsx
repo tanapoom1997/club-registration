@@ -7,6 +7,7 @@ import { Link } from 'react-router';
 import { CheckboxRow } from '@/components/CheckboxRow';
 import { ConfirmPanel } from '@/components/ConfirmPanel';
 import { FormError } from '@/components/FormError';
+import { EmptyState, LoadFailed } from '@/components/StatusBlock';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
 import { Select } from '@/components/ui/select';
@@ -151,14 +152,9 @@ export const AdminInitialPasswordsPage = () => {
       {statusQuery.isPending ? (
         <p className="text-muted-foreground">กำลังโหลด…</p>
       ) : statusQuery.isError ? (
-        <div className="flex items-center gap-3" role="alert">
-          <p>โหลดสถานะรหัสผ่านไม่สำเร็จ</p>
-          <Button variant="outline" onClick={() => void statusQuery.refetch()}>
-            ลองใหม่
-          </Button>
-        </div>
+        <LoadFailed message="โหลดสถานะรหัสผ่านไม่สำเร็จ" onRetry={() => void statusQuery.refetch()} />
       ) : classrooms.length === 0 || !scope ? (
-        <p className="text-muted-foreground">
+        <EmptyState>
           ยังไม่มีนักเรียนในระบบ ให้{' '}
           <Link
             className="font-medium text-primary underline underline-offset-4"
@@ -167,7 +163,7 @@ export const AdminInitialPasswordsPage = () => {
             นำเข้า Excel
           </Link>{' '}
           ก่อน
-        </p>
+        </EmptyState>
       ) : (
         <>
           <Card className="max-w-md p-4 sm:p-6">

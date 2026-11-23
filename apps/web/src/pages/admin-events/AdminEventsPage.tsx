@@ -1,6 +1,7 @@
 import { loginIdSchema } from '@club-registration/shared';
 import { skipToken, useInfiniteQuery, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useRef, useState } from 'react';
+import { EmptyState, LoadFailed } from '@/components/StatusBlock';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
 import { Select } from '@/components/ui/select';
@@ -253,14 +254,12 @@ export const AdminEventsPage = () => {
           กำลังโหลดประวัติ…
         </p>
       ) : eventsQuery.isError && events.length === 0 && !eventsQuery.isFetchNextPageError ? (
-        <div className="flex items-center gap-3" role="alert">
-          <p>{eventsErrorMessage(eventsQuery.error)}</p>
-          <Button variant="outline" onClick={() => void eventsQuery.refetch()}>
-            ลองใหม่
-          </Button>
-        </div>
+        <LoadFailed
+          message={eventsErrorMessage(eventsQuery.error)}
+          onRetry={() => void eventsQuery.refetch()}
+        />
       ) : events.length === 0 ? (
-        <p className="text-muted-foreground">ไม่มีเหตุการณ์ตามตัวกรองนี้</p>
+        <EmptyState>ไม่มีเหตุการณ์ตามตัวกรองนี้</EmptyState>
       ) : (
         <div className="space-y-3">
           <ul

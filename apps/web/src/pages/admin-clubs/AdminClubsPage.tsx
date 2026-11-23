@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router';
 import { SeatBar } from '@/components/SeatMeter';
 import { Badge } from '@/components/ui/badge';
-import { Button } from '@/components/ui/button';
+import { EmptyState, LoadFailed } from '@/components/StatusBlock';
 import { Label } from '@/components/ui/label';
 import { Select } from '@/components/ui/select';
 import { fetchRoundClubs, fetchRounds } from '@/lib/api';
@@ -120,14 +120,9 @@ export const AdminClubsPage = () => {
       {roundsQuery.isPending ? (
         <p className="text-muted-foreground">กำลังโหลด…</p>
       ) : roundsQuery.isError ? (
-        <div className="flex items-center gap-3" role="alert">
-          <p>โหลดรายการรอบไม่สำเร็จ</p>
-          <Button variant="outline" onClick={() => void roundsQuery.refetch()}>
-            ลองใหม่
-          </Button>
-        </div>
+        <LoadFailed message="โหลดรายการรอบไม่สำเร็จ" onRetry={() => void roundsQuery.refetch()} />
       ) : rounds.length === 0 ? (
-        <p className="text-muted-foreground">
+        <EmptyState>
           ยังไม่มีรอบลงทะเบียน ให้{' '}
           <Link
             className="font-medium text-primary underline underline-offset-4"
@@ -136,7 +131,7 @@ export const AdminClubsPage = () => {
             สร้างรอบ
           </Link>{' '}
           ก่อน
-        </p>
+        </EmptyState>
       ) : (
         <div className="max-w-md space-y-1.5">
           <Label htmlFor="clubs-round">รอบลงทะเบียน</Label>
@@ -157,12 +152,7 @@ export const AdminClubsPage = () => {
       {roundId === undefined ? null : clubsQuery.isPending ? (
         <p className="text-muted-foreground">กำลังโหลดรายการชุมนุม…</p>
       ) : clubsQuery.isError ? (
-        <div className="flex items-center gap-3" role="alert">
-          <p>โหลดรายการชุมนุมไม่สำเร็จ</p>
-          <Button variant="outline" onClick={() => void clubsQuery.refetch()}>
-            ลองใหม่
-          </Button>
-        </div>
+        <LoadFailed message="โหลดรายการชุมนุมไม่สำเร็จ" onRetry={() => void clubsQuery.refetch()} />
       ) : (
         <div className="space-y-4">
           <RoundSummary round={clubsQuery.data.round} />
@@ -172,7 +162,7 @@ export const AdminClubsPage = () => {
             </p>
           )}
           {clubs.length === 0 ? (
-            <p className="text-muted-foreground">
+            <EmptyState>
               รอบนี้ยังไม่มีชุมนุม เพิ่มได้จาก{' '}
               <Link
                 className="font-medium text-primary underline underline-offset-4"
@@ -180,7 +170,7 @@ export const AdminClubsPage = () => {
               >
                 นำเข้า Excel
               </Link>
-            </p>
+            </EmptyState>
           ) : (
             <ClubsTable
               clubs={clubs}

@@ -5,6 +5,7 @@ import { BrandMark } from '@/components/BrandMark';
 import { FormError } from '@/components/FormError';
 import { Button } from '@/components/ui/button';
 import { ScrollFades } from '@/components/ui/scroll-fades';
+import { useDocumentTitle } from '@/lib/page-title';
 import { cn } from '@/lib/utils';
 import { useScrollEdges } from '@/lib/scroll-edges';
 import { homePathFor, useLogout, useSession } from '@/lib/session';
@@ -34,6 +35,13 @@ export const AppLayout = ({ role }: { role: Role }) => {
   const navRef = useRef<HTMLElement>(null);
   const { pathname } = useLocation();
   const navEdges = useScrollEdges(navRef);
+  // The menu labels name the pages; the index route is the role's home.
+  const home = `/${role}`;
+  const pageName =
+    pathname === home || pathname === `${home}/`
+      ? 'หน้าแรก'
+      : MENUS[role].find(({ path }) => pathname === `${home}/${path}`)?.label;
+  useDocumentTitle(pageName);
   // The admin's menu is wider than a phone: bring the current page's item into the row's view.
   // Only the row scrolls (never the page), and nothing moves when the item already shows.
   useEffect(() => {
