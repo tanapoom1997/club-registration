@@ -7,6 +7,8 @@ import { useNow } from '@/lib/now';
 import { formatThaiDateTime } from '@/lib/thai-time';
 import { STATUS_DISPLAY, gradeLabel, roundCountdown } from '@/lib/round-display';
 import { cn } from '@/lib/utils';
+import { StudentSkeleton } from './StudentSkeleton';
+import type { SkeletonShape } from './StudentSkeleton';
 import { isProfileMissing } from './student-ui';
 
 // The countdown is hours at the finest, so a minute's refresh is plenty.
@@ -44,11 +46,17 @@ export const RoundHeader = ({ round }: { round: StudentRound }) => {
   );
 };
 
-type LoadStateProps = { error: unknown; isPending: boolean; onRetry: () => void };
+type LoadStateProps = {
+  error: unknown;
+  isPending: boolean;
+  onRetry: () => void;
+  // The outline drawn while loading, shaped like what will replace it.
+  skeleton: SkeletonShape;
+};
 
 // What a student page shows before it has any data to render.
-export const StudentLoadState = ({ error, isPending, onRetry }: LoadStateProps) => {
-  if (isPending) return <p className="text-muted-foreground">กำลังโหลด…</p>;
+export const StudentLoadState = ({ error, isPending, onRetry, skeleton }: LoadStateProps) => {
+  if (isPending) return <StudentSkeleton shape={skeleton} />;
   if (isProfileMissing(error)) {
     return (
       <p className={alertVariants({ variant: 'warning' })} role="alert">

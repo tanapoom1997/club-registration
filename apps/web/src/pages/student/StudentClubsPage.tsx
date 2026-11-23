@@ -239,6 +239,7 @@ export const StudentClubsPage = () => {
           error={roundQuery.error}
           isPending={roundQuery.isPending}
           onRetry={() => void roundQuery.refetch()}
+          skeleton="clubs-page"
         />
       ) : !round ? (
         <NoRound />
@@ -326,6 +327,7 @@ export const StudentClubsPage = () => {
                 // A queue_required is followed by the queue card's own state, not an error here.
                 isPending={clubsQuery.isPending || isQueueRequired(clubsQuery.error)}
                 onRetry={() => void clubsQuery.refetch()}
+                skeleton="clubs"
               />
             ) : (
               <h2

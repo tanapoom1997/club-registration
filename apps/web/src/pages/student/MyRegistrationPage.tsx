@@ -127,6 +127,7 @@ export const MyRegistrationPage = () => {
           error={query.error}
           isPending={query.isPending}
           onRetry={() => void query.refetch()}
+          skeleton="result"
         />
       ) : !round ? (
         <NoRound />
