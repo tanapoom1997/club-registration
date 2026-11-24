@@ -45,6 +45,7 @@ const club = (overrides: Partial<AdminClub>): AdminClub => ({
   capacity: 30,
   registered: 12,
   remaining: 18,
+  waitlistCount: 0,
   advisors: [],
   ...overrides,
 });

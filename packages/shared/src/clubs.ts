@@ -51,6 +51,8 @@ export const adminClubSchema = z.object({
   capacity: z.number().int().nonnegative(),
   registered: z.number().int().nonnegative(),
   remaining: z.number().int().nonnegative(),
+  // Students on the club's waitlist now; who they are is in GET /api/admin/clubs/:id/waitlist.
+  waitlistCount: z.number().int().nonnegative(),
   advisors: z.array(clubAdvisorSchema),
 });
 export type AdminClub = z.infer<typeof adminClubSchema>;

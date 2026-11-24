@@ -33,6 +33,7 @@ type ClubRow = {
   description: string;
   capacity: number;
   registered: number;
+  waitlist_count: number;
   advisors: AdvisorRow[];
 };
 
@@ -54,6 +55,7 @@ const toClub = (row: ClubRow): AdminClub => ({
   capacity: row.capacity,
   registered: row.registered,
   remaining: row.capacity - row.registered,
+  waitlistCount: row.waitlist_count,
   advisors: row.advisors.map(toAdvisor),
 });
 
@@ -72,7 +74,9 @@ export const ADVISOR_NAMES_JOIN = `
 // always a constant (a table or a CTE name), never input.
 const selectWithAdvisors = (source: string, filter = '') => `
   SELECT c.id, c.round_id, c.club_code, c.name, c.description, c.capacity, c.registered,
-         COALESCE(a.advisors, '[]'::json) AS advisors
+         COALESCE(a.advisors, '[]'::json) AS advisors,
+         (SELECT count(*)::int FROM waitlist_entries w
+          WHERE w.club_id = c.id AND w.round_id = c.round_id) AS waitlist_count
   FROM ${source} c
   LEFT JOIN LATERAL (
     SELECT json_agg(

@@ -42,6 +42,7 @@ const CLUBS: AdminClub[] = [
     capacity: 30,
     registered: 12,
     remaining: 18,
+    waitlistCount: 0,
     advisors: [
       {
         id: 1,
@@ -61,6 +62,7 @@ const CLUBS: AdminClub[] = [
     capacity: 20,
     registered: 20,
     remaining: 0,
+    waitlistCount: 0,
     advisors: [],
   },
 ];
@@ -249,6 +251,77 @@ describe('admin clubs page', () => {
     expect(clubLists).toEqual([clubsPathOf(expected.id)]);
   });
 
+  describe('searching the round clubs', () => {
+    const search = () => screen.getByRole('searchbox', { name: 'ค้นหาชุมนุม' });
+    const listedCodes = (table: HTMLElement) =>
+      within(table)
+        .getAllByRole('row')
+        .slice(1)
+        .map((row) => within(row).getAllByRole('cell')[0]?.textContent);
+
+    it.each([
+      ['part of a name, typed with a space', 'ดน ตรี', ['B200']],
+      ['a club code in lower case', 'a100', ['A100']],
+      ["an advisor's name", 'ใจดี', ['A100']],
+    ])('narrows the table by %s and says how many are shown', async (_case, query, codes) => {
+      mockClubsApi(roundFixture());
+      renderAt('/admin/clubs');
+      const table = await openTable();
+
+      fireEvent.change(search(), { target: { value: query } });
+
+      expect(listedCodes(table)).toEqual(codes);
+      expect(screen.getByText(`แสดง ${codes.length} จาก 2 ชุมนุม`).getAttribute('role')).toBe(
+        'status',
+      );
+    });
+
+    it('says so when nothing matches, and shows every club again once cleared', async () => {
+      mockClubsApi(roundFixture());
+      renderAt('/admin/clubs');
+      await openTable();
+
+      fireEvent.change(search(), { target: { value: 'ไม่มีชุมนุมนี้' } });
+
+      expect(screen.getByText('ไม่พบชุมนุมที่ตรงกับ "ไม่มีชุมนุมนี้"')).toBeTruthy();
+      expect(screen.queryByRole('table', { name: 'รายการชุมนุม' })).toBeNull();
+
+      fireEvent.change(search(), { target: { value: '' } });
+
+      expect(listedCodes(await openTable())).toEqual(['A100', 'B200']);
+    });
+
+    it('starts the next round with no search', async () => {
+      mockRoundsApi([OPEN_SOON, CLOSED_LATE]);
+      renderAt('/admin/clubs');
+      await openTable();
+      fireEvent.change(search(), { target: { value: 'a100' } });
+
+      await chooseRound('2569/1 ม.6');
+
+      const table = await openTable();
+      expect(search()).toHaveProperty('value', '');
+      expect(listedCodes(table)).toEqual(['A100', 'B200']);
+    });
+  });
+
+  it('shows how many wait for a club beside its seats', async () => {
+    mockApi({
+      'GET /api/auth/me': () => Response.json({ user: ADMIN }),
+      'GET /api/admin/rounds': () => Response.json({ rounds: [roundFixture()] }),
+      [`GET ${CLUBS_PATH}`]: () =>
+        Response.json({
+          round: roundFixture(),
+          clubs: [CLUBS[0], { ...CLUBS[1], waitlistCount: 3 }],
+        }),
+    });
+    renderAt('/admin/clubs');
+    const table = await openTable();
+
+    expect(rowOf(table, 'B200').textContent).toContain('รอ 3 คน');
+    expect(rowOf(table, 'A100').textContent).not.toContain('รอ');
+  });
+
   it('keeps the round the admin picked when the rounds list is reloaded', async () => {
     const fetchMock = mockRoundsApi([OPEN_SOON, CLOSED_LATE], {
       'PATCH /api/admin/clubs/11': () => Response.json({ club: { ...CLUBS[0], roundId: 26 } }),
@@ -262,7 +335,7 @@ describe('admin clubs page', () => {
     const form = openEditor('A100');
     fireEvent.change(within(form).getByLabelText('จำนวนรับ'), { target: { value: '35' } });
     fireEvent.click(within(form).getByRole('button', { name: 'บันทึกการแก้ไข' }));
-    await screen.findByRole('status');
+    await screen.findByText('บันทึกชุมนุม A100 แล้ว');
 
     // Saving reloads the rounds list, which still lists an open round the page would preselect.
     await waitFor(() => expect(fetchCalls(fetchMock, 'GET', '/api/admin/rounds')).toHaveLength(2));
@@ -278,7 +351,7 @@ describe('admin clubs page', () => {
     fireEvent.change(within(form).getByLabelText('จำนวนรับ'), { target: { value: '35' } });
     fireEvent.click(within(form).getByRole('button', { name: 'บันทึกการแก้ไข' }));
 
-    expect((await screen.findByRole('status')).textContent).toBe('บันทึกชุมนุม A100 แล้ว');
+    expect((await screen.findByText('บันทึกชุมนุม A100 แล้ว')).getAttribute('role')).toBe('status');
     expect(screen.queryByRole('form', { name: 'แก้ไขชุมนุม A100' })).toBeNull();
     const [, init] = fetchCalls(fetchMock, 'PATCH', '/api/admin/clubs/11')[0]!;
     expect(bodyOf(init)).toEqual({ capacity: 35 });
@@ -344,7 +417,7 @@ describe('admin clubs page', () => {
     });
     fireEvent.click(within(form).getByRole('button', { name: 'บันทึกการแก้ไข' }));
 
-    await screen.findByRole('status');
+    await screen.findByText('บันทึกชุมนุม B200 แล้ว');
     const [, init] = fetchCalls(fetchMock, 'PATCH', '/api/admin/clubs/12')[0]!;
     expect(bodyOf(init)).toEqual({ name: 'ชุมนุมดนตรีไทยสมมติ', description: 'ซ้อมวันพุธ' });
     expect(await screen.findByText('ชุมนุมดนตรีไทยสมมติ')).toBeTruthy();
