@@ -1,15 +1,14 @@
 import type { Round } from '@club-registration/shared';
 import { useQuery } from '@tanstack/react-query';
 import { useRef, useState } from 'react';
-import type { FormEvent } from 'react';
 import { ConfirmPanel } from '@/components/ConfirmPanel';
 import { FormError } from '@/components/FormError';
 import { SeatBar } from '@/components/SeatMeter';
 import { Badge } from '@/components/ui/badge';
 import { EmptyState, LoadFailed } from '@/components/StatusBlock';
 import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { Select } from '@/components/ui/select';
 import { Table, TableBody, TableCell, TableHead, TableHeader } from '@/components/ui/table';
 import { deleteRound, fetchRounds } from '@/lib/api';
 import { BELOW_LG_QUERY, useMediaQuery } from '@/lib/media-query';
@@ -29,6 +28,14 @@ import {
 } from './round-ui';
 
 const roundName = ({ term, grade }: Round) => `${term} ${gradeLabel(grade)}`;
+
+// The same key as the round pickers of the other admin pages, so they share one cached list.
+const ALL_TERMS = '';
+
+// The terms that have rounds, in the API's order (term, newest first by its text).
+const termsOf = (rounds: readonly Round[]): string[] => [
+  ...new Set(rounds.map(({ term }) => term)),
+];
 const CREATE_FORMS_ID = 'create-round-forms';
 const LIST_NAME = 'รายการรอบลงทะเบียน';
 
@@ -216,8 +223,8 @@ const RoundsTable = ({ rounds, onEdit, onDelete }: RoundsTableProps) => {
 };
 
 export const AdminRoundsPage = () => {
-  const [termInput, setTermInput] = useState('');
-  const [termFilter, setTermFilter] = useState('');
+  // '' = every term.
+  const [termFilter, setTermFilter] = useState(ALL_TERMS);
   // An id, not a snapshot, so the editor sees the latest status after every refetch. `reveal`
   // counts the clicks on edit buttons, so a second click brings the open editor back into view.
   const [editTarget, setEditTarget] = useState<{ id: number; reveal: number }>();
@@ -229,18 +236,15 @@ export const AdminRoundsPage = () => {
   const deleteOpener = useRef<HTMLButtonElement>(null);
   const headingRef = useRef<HTMLHeadingElement>(null);
 
+  // Every term at once (a handful of rounds each), filtered here: the picker can then list only
+  // the terms that exist, and the list shares its cache with the other admin pages.
   const roundsQuery = useQuery({
-    queryKey: [...ROUNDS_QUERY_KEY, termFilter],
-    queryFn: async () => await fetchRounds(termFilter === '' ? undefined : termFilter),
+    queryKey: [...ROUNDS_QUERY_KEY, ALL_TERMS],
+    queryFn: async () => await fetchRounds(),
     // The queue counts are live only while a round is open (round-ui.ts).
     refetchInterval: (query) => roundsRefetchInterval(query.state.data),
   });
   const deleteMutation = useRoundMutation(async (round: Round) => await deleteRound(round.id));
-
-  const handleFilter = (event: FormEvent<HTMLFormElement>) => {
-    event.preventDefault();
-    setTermFilter(termInput.trim());
-  };
 
   const confirmDelete = (round: Round) => {
     deleteMutation.mutate(round, {
@@ -264,14 +268,19 @@ export const AdminRoundsPage = () => {
     setEditTarget((current) => ({ id, reveal: (current?.reveal ?? 0) + 1 }));
   };
 
-  const rounds = roundsQuery.data ?? [];
-  const editing = rounds.find(({ id }) => id === editingId);
+  const allRounds = roundsQuery.data ?? [];
+  const terms = termsOf(allRounds);
+  // A term whose last round was deleted falls back to every term, rather than an empty list.
+  const shownTerm = terms.includes(termFilter) ? termFilter : ALL_TERMS;
+  const rounds =
+    shownTerm === ALL_TERMS ? allRounds : allRounds.filter(({ term }) => term === shownTerm);
+  const editing = allRounds.find(({ id }) => id === editingId);
   // The create forms are folded away behind a button (V3): rounds are made once a term, and on a
   // phone the two forms doubled the page under the list the admin comes to check. They start open
   // only while there is no round at all, where creating one is the only thing to do, and stay open
   // after that first round is made, so its success message does not vanish with them.
   const [createOpen, setCreateOpen] = useState<boolean>();
-  const noRoundsYet = roundsQuery.isSuccess && rounds.length === 0 && termFilter === '';
+  const noRoundsYet = roundsQuery.isSuccess && allRounds.length === 0;
   // Set while rendering (React's pattern for state that follows other state), not in an effect.
   if (noRoundsYet && createOpen === undefined) setCreateOpen(true);
   const showCreate = createOpen ?? noRoundsYet;
@@ -320,22 +329,24 @@ export const AdminRoundsPage = () => {
         </div>
       )}
 
-      {/* One row at every width: on a phone the button stays beside the field it applies. */}
-      <form className="max-w-sm space-y-1.5" onSubmit={handleFilter}>
-        <Label htmlFor="term-filter">กรองตามภาคเรียน</Label>
-        <div className="flex gap-2">
-          <Input
+      {/* Only once there is a choice: one term needs no filter. */}
+      {terms.length > 1 && (
+        <div className="max-w-sm space-y-1.5">
+          <Label htmlFor="term-filter">แสดงภาคเรียน</Label>
+          <Select
             id="term-filter"
-            className="min-w-0 flex-1"
-            placeholder="ทุกภาคเรียน"
-            value={termInput}
-            onChange={(event) => setTermInput(event.target.value)}
-          />
-          <Button type="submit" variant="outline" className="shrink-0 sm:min-h-10">
-            แสดง
-          </Button>
+            value={shownTerm}
+            onChange={(event) => setTermFilter(event.target.value)}
+          >
+            <option value={ALL_TERMS}>ทุกภาคเรียน</option>
+            {terms.map((term) => (
+              <option key={term} value={term}>
+                {term}
+              </option>
+            ))}
+          </Select>
         </div>
-      </form>
+      )}
 
       {deleting && (
         <ConfirmPanel
@@ -357,9 +368,7 @@ export const AdminRoundsPage = () => {
       ) : roundsQuery.isError ? (
         <LoadFailed message="โหลดรายการรอบไม่สำเร็จ" onRetry={() => void roundsQuery.refetch()} />
       ) : rounds.length === 0 ? (
-        <EmptyState>
-          {termFilter === '' ? 'ยังไม่มีรอบลงทะเบียน' : `ไม่มีรอบของภาคเรียน ${termFilter}`}
-        </EmptyState>
+        <EmptyState>ยังไม่มีรอบลงทะเบียน</EmptyState>
       ) : (
         <RoundsTable rounds={rounds} onEdit={startEdit} onDelete={startDelete} />
       )}

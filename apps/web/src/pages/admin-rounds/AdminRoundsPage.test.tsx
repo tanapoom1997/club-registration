@@ -624,18 +624,50 @@ describe('admin rounds page', () => {
     expect(screen.queryByRole('form', { name: 'แก้ไขรอบ 2569/1 ม.1' })).toBeNull();
   });
 
-  it('asks the API for one term and says when that term has no rounds', async () => {
-    const fetchMock = mockRoundsApi([roundFixture()], {
-      'GET /api/admin/rounds?term=2570%2F1': () => Response.json({ rounds: [] }),
+  describe('choosing a term', () => {
+    const OLD = roundFixture({ id: 1, term: '2569/1', grade: 1 });
+    const NEW_1 = roundFixture({ id: 2, term: '2569/2', grade: 1 });
+    const NEW_2 = roundFixture({ id: 3, term: '2569/2', grade: 2 });
+    const termPicker = () => screen.getByLabelText<HTMLSelectElement>('แสดงภาคเรียน');
+    const listedRounds = () =>
+      screen
+        .getAllByRole('button', { name: /^แก้ไขรอบ / })
+        .map((button) => button.getAttribute('aria-label') ?? button.textContent);
+
+    it('offers only the terms that have rounds, and every term first', async () => {
+      mockRoundsApi([NEW_1, NEW_2, OLD]);
+      renderAt('/admin/rounds');
+      await screen.findByRole('button', { name: 'แก้ไขรอบ 2569/1 ม.1' });
+
+      expect([...termPicker().options].map(({ text }) => text)).toEqual([
+        'ทุกภาคเรียน',
+        '2569/2',
+        '2569/1',
+      ]);
     });
-    renderAt('/admin/rounds');
-    await screen.findByRole('button', { name: 'แก้ไขรอบ 2569/1 ม.1' });
 
-    fireEvent.change(screen.getByLabelText('กรองตามภาคเรียน'), { target: { value: ' 2570/1 ' } });
-    fireEvent.click(screen.getByRole('button', { name: 'แสดง' }));
+    it('shows the chosen term only, without asking the API again', async () => {
+      const fetchMock = mockRoundsApi([NEW_1, NEW_2, OLD]);
+      renderAt('/admin/rounds');
+      await screen.findByRole('button', { name: 'แก้ไขรอบ 2569/1 ม.1' });
+      const reads = listCalls(fetchMock).length;
 
-    expect(await screen.findByText('ไม่มีรอบของภาคเรียน 2570/1')).toBeTruthy();
-    expect(fetchCalls(fetchMock, 'GET', '/api/admin/rounds?term=2570%2F1')).toHaveLength(1);
+      fireEvent.change(termPicker(), { target: { value: '2569/2' } });
+
+      expect(screen.queryByRole('button', { name: 'แก้ไขรอบ 2569/1 ม.1' })).toBeNull();
+      expect(screen.getByRole('button', { name: 'แก้ไขรอบ 2569/2 ม.1' })).toBeTruthy();
+      expect(screen.getByRole('button', { name: 'แก้ไขรอบ 2569/2 ม.2' })).toBeTruthy();
+      expect(listCalls(fetchMock)).toHaveLength(reads);
+      expect(listedRounds()).toHaveLength(2);
+    });
+
+    it('needs no picker while there is a single term', async () => {
+      mockRoundsApi([NEW_1, NEW_2]);
+      renderAt('/admin/rounds');
+      await screen.findByRole('button', { name: 'แก้ไขรอบ 2569/2 ม.1' });
+
+      expect(screen.queryByLabelText('แสดงภาคเรียน')).toBeNull();
+    });
   });
 
   it('offers a retry when the list fails to load', async () => {
@@ -751,7 +783,7 @@ describe('admin rounds page focus', () => {
     mockRoundsApi([first, second]);
     renderAt('/admin/rounds');
     fireEvent.click(await screen.findByRole('button', { name: 'ลบรอบ 2569/1 ม.1' }));
-    screen.getByLabelText('กรองตามภาคเรียน').focus();
+    screen.getByRole('heading', { level: 1, name: 'รอบลงทะเบียน' }).focus();
 
     fireEvent.click(screen.getByRole('button', { name: 'ลบรอบ 2569/1 ม.2' }));
 
