@@ -243,6 +243,23 @@ describe('admin rounds', () => {
       expect(response.statusCode).toBe(400);
       expect(errorOf(response).code).toBe('validation_error');
     });
+
+    // The browser's date field takes the Christian year; 2569 is the Buddhist year typed by habit.
+    it('rejects a Buddhist year with 400 validation_error and creates nothing', async () => {
+      const term = uniqueTerm();
+
+      const response = await postRound({
+        term,
+        grade: 1,
+        opensAt: '2569-06-01T08:00:00+07:00',
+        closesAt: '2569-06-01T16:00:00+07:00',
+        maxActive: 150,
+      });
+
+      expect(response.statusCode).toBe(400);
+      expect(errorOf(response).code).toBe('validation_error');
+      expect(await countRounds(term)).toBe(0);
+    });
   });
 
   describe('GET /api/admin/rounds', () => {
@@ -358,6 +375,16 @@ describe('admin rounds', () => {
       const round = await createRound();
 
       const response = await patchRound(round.id, { ...change, maxActive: 99 });
+
+      expect(response.statusCode).toBe(400);
+      expect(errorOf(response).code).toBe('validation_error');
+      expect(await listRounds(round.term)).toEqual([round]);
+    });
+
+    it('refuses a Buddhist year and leaves the round untouched', async () => {
+      const round = await createRound();
+
+      const response = await patchRound(round.id, { closesAt: '2569-06-01T16:00:00+07:00' });
 
       expect(response.statusCode).toBe(400);
       expect(errorOf(response).code).toBe('validation_error');

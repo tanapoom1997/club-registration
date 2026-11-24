@@ -1,9 +1,14 @@
-import { ERROR_CODES } from '@club-registration/shared';
+import {
+  ERROR_CODES,
+  ROUND_YEAR_MAX,
+  ROUND_YEAR_MESSAGE,
+  ROUND_YEAR_MIN,
+} from '@club-registration/shared';
 import type { Round } from '@club-registration/shared';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { ApiError } from '@/lib/api';
 import { useSetSession } from '@/lib/session';
-import { thaiInputToIso } from '@/lib/thai-time';
+import { formatThaiDateTime, thaiInputToIso } from '@/lib/thai-time';
 
 export const ROUNDS_QUERY_KEY = Object.freeze(['admin', 'rounds'] as const);
 
@@ -39,6 +44,24 @@ export const windowFromValues = ({ opensAt, closesAt, maxActive, noQueue }: Wind
   closesAt: thaiInputToIso(closesAt) ?? closesAt,
   maxActive: noQueue ? null : typedMaxActive(maxActive),
 });
+
+export const WINDOW_TIME_HINTS = Object.freeze({
+  empty: 'ปีในช่องนี้เป็น ค.ศ. เช่น 2026 (ตรงกับ พ.ศ. 2569)',
+  matches: (iso: string) => `ตรงกับ ${formatThaiDateTime(iso)} น.`,
+});
+
+// The line under a date field: the browser's field takes the Christian year while the rest of the
+// site reads in the Buddhist one, so the chosen time is repeated the way the site shows it, and a
+// year out of range (most likely a Buddhist year typed by habit) is flagged before saving.
+export const windowTimeHint = (value: string): { text: string; outOfRange: boolean } => {
+  const iso = thaiInputToIso(value);
+  if (iso === undefined) return { text: WINDOW_TIME_HINTS.empty, outOfRange: false };
+  // The field's own text is Thai time, so its first four digits are the year by Thai time.
+  const year = Number(value.slice(0, 4));
+  return year < ROUND_YEAR_MIN || year > ROUND_YEAR_MAX
+    ? { text: ROUND_YEAR_MESSAGE, outOfRange: true }
+    : { text: WINDOW_TIME_HINTS.matches(iso), outOfRange: false };
+};
 
 // Every message about the queue setting on this page, in one place like ERROR_MESSAGES.
 export const QUEUE_SETTING_MESSAGES = Object.freeze({
