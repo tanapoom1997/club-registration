@@ -374,6 +374,40 @@ describe('student waitlist', () => {
       expect(await eventsOfType('waitlist_join')).toEqual([]);
     });
 
+    // README waitlist rule 9: capacity 0 means the club takes no one, not that it is full.
+    it('answers 409 club_not_accepting for a club with capacity 0 and writes nothing', async () => {
+      const roundId = await createOpenRound(pool);
+      const clubId = await createClub(pool, roundId, uniqueCode(), { capacity: 0 });
+      const studentId = await createStudentId(pool);
+
+      const response = await join(studentId, clubId);
+
+      expect(response.statusCode).toBe(409);
+      expect(errorOf(response).code).toBe('club_not_accepting');
+      expect(await queueOf(clubId)).toEqual([]);
+      expect(await eventsOfType('waitlist_join')).toEqual([]);
+    });
+
+    it('keeps the old entry of a student refused by a club with capacity 0', async () => {
+      const { roundId, clubId: full } = await fullClub();
+      const closed = await createClub(pool, roundId, uniqueCode(), { capacity: 0 });
+      const studentId = await createStudentId(pool);
+      expect((await join(studentId, full)).statusCode).toBe(200);
+
+      expect(errorOf(await join(studentId, closed)).code).toBe('club_not_accepting');
+
+      expect(await queueOf(full)).toEqual([studentId]);
+    });
+
+    it('answers 409 round_not_open before the round opens, ahead of club_not_accepting', async () => {
+      const roundId = await createUpcomingRound(pool);
+      const clubId = await createClub(pool, roundId, uniqueCode(), { capacity: 0 });
+
+      const response = await join(await createStudentId(pool), clubId);
+
+      expect(errorOf(response).code).toBe('round_not_open');
+    });
+
     it('lets a student join a club with a free seat that others already wait for', async () => {
       const { roundId, clubId } = await fullClub({ capacity: 2 });
       const [waiting, studentId] = await createStudents(pool, 2);

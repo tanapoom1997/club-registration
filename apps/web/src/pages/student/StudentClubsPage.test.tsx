@@ -111,6 +111,18 @@ describe('student clubs page', () => {
     expect(joinButton(MUSIC.clubCode, MUSIC.name).disabled).toBe(false);
   });
 
+  // README waitlist rule 9: capacity 0 takes no one, so the card offers nothing at all.
+  it('shows a club with capacity 0 as not accepting, with no button', async () => {
+    mockStudentApi({ clubs: [CHESS, { ...MUSIC, capacity: 0, remaining: 0 }, ART] });
+
+    await openPage();
+
+    const music = cardOf(MUSIC.name);
+    expect(within(music).getByText('ไม่เปิดรับ')).toBeTruthy();
+    expect(within(music).queryByText('เต็ม')).toBeNull();
+    expect(within(music).queryByRole('button')).toBeNull();
+  });
+
   it('offers the waitlist, not register, for a club with a free seat that others wait for', async () => {
     mockStudentApi({ clubs: [{ ...CHESS, waitlistCount: 2 }, MUSIC, ART] });
 

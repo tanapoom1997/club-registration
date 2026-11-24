@@ -7,13 +7,21 @@ const FILL: Readonly<Record<SeatLevel, string>> = Object.freeze({
   open: 'bg-primary',
   low: 'bg-warning-foreground',
   full: 'bg-muted-foreground/50',
+  closed: 'bg-muted-foreground/50',
 });
 
 const COUNT: Readonly<Record<SeatLevel, string>> = Object.freeze({
   open: 'text-primary',
   low: 'text-warning-foreground',
   full: 'text-muted-foreground',
+  closed: 'text-muted-foreground',
 });
+
+// The words for a club whose seats cannot be counted down: full, or taking no one at all.
+export const SEAT_BADGES = Object.freeze({
+  full: { label: 'เต็ม', variant: 'warning' },
+  closed: { label: 'ไม่เปิดรับ', variant: 'neutral' },
+} as const);
 
 type SeatBarProps = { capacity: number; remaining: number; className?: string | undefined };
 
@@ -39,15 +47,15 @@ type SeatMeterProps = {
   className?: string;
 };
 
-// Seats left as words first ("เหลือ 2 ที่", "ใกล้เต็ม", "เต็ม"), so the bar's colour is never the
-// only signal.
+// Seats left as words first ("เหลือ 2 ที่", "ใกล้เต็ม", "เต็ม", "ไม่เปิดรับ"), so the bar's colour is
+// never the only signal.
 export const SeatMeter = ({ capacity, remaining, waitlistCount, className }: SeatMeterProps) => {
   const level = seatLevel(capacity, remaining);
   return (
     <div className={cn('space-y-1.5', className)}>
       <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1 text-sm">
-        {level === 'full' ? (
-          <Badge variant="warning">เต็ม</Badge>
+        {level === 'full' || level === 'closed' ? (
+          <Badge variant={SEAT_BADGES[level].variant}>{SEAT_BADGES[level].label}</Badge>
         ) : (
           <p>
             เหลือ <span className={cn('text-xl font-bold', COUNT[level])}>{remaining}</span> ที่
@@ -56,7 +64,7 @@ export const SeatMeter = ({ capacity, remaining, waitlistCount, className }: Sea
             )}
           </p>
         )}
-        <p className="text-xs text-muted-foreground">รับ {capacity} คน</p>
+        {level !== 'closed' && <p className="text-xs text-muted-foreground">รับ {capacity} คน</p>}
       </div>
       <SeatBar capacity={capacity} remaining={remaining} />
       {waitlistCount > 0 && (

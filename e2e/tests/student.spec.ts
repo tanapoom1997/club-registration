@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test';
-import { ADVISOR_NAME, FULL_CLUB, OPEN_CLUB, STUDENTS } from '../fixtures.js';
+import { ADVISOR_NAME, FULL_CLUB, NOT_ACCEPTING_CLUB, OPEN_CLUB, STUDENTS } from '../fixtures.js';
 import { PASSWORD_LABEL, STUDENT_LANDING, logIn, queryDatabase, submitLogin } from './helpers.js';
 
 // A club card is named by its heading (the club's name); its buttons and messages say code and name.
@@ -48,6 +48,17 @@ test('a full club is shown as full and offers its waitlist instead of a seat', a
     card.getByRole('button', { name: `เข้ารายชื่อรอ ${clubLabel(FULL_CLUB)}` }),
   ).toBeEnabled();
   await expect(card.getByRole('button', { name: `ลงชุมนุม ${clubLabel(FULL_CLUB)}` })).toHaveCount(0);
+});
+
+// README waitlist rule 9: capacity 0 takes no one, so neither a seat nor a waitlist is offered.
+test('a club with capacity 0 is shown as not accepting and offers nothing', async ({ page }) => {
+  await logIn(page, STUDENTS.browses, STUDENT_LANDING);
+
+  const card = page.getByRole('article', { name: NOT_ACCEPTING_CLUB.name, exact: true });
+
+  await expect(card.getByText('ไม่เปิดรับ', { exact: true })).toBeVisible();
+  await expect(card.getByText('เต็ม', { exact: true })).toHaveCount(0);
+  await expect(card.getByRole('button')).toHaveCount(0);
 });
 
 // U3: a round can have 30+ clubs, and the student's turn is limited. Read only: no seat changes.

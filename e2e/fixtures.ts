@@ -78,17 +78,26 @@ export const STUDENTS = Object.freeze({
 } satisfies Record<string, Account>);
 
 export const OPEN_CLUB = { code: 'E2E01', name: 'ชุมนุมสมมติ ดนตรี', capacity: 5 };
-export const FULL_CLUB = { code: 'E2E02', name: 'ชุมนุมสมมติ เต็มแล้ว', capacity: 0 };
+// Full clubs have their one seat taken by a fictional student seeded for it (global-setup.ts):
+// a club with capacity 0 takes no one and has no waitlist (README waitlist rule 9).
+export const FULL_CLUB = { code: 'E2E02', name: 'ชุมนุมสมมติ เต็มแล้ว', capacity: 1, seated: 1 };
 // One club per scenario, like the accounts: the waitlist one has a single seat, and the change
 // goes from one to the other.
 export const ONE_SEAT_CLUB = { code: 'E2E03', name: 'ชุมนุมสมมติ ที่นั่งเดียว', capacity: 1 };
 export const CHANGE_FROM_CLUB = { code: 'E2E04', name: 'ชุมนุมสมมติ ต้นทาง', capacity: 3 };
 export const CHANGE_TO_CLUB = { code: 'E2E05', name: 'ชุมนุมสมมติ ปลายทาง', capacity: 3 };
-// The admin's member lists: a student seated in one club then moved to the other, and a club with
-// no seats whose waitlist the admin clears.
+// The admin's member lists: a student seated in one club then moved to the other, and a full club
+// whose waitlist the admin clears.
 export const ADMIN_FROM_CLUB = { code: 'E2E06', name: 'ชุมนุมสมมติ จัดให้', capacity: 2 };
 export const ADMIN_TO_CLUB = { code: 'E2E07', name: 'ชุมนุมสมมติ ย้ายไป', capacity: 2 };
-export const ADMIN_WAITLIST_CLUB = { code: 'E2E08', name: 'ชุมนุมสมมติ คิวรอ', capacity: 0 };
+export const ADMIN_WAITLIST_CLUB = {
+  code: 'E2E08',
+  name: 'ชุมนุมสมมติ คิวรอ',
+  capacity: 1,
+  seated: 1,
+};
+// README waitlist rule 9: capacity 0, shown as not accepting, with no button.
+export const NOT_ACCEPTING_CLUB = { code: 'E2E14', name: 'ชุมนุมสมมติ ปิดรับ', capacity: 0 };
 // The student's notice of an admin change (README Phase 4, P3): seated in one by the admin, then
 // moved to the other. Clubs of their own, so the member-list scenario's seat counts stay exact.
 export const NOTICE_FROM_CLUB = { code: 'E2E12', name: 'ชุมนุมสมมติ ก่อนย้าย', capacity: 2 };

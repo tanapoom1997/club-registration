@@ -31,6 +31,8 @@ export const ERROR_CODES = Object.freeze({
   notRegistered: 'not_registered',
   alreadyInClub: 'already_in_club',
   waitlistNotNeeded: 'waitlist_not_needed',
+  // A waitlist join for a club with capacity 0, which takes no one (README waitlist rule 9).
+  clubNotAccepting: 'club_not_accepting',
   notWaitlisted: 'not_waitlisted',
   studentNotInRoundGrade: 'student_not_in_round_grade',
   notInQueue: 'not_in_queue',

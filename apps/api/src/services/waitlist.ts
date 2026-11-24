@@ -58,6 +58,8 @@ type JoinState = {
   held_club_id: number | null;
   waiting_club_id: number | null;
   has_free_seat: boolean;
+  // Capacity 0: the club takes no one (README waitlist rule 9), so it has no queue to join either.
+  not_accepting: boolean;
 };
 
 // Everything the answer order needs, read in one statement under the round lock. has_free_seat is
@@ -78,7 +80,8 @@ const readJoinState = async (
              WHERE w.round_id = t.round_id AND w.student_id = $2) AS waiting_club_id,
             c.registered < c.capacity AND NOT EXISTS (
               SELECT 1 FROM waitlist_entries w WHERE w.club_id = c.id AND w.round_id = c.round_id
-            ) AS has_free_seat
+            ) AS has_free_seat,
+            c.capacity = 0 AS not_accepting
      FROM target t
      JOIN clubs c ON c.id = t.club_id`,
     [clubId, studentId],
@@ -99,9 +102,10 @@ const deleteEntry = async (
   if (rowCount !== 1) throw new Error('Waitlist entry read under the round lock is gone');
 };
 
-// The writing statement decides the window again by its own clock, and the club must still have
-// no seat for a register: under the round lock only the clock can have moved since readJoinState,
-// so 0 rows means the round closed in between. The caller's throw rolls back the delete above.
+// The writing statement decides the window again by its own clock, and the club must still take
+// students and have no seat for a register: under the round lock only the clock can have moved
+// since readJoinState (capacity changes take the same lock), so 0 rows means the round closed in
+// between. The caller's throw rolls back the delete above.
 const insertEntry = async (
   db: pg.PoolClient,
   { roundId, studentId, clubId }: { roundId: number; studentId: number; clubId: number },
@@ -114,6 +118,7 @@ const insertEntry = async (
      WHERE c.id = $3 AND c.round_id = $1
        AND statement_timestamp() >= r.opens_at
        AND statement_timestamp() < r.closes_at
+       AND c.capacity > 0
        AND NOT (
          c.registered < c.capacity AND NOT EXISTS (
            SELECT 1 FROM waitlist_entries w WHERE w.club_id = c.id AND w.round_id = c.round_id
@@ -142,7 +147,7 @@ export type JoinWaitlistInput = { studentId: number; clubId: number; idempotency
 //   → 404 club the student is not shown → 200 already waiting for this club (written nothing, so
 //   answered even outside the window, like register's already_held) → 409 round_not_open → 403
 //   queue_required (the gate, as for register: registrations.ts) → 409 already_in_club → 409
-//   waitlist_not_needed → write.
+//   club_not_accepting (capacity 0) → 409 waitlist_not_needed → write.
 //
 // round_not_open comes before the rest, as for register, change and cancel: outside the window the
 // answer is always "not open". A student who holds another club may join (README Phase 2 decision
@@ -180,6 +185,7 @@ export const joinWaitlist = async (
   // that was not open here never reaches the write.
   await gate(db, roundId);
   if (state.held_club_id === clubId) throw new AppError(ERROR_CODES.alreadyInClub);
+  if (state.not_accepting) throw new AppError(ERROR_CODES.clubNotAccepting);
   if (state.has_free_seat) throw new AppError(ERROR_CODES.waitlistNotNeeded);
 
   const fromClubId = state.waiting_club_id;
