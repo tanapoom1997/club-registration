@@ -13,8 +13,10 @@ import { STATUS_DISPLAY, roundOptionLabel } from '@/lib/round-display';
 import { refetchWhileOpen } from '@/lib/round-refetch';
 import { ROUNDS_QUERY_KEY } from '@/pages/admin-rounds/round-ui';
 import { ClubMembersPanel } from './ClubMembersPanel';
+import { ClubSearch } from './ClubSearch';
 import { ClubsTable } from './ClubsTable';
 import { EditClubForm } from './EditClubForm';
+import { CLUB_SEARCH_MESSAGES, searchClubs } from './club-search';
 import { CLUBS_POLL_INTERVAL_MS, CLUBS_QUERY_KEY, preferredRound } from './club-ui';
 
 // The rounds page lists every term under the same key, so both pages share one cached list.
@@ -60,6 +62,7 @@ export const AdminClubsPage = () => {
   // An id, not a snapshot, so the editor sees the latest registered count after every poll.
   const [openPanel, setOpenPanel] = useState<OpenPanel>();
   const [saved, setSaved] = useState<string>();
+  const [query, setQuery] = useState('');
   // The button that opened the panel, where focus goes back when it closes.
   const opener = useRef<HTMLButtonElement>(null);
 
@@ -92,6 +95,7 @@ export const AdminClubsPage = () => {
     setRoundId(Number(value));
     setOpenPanel(undefined);
     setSaved(undefined);
+    setQuery('');
   };
 
   const open = (kind: OpenPanel['kind'], { id }: AdminClub, button: HTMLButtonElement) => {
@@ -102,6 +106,7 @@ export const AdminClubsPage = () => {
 
   const rounds = roundsQuery.data ?? [];
   const clubs = clubsQuery.data?.clubs ?? [];
+  const foundClubs = searchClubs(clubs, query);
   const shownClub = clubs.find(({ id }) => id === openPanel?.clubId);
   const closePanel = () => setOpenPanel(undefined);
   useReturnFocus(shownClub !== undefined && openPanel !== undefined, [opener]);
@@ -172,11 +177,23 @@ export const AdminClubsPage = () => {
               </Link>
             </EmptyState>
           ) : (
-            <ClubsTable
-              clubs={clubs}
-              onEdit={(club, button) => open('edit', club, button)}
-              onShowMembers={(club, button) => open('members', club, button)}
-            />
+            <>
+              <ClubSearch
+                query={query}
+                onChange={setQuery}
+                shown={foundClubs.length}
+                total={clubs.length}
+              />
+              {foundClubs.length === 0 ? (
+                <EmptyState>{CLUB_SEARCH_MESSAGES.none(query)}</EmptyState>
+              ) : (
+                <ClubsTable
+                  clubs={foundClubs}
+                  onEdit={(club, button) => open('edit', club, button)}
+                  onShowMembers={(club, button) => open('members', club, button)}
+                />
+              )}
+            </>
           )}
         </div>
       )}

@@ -64,7 +64,7 @@ const S4 = student(4, '1/3', 5, 'นักเรียนสมมติ สี�
 const S5 = student(5, '1/4', 7, 'นักเรียนสมมติ ห้า');
 const STUDENTS = [S1, S2, S3, S4, S5];
 
-type ClubBase = Omit<AdminClub, 'registered' | 'remaining'>;
+type ClubBase = Omit<AdminClub, 'registered' | 'remaining' | 'waitlistCount'>;
 const CHESS: ClubBase = {
   id: 11,
   roundId: 1,
@@ -184,7 +184,8 @@ const mockMembersApi = (round: Round = roundFixture(), otherRounds: Round[] = []
         round: state.round,
         clubs: state.clubs.map((club) => {
           const { registered, remaining } = seatsOf(state, club);
-          return { ...club, registered, remaining };
+          const waitlistCount = state.queues.get(club.id)?.length ?? 0;
+          return { ...club, registered, remaining, waitlistCount };
         }),
       }),
   };
@@ -492,14 +493,14 @@ describe('admin club members panel', () => {
     mockMembersApi();
     renderAt('/admin/clubs');
     const panel = await openMembers(CHESS);
-    expect(clubSeats('B200')).toBe('2 / 2เต็ม');
+    expect(clubSeats('B200')).toBe('2 / 2เต็มรอ 2 คน');
 
     assign(panel, S4.loginId);
 
     expect(await notice(panel)).toBe(
       `บันทึกแล้ว: demo1004 ${S4.fullName} อยู่ในชุมนุม A100 ชุมนุมหมากรุกสมมติ`,
     );
-    await waitFor(() => expect(clubSeats('B200')).toBe('1 / 2เหลือ 1'));
+    await waitFor(() => expect(clubSeats('B200')).toBe('1 / 2เหลือ 1รอ 2 คน'));
     expect(clubSeats('A100')).toBe('3 / 3เต็ม');
   });
 
@@ -622,7 +623,7 @@ describe('admin club members panel', () => {
       loginId: 'demo1004',
       idempotencyKey: expect.stringMatching(UUID_PATTERN) as unknown,
     });
-    await waitFor(() => expect(clubSeats('B200')).toBe('1 / 2เหลือ 1'));
+    await waitFor(() => expect(clubSeats('B200')).toBe('1 / 2เหลือ 1รอ 2 คน'));
   });
 
   it('says the seat stays empty when removing in a closed round, and still allows every write', async () => {
@@ -753,7 +754,7 @@ describe('admin club members panel', () => {
     expect(within(rowOf(waiters, S5.loginId)).getAllByRole('cell')[0]?.textContent).toBe('1');
     expect(within(panel).getByRole('heading', { name: 'รายชื่อรอ (1 คน)' })).toBeTruthy();
     expect(callsTo(fetchMock, 'POST', unwaitPath(MUSIC.id))).toHaveLength(1);
-    expect(clubSeats('B200')).toBe('2 / 2เต็ม');
+    expect(clubSeats('B200')).toBe('2 / 2เต็มรอ 1 คน');
   });
 
   it.each([

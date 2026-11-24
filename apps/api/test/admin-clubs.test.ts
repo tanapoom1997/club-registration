@@ -16,7 +16,11 @@ import { TEST_JWT_SECRET, createTestUser } from './support/app.js';
 import type { TestUser } from './support/app.js';
 import { createClub, createRound, uniqueCode, uniqueTerm } from './support/import-db.js';
 import { appConnectionUri, startMigratedPostgres, stopPostgres } from './support/postgres.js';
-import { waitForAdvisoryLockWaiter } from './support/registration.js';
+import {
+  addWaitingDirectly,
+  createStudents,
+  waitForAdvisoryLockWaiter,
+} from './support/registration.js';
 
 type InjectResponse = Awaited<ReturnType<FastifyInstance['inject']>>;
 
@@ -162,6 +166,7 @@ describe('admin clubs', () => {
           capacity: 30,
           registered: 0,
           remaining: 30,
+          waitlistCount: 0,
           advisors: [],
         },
         {
@@ -173,6 +178,7 @@ describe('admin clubs', () => {
           capacity: 20,
           registered: 15,
           remaining: 5,
+          waitlistCount: 0,
           advisors: [
             { id: expect.any(Number) as number, ...ADVISOR },
             {
@@ -185,6 +191,21 @@ describe('admin clubs', () => {
           ],
         },
       ]);
+    });
+
+    it('counts each club waitlist, without saying who is on it', async () => {
+      const roundId = await createRound(pool, uniqueTerm(), 1);
+      const full = await createClub(pool, roundId, uniqueCode(), { capacity: 1 });
+      const other = await createClub(pool, roundId, uniqueCode());
+      await setRegistered(full, 1);
+      for (const studentId of await createStudents(pool, 2)) {
+        await addWaitingDirectly(pool, { roundId, clubId: full, studentId });
+      }
+
+      const { clubs } = listOf(await getClubs(roundId));
+
+      expect(clubs.find(({ id }) => id === full)?.waitlistCount).toBe(2);
+      expect(clubs.find(({ id }) => id === other)?.waitlistCount).toBe(0);
     });
 
     it('leaves out clubs of other rounds', async () => {

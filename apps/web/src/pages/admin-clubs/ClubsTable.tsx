@@ -86,6 +86,7 @@ const ClubCards = ({ clubs, onEdit, onShowMembers }: ClubsTableProps) => (
           capacity={club.capacity}
           registered={club.registered}
           remaining={club.remaining}
+          waitlistCount={club.waitlistCount}
         />
         <dl className="text-sm">
           <dt className="text-muted-foreground">ครูที่ปรึกษา</dt>
@@ -129,7 +130,9 @@ export const ClubsTable = ({ clubs, onEdit, onShowMembers }: ClubsTableProps) =>
             <TableCell>
               <span className="font-medium">{club.name}</span>
               {club.description !== '' && (
-                <p className="mt-1 max-w-prose whitespace-pre-line text-muted-foreground">
+                // Two lines, as on the cards: a long description made one row fill the screen.
+                // The editor ("แก้ไข") shows all of it.
+                <p className="mt-1 line-clamp-2 max-w-prose whitespace-pre-line text-muted-foreground">
                   {club.description}
                 </p>
               )}
@@ -142,6 +145,7 @@ export const ClubsTable = ({ clubs, onEdit, onShowMembers }: ClubsTableProps) =>
                 capacity={club.capacity}
                 registered={club.registered}
                 remaining={club.remaining}
+                waitlistCount={club.waitlistCount}
               />
             </TableCell>
             {/* Thai has no spaces between words, so a narrow cell would break "รายชื่อ" in two. */}

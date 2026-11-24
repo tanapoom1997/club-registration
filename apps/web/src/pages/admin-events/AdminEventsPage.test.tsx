@@ -55,6 +55,7 @@ const adminClub = (club: ClubRef, roundId: number): AdminClub => ({
   capacity: 10,
   registered: 1,
   remaining: 9,
+  waitlistCount: 0,
   advisors: [],
 });
 const ROUND_CLUBS: Readonly<Record<number, AdminClub[]>> = {

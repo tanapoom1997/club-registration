@@ -25,4 +25,14 @@ describe('ClubSeats', () => {
     expect(screen.getByText('ไม่เปิดรับ')).toBeTruthy();
     expect(screen.queryByText('เต็ม')).toBeNull();
   });
+
+  it('says how many wait, only when someone does', () => {
+    const { container, rerender } = render(
+      <ClubSeats capacity={3} registered={3} remaining={0} waitlistCount={2} />,
+    );
+    expect(container.textContent).toContain('รอ 2 คน');
+
+    rerender(<ClubSeats capacity={3} registered={3} remaining={0} waitlistCount={0} />);
+    expect(container.textContent).not.toContain('รอ');
+  });
 });
