@@ -151,7 +151,8 @@ const seed = async (databaseUrl: string): Promise<void> => {
       [TERM, GRADE],
     );
     const roundId = rows[0]?.id;
-    for (const club of [
+    // seated: how many of the club's seats go to fictional fillers (a full club's).
+    const clubs: { code: string; name: string; capacity: number; seated?: number }[] = [
       OPEN_CLUB,
       FULL_CLUB,
       ONE_SEAT_CLUB,
@@ -164,7 +165,8 @@ const seed = async (databaseUrl: string): Promise<void> => {
       NOTICE_FROM_CLUB,
       NOTICE_TO_CLUB,
       NOT_ACCEPTING_CLUB,
-    ]) {
+    ];
+    for (const club of clubs) {
       const inserted = await client.query<{ id: number }>(
         `INSERT INTO clubs (round_id, club_code, name, capacity) VALUES ($1, $2, $3, $4)
          RETURNING id`,
@@ -176,8 +178,7 @@ const seed = async (databaseUrl: string): Promise<void> => {
         ADVISOR_NAME,
       ]);
       // A full club's seats go to fictional students who never log in, so the club stays full.
-      const seated = 'seated' in club ? club.seated : 0;
-      for (let seat = 1; seat <= seated; seat += 1) {
+      for (let seat = 1; seat <= (club.seated ?? 0); seat += 1) {
         const fillerId = await insertUser(
           {
             loginId: `e2e-filler-${club.code.toLowerCase()}-${seat}`,
