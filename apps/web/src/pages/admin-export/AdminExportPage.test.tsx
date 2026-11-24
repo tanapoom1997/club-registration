@@ -31,6 +31,8 @@ const ROUND: Round = {
   totalRegistered: 32,
   queueWaiting: 0,
   queueAdmitted: 0,
+  studentCount: 0,
+  studentsWithoutClub: 0,
 };
 
 // Every name below is made up.

@@ -16,6 +16,29 @@ const ALL_TERMS = '';
 const HEADING_ID = 'rounds-overview-heading';
 const COUNTDOWN_TICK_MS = 30_000;
 
+// Seats taken are not students done: who in the grade still has no club is what the admin
+// chases on registration day (waiting students count as without one). A grade with no students
+// yet usually means the import has not been done.
+const StudentsWithoutClub = ({ round }: { round: Round }) => {
+  const { studentCount, studentsWithoutClub } = round;
+  if (studentCount === 0) {
+    return (
+      <p className="text-sm text-warning-foreground">
+        ยังไม่มีนักเรียน {gradeLabel(round.grade)} ในระบบ
+      </p>
+    );
+  }
+  if (studentsWithoutClub === 0) {
+    return <p className="text-sm">นักเรียนได้ชุมนุมครบทุกคนแล้ว ({studentCount} คน)</p>;
+  }
+  return (
+    <p className="text-sm">
+      ยังไม่มีชุมนุม <span className="text-lg font-bold">{studentsWithoutClub}</span> จาก {studentCount}{' '}
+      คน
+    </p>
+  );
+};
+
 const RoundCard = ({ round, now }: { round: Round; now: number }) => {
   const status = STATUS_DISPLAY[round.status];
   const countdown = roundCountdown(round, now);
@@ -56,6 +79,7 @@ const RoundCard = ({ round, now }: { round: Round; now: number }) => {
       ) : (
         <p className="text-sm text-muted-foreground">ยังไม่มีชุมนุมในรอบนี้</p>
       )}
+      <StudentsWithoutClub round={round} />
       <p className="text-sm text-muted-foreground">{queueSummary(round)}</p>
     </li>
   );

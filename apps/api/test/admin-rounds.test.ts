@@ -12,12 +12,13 @@ import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from
 import { buildApp } from '../src/app.js';
 import { SESSION_COOKIE } from '../src/auth/session.js';
 import { createPool } from '../src/db.js';
+import { createClub, uniqueCode } from './support/import-db.js';
 import { DEFAULT_QUEUE_SETTINGS } from '../src/services/queue.js';
 import { roundStatusAt } from '../src/services/rounds.js';
 import { TEST_JWT_SECRET, createTestUser } from './support/app.js';
 import type { TestUser } from './support/app.js';
 import { appConnectionUri, startMigratedPostgres, stopPostgres } from './support/postgres.js';
-import { createStudents } from './support/registration.js';
+import { createStudents, seatStudent } from './support/registration.js';
 
 type InjectResponse = Awaited<ReturnType<FastifyInstance['inject']>>;
 
@@ -285,6 +286,27 @@ describe('admin rounds', () => {
       const [listed] = await listRounds(round.term);
 
       expect(listed).toMatchObject({ clubCount: 2, totalCapacity: 55, totalRegistered: 37 });
+    });
+
+    // What the admin home chases on registration day: who in the grade has no club yet. Counted
+    // as a change from before, since other tests here add students too.
+    it('counts the students of the grade and those without a club in this round', async () => {
+      const round = await createRound({
+        grade: 6,
+        opensAt: isoFromNow(-HOUR_MS),
+        closesAt: isoFromNow(HOUR_MS),
+      });
+      const [before] = await listRounds(round.term);
+      const clubId = await createClub(pool, round.id, uniqueCode(), { capacity: 5 });
+      const [seated] = await createStudents(pool, 3, { grade: 6 });
+      // Another grade's students are not this round's.
+      await createStudents(pool, 2, { grade: 5 });
+      await seatStudent(pool, seated!, clubId);
+
+      const [after] = await listRounds(round.term);
+
+      expect(after!.studentCount - before!.studentCount).toBe(3);
+      expect(after!.studentsWithoutClub - before!.studentsWithoutClub).toBe(2);
     });
 
     it('derives upcoming, open and closed from the current time', async () => {

@@ -133,6 +133,11 @@ export const roundSchema = z.object({
   // expire.
   queueWaiting: z.number().int().nonnegative(),
   queueAdmitted: z.number().int().nonnegative(),
+  // Students in the round's grade now, and those of them without a club in this round (waiting
+  // students included): what the admin chases on registration day. Counted against today's grade,
+  // so meaningful for open and upcoming rounds, not for a closed round of an earlier term.
+  studentCount: z.number().int().nonnegative(),
+  studentsWithoutClub: z.number().int().nonnegative(),
 });
 export type Round = z.infer<typeof roundSchema>;
 

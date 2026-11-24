@@ -30,6 +30,8 @@ const round = (overrides: Partial<Round>): Round => ({
   totalRegistered: 0,
   queueWaiting: 0,
   queueAdmitted: 0,
+  studentCount: 0,
+  studentsWithoutClub: 0,
   ...overrides,
 });
 

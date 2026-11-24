@@ -25,6 +25,8 @@ const round = (overrides: Partial<Round>): Round => ({
   totalRegistered: 120,
   queueWaiting: 40,
   queueAdmitted: 150,
+  studentCount: 0,
+  studentsWithoutClub: 0,
   ...overrides,
 });
 
@@ -72,6 +74,30 @@ describe("the admin home's round overview (U8)", () => {
     expect(within(upcoming).getByText('ยังไม่เปิด')).toBeTruthy();
     expect(upcoming.textContent).toContain('ยังไม่มีชุมนุมในรอบนี้');
     expect(upcoming.textContent).toContain('ไม่มีคิว');
+  });
+
+  // Seats taken are not students done: the card says who in the grade still has no club.
+  it('says how many students of the grade still have no club', async () => {
+    openHome(() =>
+      Response.json({
+        rounds: [
+          round({ id: 1, grade: 4, studentCount: 420, studentsWithoutClub: 213 }),
+          round({ id: 2, grade: 5, studentCount: 380, studentsWithoutClub: 0 }),
+          round({ id: 3, grade: 6, status: 'upcoming' }),
+        ],
+      }),
+    );
+
+    const list = await screen.findByRole('list', { name: OVERVIEW });
+    const [missing, done, empty] = within(list).getAllByRole('listitem') as [
+      HTMLElement,
+      HTMLElement,
+      HTMLElement,
+    ];
+    expect(missing.textContent).toContain('ยังไม่มีชุมนุม 213 จาก 420 คน');
+    expect(done.textContent).toContain('นักเรียนได้ชุมนุมครบทุกคนแล้ว (380 คน)');
+    // No students in the grade yet: most likely the import has not been done.
+    expect(empty.textContent).toContain('ยังไม่มีนักเรียน ม.6 ในระบบ');
   });
 
   it('says so when no round is open or upcoming', async () => {

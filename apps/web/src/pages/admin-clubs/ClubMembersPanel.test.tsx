@@ -42,6 +42,8 @@ const roundFixture = (overrides: Partial<Round> = {}): Round => ({
   totalRegistered: 4,
   queueWaiting: 0,
   queueAdmitted: 0,
+  studentCount: 0,
+  studentsWithoutClub: 0,
   ...overrides,
 });
 
