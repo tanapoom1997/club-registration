@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { loginIdSchema } from './auth.js';
 import { idempotencyKeySchema } from './idempotency.js';
 import { STUDENT_COLUMNS, classroomSchema } from './import.js';
 import { gradeSchema } from './rounds.js';
@@ -43,3 +44,26 @@ export const passwordStatusResponseSchema = z.object({
   classrooms: z.array(classroomPasswordStatusSchema),
 });
 export type PasswordStatusResponse = z.infer<typeof passwordStatusResponseSchema>;
+
+// An admin resetting one student's password, e.g. one who changed it and then forgot it. The
+// student is named by login ID (the student code), like an admin's seat write. Strict, so a body
+// naming a database id or anything else is refused with 400 instead of being ignored.
+export const passwordResetRequestSchema = z.strictObject({
+  loginId: loginIdSchema,
+  idempotencyKey: idempotencyKeySchema,
+});
+export type PasswordResetRequest = z.infer<typeof passwordResetRequestSchema>;
+
+// The new password exists only in this answer (sent with Cache-Control: no-store): the server
+// keeps nothing but its hash, so it cannot be shown again.
+export const passwordResetResponseSchema = z.object({
+  student: z.object({
+    loginId: z.string(),
+    fullName: z.string(),
+    grade: z.number().int(),
+    classroom: z.string(),
+    seatNo: z.number().int(),
+  }),
+  password: z.string().min(1),
+});
+export type PasswordResetResponse = z.infer<typeof passwordResetResponseSchema>;

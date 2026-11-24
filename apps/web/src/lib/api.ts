@@ -9,6 +9,7 @@ import {
   healthResponseSchema,
   importCommitResponseSchema,
   importPreviewResponseSchema,
+  passwordResetResponseSchema,
   passwordStatusResponseSchema,
   roundClassroomsResponseSchema,
   roundListResponseSchema,
@@ -43,6 +44,8 @@ import type {
   JoinWaitlistRequest,
   LeaveWaitlistRequest,
   LoginRequest,
+  PasswordResetRequest,
+  PasswordResetResponse,
   RegisterRequest,
   Round,
   RoundClassroomsResponse,
@@ -285,6 +288,17 @@ export const commitImport = async ({
 export const fetchPasswordStatus = async (): Promise<ClassroomPasswordStatus[]> =>
   (await sendJson('/api/admin/students/password-status', 'GET', passwordStatusResponseSchema))
     .classrooms;
+
+// The answer carries a live password; the server sends it with Cache-Control: no-store.
+export const resetStudentPassword = async (
+  request: PasswordResetRequest,
+): Promise<PasswordResetResponse> =>
+  await sendJson(
+    '/api/admin/students/password-reset',
+    'POST',
+    passwordResetResponseSchema,
+    request,
+  );
 
 export type DownloadedFile = { file: Blob; filename: string };
 export type IssuedPasswordFile = DownloadedFile & { issuedCount: number };

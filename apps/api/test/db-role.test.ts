@@ -34,6 +34,7 @@ const EXPECTED_PRIVILEGES: Readonly<Record<string, readonly string[]>> = {
   club_advisors: ['SELECT', 'INSERT', 'DELETE'],
   clubs: ['SELECT', 'INSERT', 'UPDATE'],
   password_issuances: ['SELECT', 'INSERT'],
+  password_resets: ['SELECT', 'INSERT'],
   pgmigrations: [],
   queue_tickets: ['SELECT', 'INSERT'],
   registration_events: ['SELECT', 'INSERT'],

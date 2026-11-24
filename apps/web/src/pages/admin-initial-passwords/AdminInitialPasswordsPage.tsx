@@ -20,8 +20,9 @@ import { useReturnFocus } from '@/lib/panel-focus';
 import { useSetSession } from '@/lib/session';
 import { gradeLabel } from '@/lib/round-display';
 import { PasswordStatusTable, formatCount } from './PasswordStatusTable';
+import { PASSWORD_STATUS_QUERY_KEY as STATUS_QUERY_KEY } from './query-keys';
+import { StudentPasswordReset } from './StudentPasswordReset';
 
-const STATUS_QUERY_KEY = Object.freeze(['admin', 'password-status'] as const);
 const ALL_CLASSROOMS = '';
 
 const ERROR_MESSAGES: Readonly<Record<string, string>> = Object.freeze({
@@ -271,12 +272,18 @@ export const AdminInitialPasswordsPage = () => {
               (รหัสในไฟล์เดิมจะใช้ไม่ได้)
             </p>
           )}
-
-          <div className="space-y-2">
-            <h2 className="text-lg font-semibold">สถานะรายห้อง</h2>
-            <PasswordStatusTable classrooms={classrooms} />
-          </div>
         </>
+      )}
+
+      {/* Outside the branches above, so a status refetch that fails or empties the list never
+          unmounts it and loses a password still on screen. */}
+      <StudentPasswordReset />
+
+      {statusQuery.isSuccess && classrooms.length > 0 && (
+        <div className="space-y-2">
+          <h2 className="text-lg font-semibold">สถานะรายห้อง</h2>
+          <PasswordStatusTable classrooms={classrooms} />
+        </div>
       )}
     </section>
   );

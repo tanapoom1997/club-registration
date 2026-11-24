@@ -2,6 +2,8 @@ import {
   ERROR_CODES,
   ISSUED_COUNT_HEADER,
   issueInitialPasswordsRequestSchema,
+  passwordResetRequestSchema,
+  passwordResetResponseSchema,
   passwordStatusResponseSchema,
 } from '@club-registration/shared';
 import type { FastifyReply, FastifyRequest } from 'fastify';
@@ -12,6 +14,7 @@ import type { AuthGuard } from '../auth/session.js';
 import { createConcurrencyLimit } from '../concurrency-limit.js';
 import { AppError } from '../errors.js';
 import { buildInitialPasswordWorkbook } from '../export/initial-passwords-workbook.js';
+import { ADMIN_ACTIONS, logAdminChange } from '../http/audit-log.js';
 import { assertSameOrigin } from '../http/same-origin.js';
 import {
   assertIdempotencyKeyUnused,
@@ -20,6 +23,7 @@ import {
   preparePasswords,
 } from '../services/initial-passwords.js';
 import type { IssueScope } from '../services/initial-passwords.js';
+import { assertResetKeyUnused, commitReset, prepareReset } from '../services/password-reset.js';
 
 const XLSX_MIME = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
 // Half of libuv's default 4 threads: logins (one Argon2 verify each) keep the other half while a
@@ -29,6 +33,10 @@ const HASH_CONCURRENCY = 2;
 // through a grade, small enough that a stuck button cannot keep the CPU busy.
 const ISSUES_PER_ADMIN = 20;
 const ISSUE_WINDOW_MS = 10 * 60_000;
+// One hash each, typed in by hand one student at a time: one every ten seconds is more than any
+// admin at a desk needs, and a budget of its own keeps resets from using up the issuance's.
+const RESETS_PER_ADMIN = 60;
+const RESET_WINDOW_MS = 10 * 60_000;
 
 // Scope only: the file name must never carry a name or ID. Classrooms are free text, so only
 // ASCII letters and digits of it are kept.
@@ -53,15 +61,23 @@ export const adminStudentRoutes =
       keyGenerator: (request) => String(request.authUser?.id),
     });
 
-    const issueGate = async (request: FastifyRequest, reply: FastifyReply) => {
-      // JSON alone already stops cross-site forms; this also refuses a cross-site fetch outright.
-      assertSameOrigin(request);
-      const limit = await issueLimiter(request);
-      if (!limit.isAllowed && limit.isExceeded) {
-        void reply.header('retry-after', String(limit.ttlInSeconds));
-        throw new AppError(ERROR_CODES.rateLimited);
-      }
-    };
+    const resetLimiter = app.createRateLimit({
+      max: RESETS_PER_ADMIN,
+      timeWindow: RESET_WINDOW_MS,
+      keyGenerator: (request) => String(request.authUser?.id),
+    });
+
+    // Both writes answer with live passwords: JSON alone already stops cross-site forms, and this
+    // also refuses a cross-site fetch outright.
+    const passwordWriteGate =
+      (limiter: typeof issueLimiter) => async (request: FastifyRequest, reply: FastifyReply) => {
+        assertSameOrigin(request);
+        const limit = await limiter(request);
+        if (!limit.isAllowed && limit.isExceeded) {
+          void reply.header('retry-after', String(limit.ttlInSeconds));
+          throw new AppError(ERROR_CODES.rateLimited);
+        }
+      };
 
     app.get(
       '/admin/students/password-status',
@@ -82,7 +98,10 @@ export const adminStudentRoutes =
     // round and is not a registration event.
     app.post(
       '/admin/students/initial-passwords',
-      { schema: { body: issueInitialPasswordsRequestSchema }, preHandler: issueGate },
+      {
+        schema: { body: issueInitialPasswordsRequestSchema },
+        preHandler: passwordWriteGate(issueLimiter),
+      },
       async (request, reply) => {
         const admin = requireAuthUser(request);
         const { grade, classroom, onlyUnissued, idempotencyKey } = request.body;
@@ -123,6 +142,44 @@ export const adminStudentRoutes =
           .header('cache-control', 'no-store')
           .header(ISSUED_COUNT_HEADER, String(issued.length))
           .send(file);
+      },
+    );
+
+    // One student's password, for a student who forgot it (services/password-reset.ts). Answers
+    // with the new password itself, the one copy there is: only its hash is kept.
+    //
+    // Idempotency as for the issuance: a replay cannot be answered with the same password, which
+    // was never stored, and acting again would silently kill the password the admin may already
+    // have read out to the student. The key is stored in password_resets (same transaction) and a
+    // request reusing it gets 409 idempotency_key_reused; the web app tells the admin the earlier
+    // reset went through and a new one is needed. A reset belongs to no round, so its row is
+    // there and not in registration_events (CLAUDE.md rule 7).
+    app.post(
+      '/admin/students/password-reset',
+      {
+        schema: {
+          body: passwordResetRequestSchema,
+          response: { 200: passwordResetResponseSchema },
+        },
+        preHandler: passwordWriteGate(resetLimiter),
+      },
+      async (request, reply) => {
+        const admin = requireAuthUser(request);
+        const { loginId, idempotencyKey } = request.body;
+
+        // Before hashing, like the issuance: a replay or a typo costs one query.
+        await assertResetKeyUnused(pool, admin.id, idempotencyKey);
+        const prepared = await prepareReset(pool, loginId, hashLimit);
+        const reset = await commitReset(pool, { adminId: admin.id, idempotencyKey, prepared });
+
+        // Database ids only: never the password, the student's name or login ID (a student code).
+        logAdminChange(request, ADMIN_ACTIONS.studentPasswordReset, {
+          studentId: prepared.studentId,
+        });
+
+        // The body is a live password: no browser or proxy may keep a copy.
+        void reply.header('cache-control', 'no-store');
+        return reset;
       },
     );
   };

@@ -71,6 +71,15 @@ describe('auth routes', () => {
     expect(fetchMock.mock.calls.filter(([input]) => input === '/api/auth/login')).toEqual([]);
   });
 
+  it('tells a student who forgot the password whom to ask for a new one', async () => {
+    mockApi({ 'GET /api/auth/me': unauthorized });
+
+    renderAt('/login');
+
+    await screen.findByRole('heading', { name: 'เข้าสู่ระบบ' });
+    expect(screen.getByText(/ลืมรหัสผ่าน\? ติดต่อครูที่ดูแลการลงทะเบียน/)).toBeTruthy();
+  });
+
   it('moves on to the empty password field when Enter is pressed in the login ID', async () => {
     const fetchMock = mockApi({ 'GET /api/auth/me': unauthorized });
     renderAt('/login');
