@@ -8,7 +8,7 @@ export const CLUBS_QUERY_KEY = Object.freeze(['admin', 'clubs'] as const);
 export const CLUBS_POLL_INTERVAL_MS = 5_000;
 
 // The first round with the status, ordered by one of its times (1 = earliest first).
-const firstBy = (
+export const firstRoundBy = (
   rounds: readonly Round[],
   status: RoundStatus,
   field: 'opensAt' | 'closesAt',
@@ -22,9 +22,9 @@ const firstBy = (
 // overlap), else the next to open, else the last to close. The same order the student pages use
 // to pick a grade's round.
 export const preferredRound = (rounds: readonly Round[]): Round | undefined =>
-  firstBy(rounds, 'open', 'closesAt') ??
-  firstBy(rounds, 'upcoming', 'opensAt') ??
-  firstBy(rounds, 'closed', 'closesAt', -1);
+  firstRoundBy(rounds, 'open', 'closesAt') ??
+  firstRoundBy(rounds, 'upcoming', 'opensAt') ??
+  firstRoundBy(rounds, 'closed', 'closesAt', -1);
 
 const ERROR_MESSAGES: Readonly<Record<string, string>> = Object.freeze({
   [ERROR_CODES.capacityBelowRegistered]:

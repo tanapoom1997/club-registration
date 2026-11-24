@@ -85,9 +85,9 @@ const exportCalls = (fetchMock: ReturnType<typeof mockApi>) =>
 
 const downloadButton = () => screen.getByRole('button', { name: 'ดาวน์โหลดรายชื่อ' });
 
+// The only round is chosen on arrival.
 const openPageWithRound = async () => {
   renderAt('/admin/export');
-  fireEvent.change(await screen.findByLabelText('รอบลงทะเบียน'), { target: { value: '1' } });
   await screen.findByLabelText('ขอบเขต');
 };
 
@@ -111,22 +111,72 @@ describe('admin export page', () => {
     vi.restoreAllMocks();
   });
 
-  it('says why the download is off until a round is chosen (V4)', async () => {
-    mockApi(baseApi);
-    renderAt('/admin/export');
-    const round = await screen.findByLabelText('รอบลงทะเบียน');
+  describe('the round chosen on arrival', () => {
+    const round = (overrides: Partial<Round>): Round => ({ ...ROUND, ...overrides });
+    const chosenRound = async () =>
+      (await screen.findByLabelText<HTMLSelectElement>('รอบลงทะเบียน')).selectedOptions[0]
+        ?.textContent;
 
-    expect((downloadButton() as HTMLButtonElement).disabled).toBe(true);
-    expect(downloadButton().getAttribute('aria-describedby')).not.toBeNull();
-    const hint = document.getElementById(downloadButton().getAttribute('aria-describedby') ?? '');
-    expect(hint?.textContent).toBe('เลือกรอบลงทะเบียนด้านบนก่อน จึงจะดาวน์โหลดได้');
+    const openWith = (rounds: Round[]) => {
+      const fetchMock = mockApi({
+        ...baseApi,
+        'GET /api/admin/rounds': () => Response.json({ rounds }),
+        ...Object.fromEntries(
+          rounds.map((shown) => [
+            `GET /api/admin/rounds/${shown.id}/clubs`,
+            () => Response.json({ round: shown, clubs: CLUBS }),
+          ]),
+        ),
+      });
+      renderAt('/admin/export');
+      return fetchMock;
+    };
 
-    fireEvent.change(round, { target: { value: '1' } });
-    await screen.findByLabelText('ขอบเขต');
+    it('is the open round, ready to download with no empty choice', async () => {
+      openWith([
+        round({ id: 2, grade: 2, status: 'closed' }),
+        round({ id: 3, grade: 3, status: 'open' }),
+      ]);
 
-    expect((downloadButton() as HTMLButtonElement).disabled).toBe(false);
-    expect(downloadButton().getAttribute('aria-describedby')).toBeNull();
-    expect(screen.queryByText('เลือกรอบลงทะเบียนด้านบนก่อน จึงจะดาวน์โหลดได้')).toBeNull();
+      expect(await chosenRound()).toContain('ม.3');
+      await screen.findByLabelText('ขอบเขต');
+      expect((downloadButton() as HTMLButtonElement).disabled).toBe(false);
+      expect(screen.queryByRole('option', { name: 'เลือกรอบ' })).toBeNull();
+    });
+
+    it('is the round that closed last when none is open, ahead of an upcoming one', async () => {
+      openWith([
+        round({ id: 2, grade: 2, status: 'upcoming', closesAt: '2027-05-01T09:00:00.000Z' }),
+        round({ id: 3, grade: 3, status: 'closed', closesAt: '2026-06-01T09:00:00.000Z' }),
+        round({ id: 4, grade: 4, status: 'closed', closesAt: '2026-11-01T09:00:00.000Z' }),
+      ]);
+
+      expect(await chosenRound()).toContain('ม.4');
+    });
+
+    it('is the next round to open when no round has opened yet', async () => {
+      openWith([
+        round({ id: 2, grade: 2, status: 'upcoming', opensAt: '2027-02-01T01:00:00.000Z' }),
+        round({ id: 3, grade: 3, status: 'upcoming', opensAt: '2027-01-01T01:00:00.000Z' }),
+      ]);
+
+      expect(await chosenRound()).toContain('ม.3');
+    });
+
+    it('lets the admin switch to another round', async () => {
+      const fetchMock = openWith([
+        round({ id: 2, grade: 2, status: 'closed' }),
+        round({ id: 3, grade: 3, status: 'open' }),
+      ]);
+      await screen.findByLabelText('ขอบเขต');
+
+      fireEvent.change(screen.getByLabelText('รอบลงทะเบียน'), { target: { value: '2' } });
+
+      expect(await chosenRound()).toContain('ม.2');
+      await waitFor(() => {
+        expect(fetchMock.mock.calls.map(([input]) => input)).toContain('/api/admin/rounds/2/clubs');
+      });
+    });
   });
 
   it('downloads every club of the chosen round by default', async () => {
@@ -288,8 +338,6 @@ describe('admin export page', () => {
       'GET /api/admin/rounds/1/clubs': () => Response.json({ round: ROUND, clubs: [] }),
     });
     renderAt('/admin/export');
-
-    fireEvent.change(await screen.findByLabelText('รอบลงทะเบียน'), { target: { value: '1' } });
 
     expect(await screen.findByText('รอบนี้ยังไม่มีชุมนุม เพิ่มได้จากการนำเข้า Excel')).toBeTruthy();
     expect((downloadButton() as HTMLButtonElement).disabled).toBe(true);

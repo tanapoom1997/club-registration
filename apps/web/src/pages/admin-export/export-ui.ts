@@ -1,8 +1,17 @@
 import { ERROR_CODES } from '@club-registration/shared';
-import type { ExportFormat, ExportView } from '@club-registration/shared';
+import type { ExportFormat, ExportView, Round } from '@club-registration/shared';
 import { ApiError } from '@/lib/api';
+import { firstRoundBy } from '@/pages/admin-clubs/club-ui';
 
 export const CLASSROOMS_QUERY_KEY = Object.freeze(['admin', 'classrooms'] as const);
+
+// The round an admin most likely came to export: the open one (lists to chase who has not
+// registered), else the one that closed last (the final lists for teachers), else the next to open.
+// Unlike the clubs page, a closed round beats an upcoming one: an upcoming round has no members.
+export const exportRound = (rounds: readonly Round[]): Round | undefined =>
+  firstRoundBy(rounds, 'open', 'closesAt') ??
+  firstRoundBy(rounds, 'closed', 'closesAt', -1) ??
+  firstRoundBy(rounds, 'upcoming', 'opensAt');
 
 export const VIEW_OPTIONS: Readonly<Record<ExportView, { label: string; description: string }>> =
   Object.freeze({
