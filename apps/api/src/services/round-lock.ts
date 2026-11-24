@@ -13,8 +13,9 @@ import type { Queryable } from '../db.js';
 // Global lock order. Every writer takes its locks in this order, skipping the steps it does not
 // need; apart from the import's step 2, all advisory locks come before any row lock:
 //
-// 1. The import lock (lockImport): the import commit, the initial password issuance and the
-//    admin round edit, each as its first statement, holding nothing yet. The round edit takes it
+// 1. The import lock (lockImport): the import commit, the initial password issuance, an admin's
+//    reset of one student's password (password-reset.ts) and the admin round edit, each as its
+//    first statement, holding nothing yet. The round edit takes it
 //    only to run apart from the import: it writes the rounds row the import holds FOR SHARE in
 //    step 2, after taking a round lock the import may be waiting for in step 3.
 // 2. FOR SHARE on every rounds row: the import commit only (lockRoundsForImport).
@@ -71,7 +72,10 @@ import type { Queryable } from '../db.js';
 //   users, FOR SHARE on student_profiles) do not conflict with what register takes on those rows
 //   (FOR KEY SHARE through foreign keys, FOR SHARE on the profile), and the one other writer of
 //   those users rows, a student's own password change, locks only its row and waits for nothing
-//   else. So the issuance waits only for transactions that wait for nothing it holds.
+//   else. So the issuance waits only for transactions that wait for nothing it holds. The reset of
+//   one student's password takes the same locks as the issuance, on one users row and its profile,
+//   after the import lock, so the same holds for it, and it never runs beside an issuance or an
+//   import.
 //
 // The queue lock (lockQueue, README Phase 3) stands outside this order. A queue write (join,
 // heartbeat, done in queue.ts) takes exactly one queue lock, of its round, holding nothing, and no
@@ -98,7 +102,8 @@ import type { Queryable } from '../db.js';
 // constraints (UNIQUE, CHECK); the locks only make the order simple.
 
 // A fixed key (not per term) because students are shared across terms. See import-commit.ts,
-// initial-passwords.ts and updateRound in rounds.ts for what each holder relies on it for.
+// initial-passwords.ts, password-reset.ts and updateRound in rounds.ts for what each holder relies
+// on it for.
 const IMPORT_LOCK_KEY: readonly [number, number] = Object.freeze([1, 1] as const);
 
 export const lockImport = async (db: Queryable): Promise<void> => {

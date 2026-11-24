@@ -104,11 +104,15 @@ export {
   ISSUED_COUNT_HEADER,
   classroomPasswordStatusSchema,
   issueInitialPasswordsRequestSchema,
+  passwordResetRequestSchema,
+  passwordResetResponseSchema,
   passwordStatusResponseSchema,
 } from './initial-passwords.js';
 export type {
   ClassroomPasswordStatus,
   IssueInitialPasswordsRequest,
+  PasswordResetRequest,
+  PasswordResetResponse,
   PasswordStatusResponse,
 } from './initial-passwords.js';
 export {

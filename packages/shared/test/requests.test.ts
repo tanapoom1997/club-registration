@@ -9,7 +9,11 @@ import {
 } from '../src/event-log.js';
 import { exportQuerySchema } from '../src/export.js';
 import { idempotencyKeySchema } from '../src/idempotency.js';
-import { issueInitialPasswordsRequestSchema } from '../src/initial-passwords.js';
+import {
+  issueInitialPasswordsRequestSchema,
+  passwordResetRequestSchema,
+  passwordResetResponseSchema,
+} from '../src/initial-passwords.js';
 import {
   cancelRegistrationRequestSchema,
   changeRegistrationRequestSchema,
@@ -425,5 +429,47 @@ describe('eventLogQuerySchema', () => {
     ['a login ID given twice', { loginId: ['fictional01', 'fictional02'] }],
   ])('refuses %s', (_case, query) => {
     expect(eventLogQuerySchema.safeParse(query).success).toBe(false);
+  });
+});
+
+describe('passwordResetRequestSchema', () => {
+  it('accepts a login ID and a key, lower-casing and trimming the login ID as login does', () => {
+    expect(
+      passwordResetRequestSchema.safeParse({ loginId: ' Fictional01 ', idempotencyKey: KEY }),
+    ).toEqual({ success: true, data: { loginId: 'fictional01', idempotencyKey: KEY } });
+  });
+
+  it.each([
+    ['naming a student id', { loginId: 'fictional01', idempotencyKey: KEY, studentId: 7 }],
+    ['choosing the password', { loginId: 'fictional01', idempotencyKey: KEY, password: 'x' }],
+    ['without a key', { loginId: 'fictional01' }],
+    ['with a malformed key', { loginId: 'fictional01', idempotencyKey: 'short' }],
+    ['without a login ID', { idempotencyKey: KEY }],
+    ['with an empty login ID', { loginId: '  ', idempotencyKey: KEY }],
+    ['with a login ID of other characters', { loginId: 'นักเรียน', idempotencyKey: KEY }],
+    ['with a numeric login ID', { loginId: 1001, idempotencyKey: KEY }],
+  ])('refuses a body %s', (_case, body) => {
+    expect(passwordResetRequestSchema.safeParse(body).success).toBe(false);
+  });
+});
+
+describe('passwordResetResponseSchema', () => {
+  const answer = {
+    student: {
+      loginId: 'fictional01',
+      fullName: 'นักเรียนสมมติ ทดสอบ',
+      grade: 1,
+      classroom: '2',
+      seatNo: 5,
+    },
+    password: 'abcde23456',
+  };
+
+  it('accepts the student and the new password', () => {
+    expect(passwordResetResponseSchema.safeParse(answer)).toEqual({ success: true, data: answer });
+  });
+
+  it('refuses an answer without a password', () => {
+    expect(passwordResetResponseSchema.safeParse({ ...answer, password: '' }).success).toBe(false);
   });
 });

@@ -7,7 +7,9 @@ import { requireAuthUser } from '../auth/session.js';
 // have no table, so without this line nothing would show which admin changed a window or a
 // capacity. An admin seating or removing a student, or taking one off a waitlist
 // (routes/admin-club-members.ts), does write registration_events; it logs here too so every admin
-// change, and the promotions it caused, is found with one grep. Logged only after the change commits: a refused request changed nothing.
+// change, and the promotions it caused, is found with one grep. A reset of one student's password
+// (routes/admin-students.ts) keeps a password_resets row and logs here too, for the same reason.
+// Logged only after the change commits: a refused request changed nothing.
 //
 // A log line, not a table: it lasts only as long as the container's log rotation keeps it
 // (compose.prod.yml), which covers investigating a registration day, not a long-term record.
@@ -20,6 +22,7 @@ export const ADMIN_ACTIONS = Object.freeze({
   clubMemberAssign: 'club.member_assign',
   clubMemberRemove: 'club.member_remove',
   clubWaitlistRemove: 'club.waitlist_remove',
+  studentPasswordReset: 'student.password_reset',
 } as const);
 
 export type AdminAction = (typeof ADMIN_ACTIONS)[keyof typeof ADMIN_ACTIONS];

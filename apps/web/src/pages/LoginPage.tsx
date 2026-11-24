@@ -97,6 +97,10 @@ export const LoginPage = () => {
           {mutation.isPending ? 'กำลังเข้าสู่ระบบ…' : 'เข้าสู่ระบบ'}
         </Button>
       </form>
+      {/* There is no self-service reset: an admin resets one student's password on request. */}
+      <p className="mt-4 text-center text-sm text-muted-foreground">
+        ลืมรหัสผ่าน? ติดต่อครูที่ดูแลการลงทะเบียนเพื่อขอรหัสใหม่
+      </p>
     </AuthShell>
   );
 };
