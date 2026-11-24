@@ -32,6 +32,8 @@ type RoundRow = {
   total_registered: number;
   queue_waiting: number;
   queue_admitted: number;
+  student_count: number;
+  students_without_club: number;
 };
 
 // The window is half-open: a round is open from opens_at up to, but not including, closes_at.
@@ -59,12 +61,18 @@ const toRound = (row: RoundRow, now: Date): Round => ({
   totalRegistered: row.total_registered,
   queueWaiting: row.queue_waiting,
   queueAdmitted: row.queue_admitted,
+  studentCount: row.student_count,
+  studentsWithoutClub: row.students_without_club,
 });
 
 const ROUND_COLUMNS = 'id, term, grade, opens_at, closes_at, max_active';
 
 // Totals are summed from clubs on every read instead of being cached on rounds, so they cannot
-// drift from clubs.registered. `source` is always a constant (a table or a CTE name), never input.
+// drift from clubs.registered. The student counts are of the students in the round's grade *now*
+// (student_profiles holds only the current grade): right for an open or upcoming round, which is
+// where the admin home shows them, but a closed round of an earlier term is counted against
+// today's grade, not the students it had. Registrations of a round are only of its own grade
+// (README Phase 1 item 5), so "no registration in this round" is "no club yet". `source` is always a constant (a table or a CTE name), never input.
 //
 // The queue counts (Q4) are the round's live tickets by the DB clock, with the queue's own
 // definition of live (liveTicket in queue.ts): a ticket past its idle timeout or its TTL is not
@@ -84,7 +92,8 @@ type QueueParams = { idle: string; ttl: string };
 const selectWithTotals = (source: string, { idle, ttl }: QueueParams, filter = '') => `
   SELECT r.id, r.term, r.grade, r.opens_at, r.closes_at, r.max_active,
          totals.club_count, totals.total_capacity, totals.total_registered,
-         queue.queue_waiting, queue.queue_admitted
+         queue.queue_waiting, queue.queue_admitted,
+         students.student_count, students.students_without_club
   FROM ${source} r
   CROSS JOIN LATERAL (
     SELECT count(*)::int AS club_count,
@@ -99,6 +108,15 @@ const selectWithTotals = (source: string, { idle, ttl }: QueueParams, filter = '
     FROM queue_tickets q
     WHERE q.round_id = r.id AND ${liveTicket('q', idle, ttl)}
   ) queue
+  CROSS JOIN LATERAL (
+    SELECT count(*)::int AS student_count,
+           count(*) FILTER (WHERE NOT EXISTS (
+             SELECT 1 FROM registrations reg
+             WHERE reg.round_id = r.id AND reg.student_id = sp.user_id
+           ))::int AS students_without_club
+    FROM student_profiles sp
+    WHERE sp.grade = r.grade
+  ) students
   ${filter}
   ORDER BY r.term DESC, r.grade`;
 
