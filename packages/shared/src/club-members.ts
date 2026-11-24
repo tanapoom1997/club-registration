@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import { loginIdSchema } from './auth.js';
 import { idempotencyKeySchema } from './idempotency.js';
+import { dbIdSchema } from './rounds.js';
 
 // An admin's view of who holds a seat in a club, and an admin seating or removing a student in
 // their place (README Phase 2, PR 3a). Admin routes only: these carry students' names.
@@ -100,3 +101,32 @@ export type ClubWaitlistResponse = z.infer<typeof clubWaitlistResponseSchema>;
 // ID, the round from the club.
 export const clubWaitlistRemoveRequestSchema = clubMemberRequestSchema;
 export type ClubWaitlistRemoveRequest = z.infer<typeof clubWaitlistRemoveRequestSchema>;
+
+// Every student of a round's grade and where each stands in the round, for an admin who knows a
+// student's name or classroom but not their code: the members panel searches it client-side and
+// fills the login ID the assign takes. The grade is the student's current one (an import may have
+// moved members of a closed round on). No query parameters, strict like the students' reads, so
+// a filter the endpoint does not have is refused instead of silently ignored.
+export const roundStudentsParamsSchema = z.object({ roundId: dbIdSchema });
+export type RoundStudentsParams = z.infer<typeof roundStudentsParamsSchema>;
+
+export const roundStudentsQuerySchema = z.strictObject({});
+export type RoundStudentsQuery = z.infer<typeof roundStudentsQuerySchema>;
+
+// club: the seat the student holds in this round; waitingFor: the club whose waitlist they are on
+// in it. Both can be set at once (a waiter may hold another club meanwhile).
+export const roundStudentSchema = z.object({
+  loginId: z.string(),
+  fullName: z.string(),
+  classroom: z.string(),
+  seatNo: z.number().int().positive(),
+  club: clubRefSchema.nullable(),
+  waitingFor: clubRefSchema.nullable(),
+});
+export type RoundStudent = z.infer<typeof roundStudentSchema>;
+
+// In the export order: classroom (numeric-aware), seat number, then login ID.
+export const roundStudentsResponseSchema = z.object({
+  students: z.array(roundStudentSchema),
+});
+export type RoundStudentsResponse = z.infer<typeof roundStudentsResponseSchema>;

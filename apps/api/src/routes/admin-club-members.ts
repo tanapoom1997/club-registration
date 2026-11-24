@@ -6,6 +6,9 @@ import {
   clubMemberWriteResponseSchema,
   clubWaitlistRemoveRequestSchema,
   clubWaitlistResponseSchema,
+  roundStudentsParamsSchema,
+  roundStudentsQuerySchema,
+  roundStudentsResponseSchema,
 } from '@club-registration/shared';
 import type { FastifyReply, FastifyRequest } from 'fastify';
 import type { FastifyPluginAsyncZod } from 'fastify-type-provider-zod';
@@ -19,6 +22,7 @@ import type { AdminAction } from '../http/audit-log.js';
 import { assignMember, listClubMembers, removeMember } from '../services/club-members.js';
 import type { MemberWriteInput, MemberWriteResult } from '../services/club-members.js';
 import { listClubWaitlist, removeWaitlistEntry } from '../services/club-waitlist.js';
+import { listRoundStudents } from '../services/round-students.js';
 
 // Seating, removing and taking a student off a waitlist is one request per student, so a busy
 // admin fixing a list clicks a few times a minute. 120 a minute (two a second, shared by the
@@ -77,6 +81,21 @@ export const adminClubMemberRoutes =
       });
       return { club: result.club, member: result.member };
     };
+
+    // The students the panel can seat, to find one by name or classroom (services/round-students.ts).
+    // A read, so outside the write budget. No query string: a student's name or code typed into
+    // the search never leaves the browser.
+    app.get(
+      '/admin/rounds/:roundId/students',
+      {
+        schema: {
+          params: roundStudentsParamsSchema,
+          querystring: roundStudentsQuerySchema,
+          response: { 200: roundStudentsResponseSchema },
+        },
+      },
+      async (request) => await listRoundStudents(pool, request.params.roundId),
+    );
 
     app.get(
       '/admin/clubs/:id/members',

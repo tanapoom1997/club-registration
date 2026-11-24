@@ -3,6 +3,7 @@ import {
   clubMembersResponseSchema,
   clubMemberWriteResponseSchema,
   errorResponseSchema,
+  roundStudentsResponseSchema,
 } from '@club-registration/shared';
 import type { FastifyInstance, InjectOptions } from 'fastify';
 import type { Pool } from 'pg';
@@ -359,6 +360,149 @@ describe('admin club members', () => {
 
       expect(asStudentResponse.statusCode).toBe(403);
       expect(anonymous.statusCode).toBe(401);
+    });
+  });
+
+  // The students the panel searches to find one by name or classroom (services/round-students.ts).
+  describe('GET /api/admin/rounds/:roundId/students', () => {
+    const studentsUrl = (roundId: number | string) => `/api/admin/rounds/${roundId}/students`;
+    const listStudents = async (roundId: number) =>
+      await asAdmin({ method: 'GET', url: studentsUrl(roundId) });
+    const studentsOf = async (roundId: number) =>
+      roundStudentsResponseSchema.parse((await listStudents(roundId)).json()).students;
+
+    // Other tests in this file leave students of every grade behind; these count them.
+    beforeEach(async () => {
+      await truncateAsOwner(container, ['rounds', 'users']);
+      adminId = await createAdminId(pool);
+    });
+
+    it('lists the students of the round grade only, by classroom (numeric-aware), seat, then login ID', async () => {
+      const roundId = await createOpenRound(pool, 4);
+      const made = [
+        { loginId: 'room10-seat1', classroom: '4/10', seatNo: 1 },
+        { loginId: 'room2-seat3', classroom: '4/2', seatNo: 3 },
+        { loginId: 'room2-tie-b', classroom: '4/2', seatNo: 1 },
+        { loginId: 'room2-tie-a', classroom: '4/2', seatNo: 1 },
+      ];
+      for (const student of made) await createStudent(pool, { ...student, grade: 4 });
+      await createStudent(pool, { loginId: 'other-grade', grade: 5, classroom: '4/2', seatNo: 2 });
+
+      const students = await studentsOf(roundId);
+
+      expect(students.map(({ loginId }) => loginId)).toEqual([
+        'room2-tie-a',
+        'room2-tie-b',
+        'room2-seat3',
+        'room10-seat1',
+      ]);
+      expect(students[0]).toEqual({
+        loginId: 'room2-tie-a',
+        fullName: 'นักเรียน สมมติ',
+        classroom: '4/2',
+        seatNo: 1,
+        club: null,
+        waitingFor: null,
+      });
+    });
+
+    it('says which club each student holds and waits for in this round, not in another', async () => {
+      const roundId = await createOpenRound(pool);
+      const full = await fullClubWithWaiters({ roundId, capacity: 1, waiters: 1 });
+      const other = await clubWith({ roundId, capacity: 2, holders: 1 });
+      const [holder] = full.holders;
+      const [waiter] = full.queue;
+      const [holderWaiting] = other.holders;
+      expect(codeOf(await join(holderWaiting!, full.clubId))).toBe('ok');
+      const free = await createStudentId(pool);
+      const elsewhere = await clubWith({ roundId: await createUpcomingRound(pool) });
+      expect(codeOf(await assign(elsewhere.clubId, await loginOf(free)))).toBe('ok');
+      const refOf = async (clubId: number) => {
+        const { rows } = await pool.query<{ club_code: string; name: string }>(
+          'SELECT club_code, name FROM clubs WHERE id = $1',
+          [clubId],
+        );
+        return { id: clubId, clubCode: rows[0]!.club_code, name: rows[0]!.name };
+      };
+      const fullRef = await refOf(full.clubId);
+      const otherRef = await refOf(other.clubId);
+
+      const byLogin = new Map(
+        (await studentsOf(roundId)).map(({ loginId, club, waitingFor }) => [
+          loginId,
+          { club, waitingFor },
+        ]),
+      );
+
+      expect(byLogin.size).toBe(4);
+      expect(byLogin.get(await loginOf(holder!))).toEqual({ club: fullRef, waitingFor: null });
+      expect(byLogin.get(await loginOf(waiter!))).toEqual({ club: null, waitingFor: fullRef });
+      expect(byLogin.get(await loginOf(holderWaiting!))).toEqual({
+        club: otherRef,
+        waitingFor: fullRef,
+      });
+      expect(byLogin.get(await loginOf(free))).toEqual({ club: null, waitingFor: null });
+    });
+
+    // Assign refuses any account but a student's, so the list must not offer one, even an admin
+    // given a profile by hand.
+    it('lists no admin account, even one with a student profile', async () => {
+      const roundId = await createOpenRound(pool);
+      const studentId = await createStudentId(pool);
+      await pool.query(
+        `INSERT INTO student_profiles (user_id, grade, classroom, seat_no) VALUES ($1, 1, '1', 2)`,
+        [adminId],
+      );
+
+      const students = await studentsOf(roundId);
+
+      expect(students.map(({ loginId }) => loginId)).toEqual([await loginOf(studentId)]);
+    });
+
+    it('answers 404 for an unknown round', async () => {
+      const response = await listStudents(UNKNOWN_ID);
+
+      expect(response.statusCode).toBe(404);
+      expect(codeOf(response)).toBe('not_found');
+    });
+
+    it('refuses a query parameter with 400 instead of ignoring it', async () => {
+      const roundId = await createOpenRound(pool);
+
+      const response = await asAdmin({ method: 'GET', url: `${studentsUrl(roundId)}?grade=2` });
+
+      expect(response.statusCode).toBe(400);
+      expect(codeOf(response)).toBe('validation_error');
+    });
+
+    it('is for admins only', async () => {
+      const roundId = await createOpenRound(pool);
+      const studentId = await createStudentId(pool);
+
+      const asStudentResponse = await app.inject({
+        method: 'GET',
+        url: studentsUrl(roundId),
+        cookies: { [SESSION_COOKIE]: sessionCookie(app, studentId) },
+      });
+      const anonymous = await app.inject({ method: 'GET', url: studentsUrl(roundId) });
+
+      expect(asStudentResponse.statusCode).toBe(403);
+      expect(anonymous.statusCode).toBe(401);
+    });
+
+    it('logs no name and no login ID', async () => {
+      const { roundId, holders } = await clubWith({ holders: 1 });
+      const loginId = await loginOf(holders[0]!);
+      await createStudent(pool, { loginId: 'fictional-room2', fullName: 'ชื่อสมมติ ไม่ควรอยู่ในล็อก' });
+
+      expect((await listStudents(roundId)).statusCode).toBe(200);
+
+      const log = logLines.join('\n');
+      expect(log).toContain(studentsUrl(roundId));
+      expect(log).not.toContain(STUDENT_NAME);
+      expect(log).not.toContain('ชื่อสมมติ');
+      expect(log).not.toContain(loginId);
+      expect(log).not.toContain('fictional-room2');
     });
   });
 

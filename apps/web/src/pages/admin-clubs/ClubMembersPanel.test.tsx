@@ -62,7 +62,9 @@ const S2 = student(2, '1/2', 3, 'นักเรียนสมมติ <i>ส�
 const S3 = student(3, '1/1', 2, 'นักเรียนสมมติ สาม');
 const S4 = student(4, '1/3', 5, 'นักเรียนสมมติ สี่');
 const S5 = student(5, '1/4', 7, 'นักเรียนสมมติ ห้า');
-const STUDENTS = [S1, S2, S3, S4, S5];
+// In no club and no waitlist.
+const S6 = student(6, '1/2', 12, 'นักเรียนสมมติ หก');
+const STUDENTS = [S1, S2, S3, S4, S5, S6];
 
 type ClubBase = Omit<AdminClub, 'registered' | 'remaining' | 'waitlistCount'>;
 const CHESS: ClubBase = {
@@ -93,6 +95,8 @@ type ServerState = {
   clubs: ClubBase[];
   seats: Map<number, Seat[]>;
   queues: Map<number, Student[]>;
+  // More students of the grade, for the search only (the mock cannot seat them).
+  extraStudents: Student[];
 };
 
 const initialState = (round: Round): ServerState => ({
@@ -118,6 +122,7 @@ const initialState = (round: Round): ServerState => ({
     [CHESS.id, []],
     [MUSIC.id, [S1, S5]],
   ]),
+  extraStudents: [],
 });
 
 const seatsOf = (state: ServerState, club: ClubBase): ClubSeats => {
@@ -147,6 +152,13 @@ const heldClubOf = (state: ServerState, loginId: string) => {
   return club ? { id: club.id, clubCode: club.clubCode, name: club.name } : null;
 };
 
+const waitingClubOf = (state: ServerState, loginId: string) => {
+  const club = state.clubs.find(({ id }) =>
+    state.queues.get(id)?.some((s) => s.loginId === loginId),
+  );
+  return club ? { id: club.id, clubCode: club.clubCode, name: club.name } : null;
+};
+
 const entriesOf = (state: ServerState, clubId: number): ClubWaitlistEntry[] =>
   (state.queues.get(clubId) ?? []).map((s, index) => ({
     ...s,
@@ -160,6 +172,7 @@ const removePath = (clubId: number) => `/api/admin/clubs/${clubId}/members/remov
 const waitlistPath = (clubId: number) => `/api/admin/clubs/${clubId}/waitlist`;
 const unwaitPath = (clubId: number) => `/api/admin/clubs/${clubId}/waitlist/remove`;
 const CLUBS_PATH = '/api/admin/rounds/1/clubs';
+const STUDENTS_PATH = '/api/admin/rounds/1/students';
 
 const loginIdIn = (init: RequestInit | undefined) => (bodyOf(init) as { loginId: string }).loginId;
 
@@ -187,6 +200,19 @@ const mockMembersApi = (round: Round = roundFixture(), otherRounds: Round[] = []
           const waitlistCount = state.queues.get(club.id)?.length ?? 0;
           return { ...club, registered, remaining, waitlistCount };
         }),
+      }),
+    [`GET ${STUDENTS_PATH}`]: () =>
+      Response.json({
+        students: [...STUDENTS, ...state.extraStudents].map(
+          ({ loginId, fullName, classroom, seatNo }) => ({
+            loginId,
+            fullName,
+            classroom,
+            seatNo,
+            club: heldClubOf(state, loginId),
+            waitingFor: waitingClubOf(state, loginId),
+          }),
+        ),
       }),
   };
   for (const club of state.clubs) {
@@ -969,5 +995,162 @@ describe('admin club members panel on a phone or an upright tablet (W2)', () => 
     expect(within(waiters).queryByText(S1.fullName)).toBeNull();
     expect(cardOf(waiters, S5).textContent).toContain('ลำดับที่ 1');
     expect(callsTo(fetchMock, 'POST', unwaitPath(MUSIC.id))).toHaveLength(1);
+  });
+});
+
+// Teachers know a student's name and classroom, rarely the code: the panel finds the student in
+// the round's grade and fills the code, and the add goes through the same form as a typed code.
+describe('finding a student in the members panel', () => {
+  afterEach(() => {
+    cleanup();
+    vi.unstubAllGlobals();
+  });
+
+  const searchFor = (panel: HTMLElement, text: string) =>
+    fireEvent.change(within(panel).getByRole('searchbox', { name: 'ค้นหานักเรียน' }), {
+      target: { value: text },
+    });
+
+  const resultsOf = async (panel: HTMLElement) =>
+    await within(panel).findByRole('list', { name: 'ผลการค้นหานักเรียน' });
+
+  const namesIn = (list: HTMLElement) =>
+    within(list)
+      .getAllByRole('listitem')
+      .map((item) => item.querySelector('p')?.textContent);
+
+  const itemOf = (list: HTMLElement, s: Student) =>
+    within(list).getByText(s.fullName).closest('li') as HTMLElement;
+
+  const pickButton = (panel: HTMLElement, s: Student) =>
+    within(panel).queryByRole('button', { name: `เลือก ${s.loginId} ${s.fullName}` });
+
+  it('lists nothing until the admin types', async () => {
+    mockMembersApi();
+    renderAt('/admin/clubs');
+    const panel = await openMembers(CHESS);
+
+    expect(within(panel).queryByRole('list', { name: 'ผลการค้นหานักเรียน' })).toBeNull();
+  });
+
+  it('finds students by name and says where each one is in the round', async () => {
+    mockMembersApi();
+    renderAt('/admin/clubs');
+    const panel = await openMembers(CHESS);
+
+    searchFor(panel, ' นักเรียน  สมมติ ');
+
+    const list = await resultsOf(panel);
+    expect(namesIn(list)).toEqual(STUDENTS.map(({ fullName }) => fullName));
+    expect(within(panel).getByText('พบ 6 คน')).toBeTruthy();
+    expect(itemOf(list, S6).textContent).toContain('demo1006 · ห้อง 1/2 เลขที่ 12');
+    expect(itemOf(list, S6).textContent).toContain('ยังไม่มีชุมนุม');
+    expect(itemOf(list, S2).textContent).toContain('อยู่ชุมนุม B200 ชุมนุมดนตรีสมมติ');
+    expect(itemOf(list, S5).textContent).toContain('รอชุมนุม B200 ชุมนุมดนตรีสมมติ');
+    expect(itemOf(list, S1).textContent).toContain('อยู่ชุมนุมนี้แล้ว · รอชุมนุม B200 ชุมนุมดนตรีสมมติ');
+    // An imported name is text, never markup.
+    expect(itemOf(list, S2).querySelector('i')).toBeNull();
+  });
+
+  it('offers no pick for a student already in this club', async () => {
+    mockMembersApi();
+    renderAt('/admin/clubs');
+    const panel = await openMembers(CHESS);
+
+    searchFor(panel, 'นักเรียนสมมติ');
+    await resultsOf(panel);
+
+    expect(pickButton(panel, S1)).toBeNull();
+    expect(pickButton(panel, S3)).toBeNull();
+    expect(pickButton(panel, S2)).toBeTruthy();
+    expect(pickButton(panel, S5)).toBeTruthy();
+  });
+
+  it.each([
+    ['a classroom and seat number', '1/2 12', [S6]],
+    ['the words before them', 'ห้อง 1/1 เลขที่ 2', [S3]],
+    ['a classroom alone', '1/1', [S1, S3]],
+    ['a student code, in any case', 'DEMO1005', [S5]],
+  ])('finds students by %s', async (_what, text, expected) => {
+    mockMembersApi();
+    renderAt('/admin/clubs');
+    const panel = await openMembers(CHESS);
+
+    searchFor(panel, text);
+
+    expect(namesIn(await resultsOf(panel))).toEqual(expected.map(({ fullName }) => fullName));
+  });
+
+  it('shows the first 8 of a long result and asks for more letters', async () => {
+    const api = mockMembersApi();
+    api.state.extraStudents = Array.from({ length: 10 }, (_, i) =>
+      student(20 + i, '1/5', i + 1, `นักเรียนห้องห้าสมมติ ${i + 1}`),
+    );
+    renderAt('/admin/clubs');
+    const panel = await openMembers(CHESS);
+
+    searchFor(panel, '1/5');
+
+    expect(within(await resultsOf(panel)).getAllByRole('listitem')).toHaveLength(8);
+    expect(within(panel).getByText('แสดง 8 จาก 10 คน พิมพ์เพิ่มเพื่อให้แคบลง')).toBeTruthy();
+  });
+
+  it('says so when no student matches', async () => {
+    mockMembersApi();
+    renderAt('/admin/clubs');
+    const panel = await openMembers(CHESS);
+
+    searchFor(panel, 'ไม่มีใคร');
+
+    expect(await within(panel).findByText('ไม่พบนักเรียนที่ตรงกับ "ไม่มีใคร"')).toBeTruthy();
+    expect(within(panel).queryByRole('list', { name: 'ผลการค้นหานักเรียน' })).toBeNull();
+  });
+
+  it('fills the code and focuses the add button on pick, then adds through the same form', async () => {
+    const { fetchMock } = mockMembersApi();
+    renderAt('/admin/clubs');
+    const panel = await openMembers(CHESS);
+    searchFor(panel, 'หก');
+    await resultsOf(panel);
+
+    fireEvent.click(pickButton(panel, S6) as HTMLElement);
+
+    expect(within(panel).getByLabelText<HTMLInputElement>('รหัสนักเรียน').value).toBe('demo1006');
+    const add = within(panel).getByRole('button', { name: 'เพิ่มเข้าชุมนุม' });
+    expect(document.activeElement).toBe(add);
+    expect(callsTo(fetchMock, 'POST', membersPath(CHESS.id))).toHaveLength(0);
+
+    fireEvent.click(add);
+
+    expect(await notice(panel)).toBe(
+      `บันทึกแล้ว: demo1006 ${S6.fullName} อยู่ในชุมนุม A100 ชุมนุมหมากรุกสมมติ`,
+    );
+    const [[, init]] = callsTo(fetchMock, 'POST', membersPath(CHESS.id)) as [[string, RequestInit]];
+    expect(bodyOf(init)).toEqual({
+      loginId: 'demo1006',
+      idempotencyKey: expect.stringMatching(UUID_PATTERN) as unknown,
+    });
+    // The list is read again after the write, so the student now shows as a member.
+    await waitFor(() => expect(pickButton(panel, S6)).toBeNull());
+    expect(
+      itemOf(within(panel).getByRole('list', { name: 'ผลการค้นหานักเรียน' }), S6).textContent,
+    ).toContain('อยู่ชุมนุมนี้แล้ว');
+  });
+
+  it('still adds by a typed code when the student list cannot be loaded', async () => {
+    const api = mockMembersApi();
+    api.once(`GET ${STUDENTS_PATH}`, apiError(500, 'internal_error'));
+    renderAt('/admin/clubs');
+    const panel = await openMembers(CHESS);
+
+    searchFor(panel, 'หก');
+
+    expect((await within(panel).findByRole('alert')).textContent).toContain(
+      'โหลดรายชื่อนักเรียนไม่สำเร็จ',
+    );
+    assign(panel, S6.loginId);
+    expect(await notice(panel)).toBe(
+      `บันทึกแล้ว: demo1006 ${S6.fullName} อยู่ในชุมนุม A100 ชุมนุมหมากรุกสมมติ`,
+    );
   });
 });
