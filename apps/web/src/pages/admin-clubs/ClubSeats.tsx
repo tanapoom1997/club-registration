@@ -1,5 +1,5 @@
 import type { AdminClub } from '@club-registration/shared';
-import { SeatBar } from '@/components/SeatMeter';
+import { SEAT_BADGES, SeatBar } from '@/components/SeatMeter';
 import { Badge } from '@/components/ui/badge';
 import { seatLevel } from '@/lib/seats';
 import { cn } from '@/lib/utils';
@@ -21,8 +21,8 @@ export const ClubSeats = ({ capacity, registered, remaining, className }: ClubSe
           <span className="font-semibold">{registered}</span>
           <span className="text-muted-foreground"> / {capacity}</span>
         </span>
-        {level === 'full' ? (
-          <Badge variant="warning">เต็ม</Badge>
+        {level === 'full' || level === 'closed' ? (
+          <Badge variant={SEAT_BADGES[level].variant}>{SEAT_BADGES[level].label}</Badge>
         ) : (
           <span
             className={

@@ -16,6 +16,7 @@ import { DEFAULT_QUEUE_SETTINGS, requireAdmittedTicket } from '../src/services/q
 import type { QueueSettings } from '../src/services/queue.js';
 import { changeRegistration, registerForClub } from '../src/services/registrations.js';
 import type { AdmissionGate } from '../src/services/registrations.js';
+import { updateClub } from '../src/services/clubs.js';
 import { updateRound } from '../src/services/rounds.js';
 import { joinWaitlist } from '../src/services/waitlist.js';
 import { TEST_JWT_SECRET } from './support/app.js';
@@ -824,6 +825,63 @@ describe('registration under concurrency', () => {
       // a register, the queue's head took it, and anyone still queued waits for a full club.
       expect(queue.length === 0 || registered === 10).toBe(true);
       expect(registered).toBeGreaterThanOrEqual(5);
+    }, 60_000);
+
+    // README waitlist rule 9: a club with capacity 0 takes no one, waitlist included, and the
+    // admin's edit that opens it takes the same round lock as the joins racing it.
+    it('queues nobody for a club while it takes no one, as an admin opens it mid-race', async () => {
+      const roundId = await createOpenRound(pool);
+      const clubId = await createClub(pool, roundId, uniqueCode(), { capacity: 0 });
+      const students = await studentsInTurn(roundId, 40);
+      const adminId = await createAdminId(pool);
+      const capacity = 5;
+
+      // Open the club once a few students have their answer, so both states are seen.
+      let answered = 0;
+      let markStarted: () => void = () => undefined;
+      const started = new Promise<void>((resolve) => {
+        markStarted = resolve;
+      });
+      const outcomes = Promise.all(
+        students.map(async (studentId) => {
+          const outcome = await registerOrWait(studentId, clubId);
+          answered += 1;
+          if (answered === 5) markStarted();
+          return outcome;
+        }),
+      );
+      await started;
+      await withTransaction(
+        pool,
+        async (client) =>
+          await updateClub(client, { clubId, changes: { capacity }, actorId: adminId }),
+      );
+      const results = await outcomes;
+
+      results.forEach((outcome) =>
+        expect(['ok', 'waitlisted', 'club_not_accepting', 'waitlist_not_needed']).toContain(
+          outcome,
+        ),
+      );
+      expect(results).toContain('club_not_accepting');
+      const okCount = results.filter((outcome) => outcome === 'ok').length;
+      expect(await storedSeats(pool, clubId)).toEqual({
+        registered: okCount,
+        capacity,
+        rows: okCount,
+      });
+      // A student is queued only behind a full club, and only after it was opened.
+      const queue = await queueOf(clubId);
+      expect(new Set(queue)).toEqual(
+        new Set(students.filter((_, i) => results[i] === 'waitlisted')),
+      );
+      expect(queue.length === 0 || okCount === capacity).toBe(true);
+      const { rows } = await pool.query<{ count: number }>(
+        `SELECT count(*)::int AS count FROM registration_events
+         WHERE event_type = 'waitlist_join' AND club_id = $1`,
+        [clubId],
+      );
+      expect(rows[0]?.count).toBe(queue.length);
     }, 60_000);
   });
 });

@@ -11,7 +11,7 @@ describe('seatLevel', () => {
     [3, 2, 'low'],
     [3, 3, 'open'],
     [12, 0, 'full'],
-    [0, 0, 'full'],
+    [0, 0, 'closed'],
   ] as const)('a club of %i with %i left is %s', (capacity, remaining, level) => {
     expect(seatLevel(capacity, remaining)).toBe(level);
   });
@@ -21,7 +21,7 @@ describe('takenPercent', () => {
   it.each([
     [20, 15, 25],
     [3, 0, 100],
-    [0, 0, 100],
+    [0, 0, 0],
     [10, 10, 0],
   ])('a club of %i with %i left is %i%% taken', (capacity, remaining, percent) => {
     expect(takenPercent(capacity, remaining)).toBe(percent);
@@ -51,5 +51,14 @@ describe('SeatMeter', () => {
     expect(screen.getByText('เต็ม')).toBeTruthy();
     expect(container.textContent).not.toContain('เหลือ');
     expect(container.textContent).toContain('มีคนรอ 1 คน');
+  });
+
+  // README waitlist rule 9: capacity 0 takes no one; "full" would suggest a waitlist.
+  it('says a club with capacity 0 takes no one, not that it is full', () => {
+    const { container } = render(<SeatMeter capacity={0} remaining={0} waitlistCount={0} />);
+
+    expect(screen.getByText('ไม่เปิดรับ')).toBeTruthy();
+    expect(container.textContent).not.toContain('เต็ม');
+    expect(container.textContent).not.toContain('รับ 0 คน');
   });
 });

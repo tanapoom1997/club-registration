@@ -17,4 +17,12 @@ describe('ClubSeats', () => {
     expect(screen.getByText('เต็ม')).toBeTruthy();
     expect(screen.queryByText(/^เหลือ/)).toBeNull();
   });
+
+  // README waitlist rule 9: the admin sees the same words the students do.
+  it('says a club with capacity 0 takes no one, not that it is full', () => {
+    render(<ClubSeats capacity={0} registered={0} remaining={0} />);
+
+    expect(screen.getByText('ไม่เปิดรับ')).toBeTruthy();
+    expect(screen.queryByText('เต็ม')).toBeNull();
+  });
 });

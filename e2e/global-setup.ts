@@ -22,6 +22,7 @@ import {
   EVENT_LOG_CLUB,
   NOTICE_FROM_CLUB,
   NOTICE_TO_CLUB,
+  NOT_ACCEPTING_CLUB,
   FULL_CLUB,
   GRADE,
   ONE_SEAT_CLUB,
@@ -150,7 +151,8 @@ const seed = async (databaseUrl: string): Promise<void> => {
       [TERM, GRADE],
     );
     const roundId = rows[0]?.id;
-    for (const club of [
+    // seated: how many of the club's seats go to fictional fillers (a full club's).
+    const clubs: { code: string; name: string; capacity: number; seated?: number }[] = [
       OPEN_CLUB,
       FULL_CLUB,
       ONE_SEAT_CLUB,
@@ -162,16 +164,40 @@ const seed = async (databaseUrl: string): Promise<void> => {
       EVENT_LOG_CLUB,
       NOTICE_FROM_CLUB,
       NOTICE_TO_CLUB,
-    ]) {
+      NOT_ACCEPTING_CLUB,
+    ];
+    for (const club of clubs) {
       const inserted = await client.query<{ id: number }>(
         `INSERT INTO clubs (round_id, club_code, name, capacity) VALUES ($1, $2, $3, $4)
          RETURNING id`,
         [roundId, club.code, club.name, club.capacity],
       );
+      const clubId = inserted.rows[0]?.id;
       await client.query('INSERT INTO club_advisors (club_id, full_name) VALUES ($1, $2)', [
-        inserted.rows[0]?.id,
+        clubId,
         ADVISOR_NAME,
       ]);
+      // A full club's seats go to fictional students who never log in, so the club stays full.
+      for (let seat = 1; seat <= (club.seated ?? 0); seat += 1) {
+        const fillerId = await insertUser(
+          {
+            loginId: `e2e-filler-${club.code.toLowerCase()}-${seat}`,
+            password: randomHex(16),
+            fullName: `ด.ช.สมมติ เต็มที่ ${club.code}`,
+          },
+          'student',
+          false,
+        );
+        await client.query(
+          'INSERT INTO student_profiles (user_id, grade, classroom, seat_no) VALUES ($1, $2, $3, $4)',
+          [fillerId, GRADE, `${GRADE}/2`, seat],
+        );
+        await client.query(
+          'INSERT INTO registrations (round_id, student_id, club_id) VALUES ($1, $2, $3)',
+          [roundId, fillerId, clubId],
+        );
+        await client.query('UPDATE clubs SET registered = registered + 1 WHERE id = $1', [clubId]);
+      }
     }
 
     const queueStudents = [QUEUE_STUDENTS.first, QUEUE_STUDENTS.second];

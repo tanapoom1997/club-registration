@@ -69,8 +69,9 @@ export type ClubOffer = ClubWriteKind | 'none';
 export const isSeatFree = ({ remaining, waitlistCount }: StudentClub): boolean =>
   remaining > 0 && waitlistCount === 0;
 
-// The club held or waited for needs no button. Outside the open window a student without a club
-// still sees the button they will get (disabled), as before; one holding a club sees none.
+// The club held or waited for needs no button, and neither does a club that takes no one
+// (capacity 0, README waitlist rule 9). Outside the open window a student without a club still
+// sees the button they will get (disabled), as before; one holding a club sees none.
 export const clubOffer = (
   club: StudentClub,
   {
@@ -80,6 +81,7 @@ export const clubOffer = (
   }: Pick<StudentRoundResponse, 'registration' | 'waitlist'> & { round: StudentRound },
 ): ClubOffer => {
   if (registration?.club.id === club.id || waitlist?.club.id === club.id) return 'none';
+  if (club.capacity <= 0) return 'none';
   if (registration && round.status !== 'open') return 'none';
   if (!isSeatFree(club)) return 'join';
   return registration ? 'change' : 'register';
@@ -146,6 +148,7 @@ const WRITE_MESSAGES: Readonly<Record<StudentWriteKind, WriteMessages>> = Object
       [ERROR_CODES.alreadyInClub]: 'คุณอยู่ในชุมนุมนี้แล้ว ไม่ต้องเข้ารายชื่อรอ',
       [ERROR_CODES.waitlistNotNeeded]:
         'ชุมนุมนี้มีที่ว่างแล้ว ไม่ต้องรอ กรุณาดูรายการล่าสุดแล้วลงหรือย้ายมาชุมนุมนี้ได้เลย',
+      [ERROR_CODES.clubNotAccepting]: 'ชุมนุมนี้ไม่เปิดรับในรอบนี้ จึงไม่มีรายชื่อรอ กรุณาเลือกชุมนุมอื่น',
       [ERROR_CODES.roundNotOpen]: 'เข้ารายชื่อรอไม่ได้ เพราะตอนนี้ไม่อยู่ในช่วงเปิดลงทะเบียน',
       [ERROR_CODES.queueRequired]: QUEUE_REQUIRED,
       [ERROR_CODES.notFound]: CLUB_NOT_FOUND,
