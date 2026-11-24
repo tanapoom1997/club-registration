@@ -146,6 +146,10 @@ export {
   clubWaitlistEntrySchema,
   clubWaitlistRemoveRequestSchema,
   clubWaitlistResponseSchema,
+  roundStudentSchema,
+  roundStudentsParamsSchema,
+  roundStudentsQuerySchema,
+  roundStudentsResponseSchema,
 } from './club-members.js';
 export type {
   ClubMember,
@@ -158,6 +162,10 @@ export type {
   ClubWaitlistEntry,
   ClubWaitlistRemoveRequest,
   ClubWaitlistResponse,
+  RoundStudent,
+  RoundStudentsParams,
+  RoundStudentsQuery,
+  RoundStudentsResponse,
 } from './club-members.js';
 export {
   EVENT_LOG_DEFAULT_LIMIT,

@@ -1,6 +1,12 @@
 import { describe, expect, it } from 'vitest';
 import { CAPACITY_MAX } from '../src/import.js';
-import { clubMemberRequestSchema, clubWaitlistRemoveRequestSchema } from '../src/club-members.js';
+import {
+  clubMemberRequestSchema,
+  clubWaitlistRemoveRequestSchema,
+  roundStudentsParamsSchema,
+  roundStudentsQuerySchema,
+  roundStudentsResponseSchema,
+} from '../src/club-members.js';
 import { updateClubRequestSchema } from '../src/clubs.js';
 import {
   EVENT_LOG_DEFAULT_LIMIT,
@@ -471,5 +477,45 @@ describe('passwordResetResponseSchema', () => {
 
   it('refuses an answer without a password', () => {
     expect(passwordResetResponseSchema.safeParse({ ...answer, password: '' }).success).toBe(false);
+  });
+});
+
+// The members panel's student search (GET /api/admin/rounds/:roundId/students): the round from the
+// path, nothing in the query, so a name or code typed into the search never reaches the URL.
+describe('round students request', () => {
+  it('reads the round id from the path as a number', () => {
+    expect(roundStudentsParamsSchema.parse({ roundId: '12' })).toEqual({ roundId: 12 });
+  });
+
+  it.each(['0', '-1', 'abc', '1.5'])('refuses round id %j', (roundId) => {
+    expect(roundStudentsParamsSchema.safeParse({ roundId }).success).toBe(false);
+  });
+
+  it('accepts an empty query', () => {
+    expect(roundStudentsQuerySchema.safeParse({}).success).toBe(true);
+  });
+
+  it.each([{ grade: '2' }, { q: 'fictional name' }, { loginId: 'demo1001' }])(
+    'refuses query %j',
+    (query) => {
+      expect(roundStudentsQuerySchema.safeParse(query).success).toBe(false);
+    },
+  );
+
+  it('accepts a student with a seat and a waitlist entry, or neither', () => {
+    const club = { id: 3, clubCode: 'C01', name: 'ชุมนุมสมมติ' };
+    const student = { loginId: 'demo1001', fullName: 'นักเรียนสมมติ', classroom: '2', seatNo: 1 };
+
+    expect(
+      roundStudentsResponseSchema.safeParse({
+        students: [
+          { ...student, club, waitingFor: { ...club, id: 4 } },
+          { ...student, loginId: 'demo1002', club: null, waitingFor: null },
+        ],
+      }).success,
+    ).toBe(true);
+    expect(
+      roundStudentsResponseSchema.safeParse({ students: [{ ...student, club: null }] }).success,
+    ).toBe(false);
   });
 });

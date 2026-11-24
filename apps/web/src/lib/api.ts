@@ -15,6 +15,7 @@ import {
   roundListResponseSchema,
   roundClubsResponseSchema,
   roundResponseSchema,
+  roundStudentsResponseSchema,
   sessionResponseSchema,
   studentClubsResponseSchema,
   studentQueueResponseSchema,
@@ -50,6 +51,7 @@ import type {
   Round,
   RoundClassroomsResponse,
   RoundClubsResponse,
+  RoundStudentsResponse,
   SessionUser,
   StudentClubsResponse,
   StudentQueueResponse,
@@ -196,6 +198,11 @@ export const removeClubMember = async (
     clubMemberWriteResponseSchema,
     request,
   );
+
+// Every student of the round's grade with the club they hold and wait for in it, for the members
+// panel to find a student by name or classroom. The search itself stays in the browser.
+export const fetchRoundStudents = async (roundId: number): Promise<RoundStudentsResponse> =>
+  await sendJson(`/api/admin/rounds/${roundId}/students`, 'GET', roundStudentsResponseSchema);
 
 export const fetchClubWaitlist = async (clubId: number): Promise<ClubWaitlistResponse> =>
   await sendJson(`/api/admin/clubs/${clubId}/waitlist`, 'GET', clubWaitlistResponseSchema);

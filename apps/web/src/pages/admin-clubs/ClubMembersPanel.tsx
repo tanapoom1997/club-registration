@@ -198,6 +198,8 @@ export const ClubMembersPanel = ({ club, round, reveal, onClose }: ClubMembersPa
         <FormError message={orphanError} />
 
         <AddMemberForm
+          round={round}
+          clubId={club.id}
           clubCode={club.clubCode}
           pending={mutation.isPending}
           error={

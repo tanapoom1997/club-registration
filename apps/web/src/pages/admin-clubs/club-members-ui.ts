@@ -27,6 +27,9 @@ const UNAUTHORIZED = 401;
 export const membersQueryKey = (clubId: number) => [...CLUBS_QUERY_KEY, 'members', clubId] as const;
 export const waitlistQueryKey = (clubId: number) =>
   [...CLUBS_QUERY_KEY, 'waitlist', clubId] as const;
+// The round's students and where each stands, which the same writes change.
+export const roundStudentsQueryKey = (roundId: number) =>
+  [...CLUBS_QUERY_KEY, 'students', roundId] as const;
 
 export type MemberWriteKind = 'assign' | 'removeMember' | 'removeWaiter';
 export type MemberWrite = { kind: MemberWriteKind; loginId: string };
