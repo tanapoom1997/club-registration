@@ -28,10 +28,9 @@ import {
   FORMAT_OPTIONS,
   VIEW_OPTIONS,
   exportErrorMessage,
+  exportRound,
 } from './export-ui';
 
-const NO_ROUND = '';
-const NO_ROUND_HINT_ID = 'export-no-round-hint';
 const WHOLE_ROUND = '';
 // The rounds page lists every term under the same key, so the pages share one cached list.
 const ALL_TERMS = '';
@@ -52,6 +51,7 @@ const studentSummary = (registered: number, total: number, of: string): string =
   `ลงแล้ว ${registered} / ${of} ${total} คน (ยังไม่ลง ${total - registered} คน)`;
 
 export const AdminExportPage = () => {
+  // Starts unset and is filled in from the rounds list once; after that only the admin changes it.
   const [roundId, setRoundId] = useState<number>();
   const [view, setView] = useState<ExportView>('club');
   const [scope, setScope] = useState(WHOLE_ROUND);
@@ -62,6 +62,9 @@ export const AdminExportPage = () => {
     queryKey: [...ROUNDS_QUERY_KEY, ALL_TERMS],
     queryFn: async () => await fetchRounds(),
   });
+  // Once, not derived on every render, so a refetch of the list never switches the round.
+  const preselected = roundId === undefined ? exportRound(roundsQuery.data ?? []) : undefined;
+  if (preselected) setRoundId(preselected.id);
   const clubsQuery = useQuery({
     queryKey: [...CLUBS_QUERY_KEY, roundId],
     queryFn:
@@ -177,16 +180,9 @@ export const AdminExportPage = () => {
               <Label htmlFor="export-round">รอบลงทะเบียน</Label>
               <Select
                 id="export-round"
-                value={roundId ?? NO_ROUND}
-                onChange={(event) =>
-                  choose(() =>
-                    setRoundId(
-                      event.target.value === NO_ROUND ? undefined : Number(event.target.value),
-                    ),
-                  )
-                }
+                value={roundId}
+                onChange={(event) => choose(() => setRoundId(Number(event.target.value)))}
               >
-                <option value={NO_ROUND}>เลือกรอบ</option>
                 {rounds.map((round) => (
                   <option key={round.id} value={round.id}>
                     {roundOptionLabel(round)}
@@ -285,23 +281,15 @@ export const AdminExportPage = () => {
               ))}
             </fieldset>
 
-            {/* Before a round is chosen nothing above says why the button is pale (V4); the
-                other times it is, the loading line, the retry or the empty note above says so. */}
-            <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
-              <Button
-                type="submit"
-                className="w-full sm:w-auto"
-                disabled={!scopeChoice || scopeChoice.options.length === 0 || mutation.isPending}
-                aria-describedby={roundId === undefined ? NO_ROUND_HINT_ID : undefined}
-              >
-                {mutation.isPending ? 'กำลังสร้างไฟล์…' : 'ดาวน์โหลดรายชื่อ'}
-              </Button>
-              {roundId === undefined && (
-                <p id={NO_ROUND_HINT_ID} className="text-sm text-muted-foreground">
-                  เลือกรอบลงทะเบียนด้านบนก่อน จึงจะดาวน์โหลดได้
-                </p>
-              )}
-            </div>
+            {/* A round is always chosen here, so whenever the button is pale the loading line,
+                the retry or the empty note above says why. */}
+            <Button
+              type="submit"
+              className="w-full sm:w-auto"
+              disabled={!scopeChoice || scopeChoice.options.length === 0 || mutation.isPending}
+            >
+              {mutation.isPending ? 'กำลังสร้างไฟล์…' : 'ดาวน์โหลดรายชื่อ'}
+            </Button>
 
             <FormError
               message={mutation.isError ? exportErrorMessage(mutation.error) : undefined}
