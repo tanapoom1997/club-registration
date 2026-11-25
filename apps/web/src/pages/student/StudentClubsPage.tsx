@@ -399,6 +399,7 @@ export const StudentClubsPage = () => {
                       })}
                       closed={round.status === 'closed'}
                       enabled={round.status === 'open' && !mutation.isPending}
+                      opensAt={round.status === 'upcoming' ? round.opensAt : undefined}
                       write={
                         panelTarget?.kind !== 'leave' && panelTarget?.clubId === club.id
                           ? clubWrite(panelTarget.kind, club.id)
