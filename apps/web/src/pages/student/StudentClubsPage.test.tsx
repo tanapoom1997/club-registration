@@ -135,18 +135,60 @@ describe('student clubs page', () => {
     expect(cardOf(CHESS.name).textContent).toContain('มีคนรอ 2 คน');
   });
 
-  it.each(['upcoming', 'closed'] as const)(
-    'disables every action button while the round is %s',
-    async (status) => {
-      mockStudentApi({ round: roundFixture({ status }) });
+  it('disables every action button while the round is upcoming', async () => {
+    mockStudentApi({ round: roundFixture({ status: 'upcoming' }) });
+
+    await openPage();
+
+    expect(registerButton(CHESS.clubCode, CHESS.name).disabled).toBe(true);
+    expect(registerButton(ART.clubCode, ART.name).disabled).toBe(true);
+    expect(joinButton(MUSIC.clubCode, MUSIC.name).disabled).toBe(true);
+  });
+
+  describe('a closed round', () => {
+    const ACTION = /^(ลงชุมนุม|ย้ายมาชุมนุมนี้|เข้ารายชื่อรอ|ออกจากรายชื่อรอ) /;
+
+    it('shows no action button, only the final counts', async () => {
+      mockStudentApi({
+        round: roundFixture({ status: 'closed' }),
+        clubs: [CHESS, { ...MUSIC, waitlistCount: 2 }, { ...ART, capacity: 0, remaining: 0 }],
+      });
 
       await openPage();
 
-      expect(registerButton(CHESS.clubCode, CHESS.name).disabled).toBe(true);
-      expect(registerButton(ART.clubCode, ART.name).disabled).toBe(true);
-      expect(joinButton(MUSIC.clubCode, MUSIC.name).disabled).toBe(true);
-    },
-  );
+      expect(screen.getByText(/รอบนี้ปิดรับลงทะเบียนแล้ว/).textContent).toContain(
+        'จำนวนด้านล่างคือจำนวนที่ลงไว้ตอนปิดรอบ',
+      );
+      expect(screen.queryAllByRole('button', { name: ACTION })).toEqual([]);
+      expect(cardOf(CHESS.name).textContent).toContain('ลงแล้ว 12 / รับ 30 คน');
+      expect(cardOf(CHESS.name).textContent).not.toContain('เหลือ');
+      expect(cardOf(MUSIC.name).textContent).toContain('ลงแล้ว 20 / รับ 20 คน');
+      expect(cardOf(MUSIC.name).textContent).not.toContain('มีคนรอ');
+      expect(cardOf(ART.name).textContent).toContain('ไม่เปิดรับ');
+    });
+
+    it('offers search but no "ยังรับ" filter', async () => {
+      mockStudentApi({ round: roundFixture({ status: 'closed' }) });
+
+      await openPage();
+
+      expect(screen.getByRole('searchbox', { name: 'ค้นหาชุมนุม' })).toBeTruthy();
+      expect(screen.queryByRole('radio', { name: 'ยังรับ' })).toBeNull();
+    });
+
+    it('drops the one-club rule from the held club and links to the result only', async () => {
+      mockStudentApi({
+        round: roundFixture({ status: 'closed' }),
+        registration: registrationFor(ART),
+      });
+
+      await openPage();
+
+      const held = screen.getByRole('heading', { name: 'ชุมนุมของฉัน' }).parentElement as HTMLElement;
+      expect(held.textContent).not.toContain('ลงได้ 1 ชุมนุมต่อรอบ');
+      expect(within(held).getByRole('link', { name: 'ดูผลของฉัน' })).toBeTruthy();
+    });
+  });
 
   it('shows the club the student holds at the top and offers no register button', async () => {
     mockStudentApi({ registration: registrationFor(ART) });

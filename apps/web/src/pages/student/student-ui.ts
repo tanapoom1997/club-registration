@@ -70,8 +70,9 @@ export const isSeatFree = ({ remaining, waitlistCount }: StudentClub): boolean =
   remaining > 0 && waitlistCount === 0;
 
 // The club held or waited for needs no button, and neither does a club that takes no one
-// (capacity 0, README waitlist rule 9). Outside the open window a student without a club still
-// sees the button they will get (disabled), as before; one holding a club sees none.
+// (capacity 0, README waitlist rule 9), nor any club once the round has closed: there is nothing
+// left to do there. Before it opens a student without a club still sees the button they will get
+// (disabled); one holding a club sees none.
 export const clubOffer = (
   club: StudentClub,
   {
@@ -81,7 +82,7 @@ export const clubOffer = (
   }: Pick<StudentRoundResponse, 'registration' | 'waitlist'> & { round: StudentRound },
 ): ClubOffer => {
   if (registration?.club.id === club.id || waitlist?.club.id === club.id) return 'none';
-  if (club.capacity <= 0) return 'none';
+  if (club.capacity <= 0 || round.status === 'closed') return 'none';
   if (registration && round.status !== 'open') return 'none';
   if (!isSeatFree(club)) return 'join';
   return registration ? 'change' : 'register';

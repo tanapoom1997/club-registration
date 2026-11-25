@@ -72,7 +72,11 @@ const RoundHint = ({ data: { round, registration } }: { data: StudentRoundRespon
     );
   }
   if (round.status === 'closed') {
-    return <p className="text-sm text-muted-foreground">รอบนี้ปิดรับลงทะเบียนแล้ว</p>;
+    return (
+      <p className="text-sm text-muted-foreground">
+        รอบนี้ปิดรับลงทะเบียนแล้ว จำนวนด้านล่างคือจำนวนที่ลงไว้ตอนปิดรอบ
+      </p>
+    );
   }
   return (
     <p className="max-w-prose text-sm text-muted-foreground">
@@ -142,16 +146,22 @@ export const StudentClubsPage = () => {
   const succeeded = mutation.isSuccess;
 
   const [filter, setFilter] = useState<ClubFilter>(NO_FILTER);
+  // A closed round has no seat filter (ClubFilterBar), so a "ยังรับ" chosen while it was open
+  // stops applying instead of hiding every club behind a control that is gone.
+  const roundClosed = round?.status === 'closed';
+  const applied = (chosen: ClubFilter): ClubFilter =>
+    roundClosed ? { ...chosen, seats: 'all' } : chosen;
   const [announcement, setAnnouncement] = useState('');
   const keepId =
     panelTarget !== undefined && panelTarget.kind !== 'leave' ? panelTarget.clubId : undefined;
-  const shownClubs = clubs && filterClubs(clubs, filter, keepId);
-  const filtering = isFiltering(filter);
+  const shownClubs = clubs && filterClubs(clubs, applied(filter), keepId);
+  const filtering = isFiltering(applied(filter));
   // Announced from here, when the student changes the filter, and never from a poll's counts.
   const changeFilter = (next: ClubFilter) => {
     setFilter(next);
     if (clubs) {
-      setAnnouncement(filterSummary(next, filterClubs(clubs, next, keepId).length, clubs.length));
+      const shown = filterClubs(clubs, applied(next), keepId).length;
+      setAnnouncement(filterSummary(applied(next), shown, clubs.length));
     }
   };
   const searchRef = useRef<HTMLInputElement>(null);
@@ -271,7 +281,8 @@ export const StudentClubsPage = () => {
           {data.registration && (
             <HeldClubCard registration={data.registration}>
               <p ref={heldNoteRef} className="text-sm">
-                ลงได้ 1 ชุมนุมต่อรอบ
+                {/* The rule only matters while the student can still choose. */}
+                {round.status !== 'closed' && 'ลงได้ 1 ชุมนุมต่อรอบ'}
                 {/* The change buttons are on the club list, hidden while the student queues. Kept
                     short: it sits above the list on a phone, and the change confirmation says that
                     the old seat is only given up once the new one is taken. */}
@@ -346,6 +357,7 @@ export const StudentClubsPage = () => {
                 onChange={changeFilter}
                 announcement={announcement}
                 searchRef={searchRef}
+                seatFilter={!roundClosed}
                 admittedUntil={
                   queue.view.kind === 'admitted' ? queue.view.admittedUntil : undefined
                 }
@@ -363,7 +375,7 @@ export const StudentClubsPage = () => {
                     shownClubs.length === 0 ? 'font-medium' : 'text-muted-foreground',
                   )}
                 >
-                  {filterSummary(filter, shownClubs.length, clubs.length)}
+                  {filterSummary(applied(filter), shownClubs.length, clubs.length)}
                 </p>
                 {shownClubs.length === 0 && (
                   <Button variant="outline" onClick={clearFilter}>
@@ -385,6 +397,7 @@ export const StudentClubsPage = () => {
                         registration: data.registration,
                         waitlist: data.waitlist,
                       })}
+                      closed={round.status === 'closed'}
                       enabled={round.status === 'open' && !mutation.isPending}
                       write={
                         panelTarget?.kind !== 'leave' && panelTarget?.clubId === club.id
