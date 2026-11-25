@@ -129,7 +129,9 @@ describe('student queue on the clubs page', () => {
 
         expect(fetchMock.mock.calls.filter(([path]) => path.startsWith(QUEUE_PATH))).toEqual([]);
         expect(screen.queryByRole('region', { name: 'คิวเลือกชุมนุม' })).toBeNull();
-        expect(registerButton(CHESS).disabled).toBe(true);
+        // Disabled before the round opens; gone once it has closed.
+        if (status === 'upcoming') expect(registerButton(CHESS).disabled).toBe(true);
+        else expect(screen.queryByRole('button', { name: /^ลงชุมนุม / })).toBeNull();
       },
     );
 
@@ -163,11 +165,11 @@ describe('student queue on the clubs page', () => {
 
       await openPage();
 
-      expect(await screen.findByText('รอบนี้ปิดรับลงทะเบียนแล้ว')).toBeTruthy();
+      expect(await screen.findByText(/รอบนี้ปิดรับลงทะเบียนแล้ว/)).toBeTruthy();
       // The list of a round that is not open comes without a ticket, after the round read.
       await screen.findByRole('list', { name: CLUB_LIST });
       expect(screen.queryByRole('region', { name: 'คิวเลือกชุมนุม' })).toBeNull();
-      expect(registerButton(CHESS).disabled).toBe(true);
+      expect(screen.queryByRole('button', { name: /^ลงชุมนุม / })).toBeNull();
       expect(callsTo(api.fetchMock, 'POST', QUEUE_JOIN_PATH)).toHaveLength(1);
     });
 

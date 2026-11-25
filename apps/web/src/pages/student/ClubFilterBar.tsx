@@ -15,6 +15,8 @@ type ClubFilterBarProps = {
   // changes the counts does not talk over the student every 5 s.
   announcement: string;
   searchRef: Ref<HTMLInputElement>;
+  // Off once the round has closed: no club takes anyone then, so "ยังรับ" would always be empty.
+  seatFilter: boolean;
   // While the student holds a turn: when it ends (ISO), as on the queue card.
   admittedUntil?: string | undefined;
 };
@@ -31,6 +33,7 @@ export const ClubFilterBar = ({
   onChange,
   announcement,
   searchRef,
+  seatFilter,
   admittedUntil,
 }: ClubFilterBarProps) => {
   const searchId = useId();
@@ -73,25 +76,27 @@ export const ClubFilterBar = ({
             onChange={(event) => onChange({ ...filter, query: event.target.value })}
           />
         </div>
-        <fieldset className="flex shrink-0 gap-1 rounded-lg bg-muted p-1">
-          <legend className="sr-only">{CLUB_FILTER_MESSAGES.seatsLegend}</legend>
-          {SEAT_FILTERS.map((seats) => (
-            <label
-              key={seats}
-              className="flex min-h-11 cursor-pointer items-center justify-center rounded-md px-3.5 text-sm text-muted-foreground transition-colors has-checked:bg-card has-checked:font-medium has-checked:text-primary has-checked:shadow-xs has-focus-visible:ring-2 has-focus-visible:ring-ring sm:min-h-8"
-            >
-              <input
-                type="radio"
-                name={seatsName}
-                className="sr-only"
-                value={seats}
-                checked={filter.seats === seats}
-                onChange={() => onChange({ ...filter, seats })}
-              />
-              {CLUB_FILTER_MESSAGES.seats[seats]}
-            </label>
-          ))}
-        </fieldset>
+        {seatFilter && (
+          <fieldset className="flex shrink-0 gap-1 rounded-lg bg-muted p-1">
+            <legend className="sr-only">{CLUB_FILTER_MESSAGES.seatsLegend}</legend>
+            {SEAT_FILTERS.map((seats) => (
+              <label
+                key={seats}
+                className="flex min-h-11 cursor-pointer items-center justify-center rounded-md px-3.5 text-sm text-muted-foreground transition-colors has-checked:bg-card has-checked:font-medium has-checked:text-primary has-checked:shadow-xs has-focus-visible:ring-2 has-focus-visible:ring-ring sm:min-h-8"
+              >
+                <input
+                  type="radio"
+                  name={seatsName}
+                  className="sr-only"
+                  value={seats}
+                  checked={filter.seats === seats}
+                  onChange={() => onChange({ ...filter, seats })}
+                />
+                {CLUB_FILTER_MESSAGES.seats[seats]}
+              </label>
+            ))}
+          </fieldset>
+        )}
       </div>
       {/* The turn's end, repeated where a phone still shows it once the queue card above has
           scrolled away (X2): the time is fixed from when the turn began, and a student reading

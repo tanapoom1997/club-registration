@@ -19,6 +19,9 @@ type ClubCardProps = {
   registration: StudentRegistration | null;
   waitlist: StudentWaitlist | null;
   offer: ClubOffer;
+  // The round has closed: the counts are final, so the card says how many joined, not how many
+  // seats are left or who waits.
+  closed: boolean;
   // The round is open and no write is on its way.
   enabled: boolean;
   // Set while this club's confirmation is open.
@@ -115,6 +118,7 @@ export const ClubCard = ({
   registration,
   waitlist,
   offer,
+  closed,
   enabled,
   write,
   onStart,
@@ -158,11 +162,17 @@ export const ClubCard = ({
           </div>
         )}
       </div>
-      <SeatMeter
-        capacity={club.capacity}
-        remaining={club.remaining}
-        waitlistCount={club.waitlistCount}
-      />
+      {closed ? (
+        <p className="text-sm text-muted-foreground">
+          {club.capacity <= 0 ? 'ไม่เปิดรับ' : `ลงแล้ว ${club.registered} / รับ ${club.capacity} คน`}
+        </p>
+      ) : (
+        <SeatMeter
+          capacity={club.capacity}
+          remaining={club.remaining}
+          waitlistCount={club.waitlistCount}
+        />
+      )}
 
       <p className="text-sm">
         <span className="text-muted-foreground">ครูที่ปรึกษา: </span>
