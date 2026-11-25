@@ -14,7 +14,10 @@ export const buttonVariants = cva(
           'bg-primary text-primary-foreground shadow-sm shadow-primary/25 hover:bg-primary/90 hover:shadow-md hover:shadow-primary/25',
         outline: 'border border-border bg-card shadow-xs hover:border-input hover:bg-muted',
         ghost: 'text-muted-foreground hover:bg-muted hover:text-foreground',
-        danger: 'text-destructive hover:bg-destructive/10',
+        // A row button that starts giving something up (the confirmation is `destructive`): the
+        // shape of `outline`, so it lines up with the row's other buttons, in red.
+        danger:
+          'border border-destructive/40 bg-card text-destructive shadow-xs hover:border-destructive hover:bg-destructive/10',
         // The confirmation of a write that gives something up (a seat, a waitlist place, a round).
         destructive:
           'bg-destructive text-destructive-foreground shadow-sm shadow-destructive/25 hover:bg-destructive/90 hover:shadow-md hover:shadow-destructive/25',
