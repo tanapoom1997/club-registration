@@ -108,6 +108,48 @@ describe('auth routes', () => {
     expect(notPrevented).toBe(true);
   });
 
+  // An empty field is a missing entry, not a wrong one, so the message names what to fill in.
+  it.each([
+    ['both fields are empty', '', '', 'กรุณากรอกรหัสนักเรียนหรือรหัสผู้ใช้ และรหัสผ่าน'],
+    ['the login ID is empty', '', 'a-password', 'กรุณากรอกรหัสนักเรียนหรือรหัสผู้ใช้'],
+    ['the login ID is only spaces', '   ', 'a-password', 'กรุณากรอกรหัสนักเรียนหรือรหัสผู้ใช้'],
+    ['the password is empty', 'demo1001', '', 'กรุณากรอกรหัสผ่าน'],
+    [
+      'the login ID was typed on a Thai keyboard',
+      'ๅ/-ภ',
+      'a-password',
+      'รหัสผู้ใช้ใช้ได้เฉพาะ a-z 0-9 . _ - ไม่เกิน 64 ตัว',
+    ],
+    [
+      'the password is longer than any account can have',
+      'demo1001',
+      'x'.repeat(129),
+      'รหัสผู้ใช้หรือรหัสผ่านไม่ถูกต้อง',
+    ],
+  ])(
+    'says what to fix without sending the form when %s',
+    async (_case, loginId, password, message) => {
+      const fetchMock = mockApi({ 'GET /api/auth/me': unauthorized });
+      renderAt('/login');
+      await screen.findByRole('heading', { name: 'เข้าสู่ระบบ' });
+
+      fillLogin(loginId, password);
+
+      expect(screen.getByRole('alert').textContent).toBe(message);
+      expect(fetchMock.mock.calls.filter(([input]) => input === '/api/auth/login')).toEqual([]);
+    },
+  );
+
+  it('moves focus to the field that still has to be filled in', async () => {
+    mockApi({ 'GET /api/auth/me': unauthorized });
+    renderAt('/login');
+    await screen.findByRole('heading', { name: 'เข้าสู่ระบบ' });
+
+    fillLogin('demo1001', '');
+
+    expect(document.activeElement).toBe(screen.getByLabelText('รหัสผ่าน'));
+  });
+
   it('shows an error when the credentials are wrong', async () => {
     mockApi({
       'GET /api/auth/me': unauthorized,
