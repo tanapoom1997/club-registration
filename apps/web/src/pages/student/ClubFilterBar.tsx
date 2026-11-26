@@ -5,6 +5,7 @@ import { Label } from '@/components/ui/label';
 import { CLUB_FILTER_MESSAGES } from './club-filter';
 import type { ClubFilter, SeatFilter } from './club-filter';
 import { admittedParts } from './queue-ui';
+import { TurnTimeLeft } from './QueueText';
 
 const SEAT_FILTERS: readonly SeatFilter[] = Object.freeze(['all', 'free']);
 
@@ -17,8 +18,9 @@ type ClubFilterBarProps = {
   searchRef: Ref<HTMLInputElement>;
   // Off once the round has closed: no club takes anyone then, so "ยังรับ" would always be empty.
   seatFilter: boolean;
-  // While the student holds a turn: when it ends (ISO), as on the queue card.
-  admittedUntil?: string | undefined;
+  // While the student holds a turn: when it ends (its clock time, and on this device's clock for
+  // the minutes left), as on the queue card.
+  turn?: { admittedUntil: string; endsAt: number } | undefined;
 };
 
 // One row on a phone too: the list starts as high as it can (U4). The label is visually hidden
@@ -34,16 +36,16 @@ export const ClubFilterBar = ({
   announcement,
   searchRef,
   seatFilter,
-  admittedUntil,
+  turn,
 }: ClubFilterBarProps) => {
   const searchId = useId();
-  const turn = admittedUntil === undefined ? undefined : admittedParts(admittedUntil);
+  const deadline = turn === undefined ? undefined : admittedParts(turn.admittedUntil);
   const seatsName = useId();
   return (
     <div
       role="search"
       aria-label={CLUB_FILTER_MESSAGES.searchLabel}
-      data-sticky-filter={turn === undefined ? '' : 'deadline'}
+      data-sticky-filter={deadline === undefined ? '' : 'deadline'}
       className="space-y-2 compact:sticky compact:top-0 compact:z-10 compact:-mx-4 compact:border-b compact:border-border compact:bg-background/95 compact:px-4 compact:py-2 compact:backdrop-blur-md"
     >
       <div className="flex flex-wrap items-center gap-2">
@@ -102,9 +104,10 @@ export const ClubFilterBar = ({
           scrolled away (X2): the time is fixed from when the turn began, and a student reading
           club after club loses track of it. Only where the bar sticks (compact, index.css). Not a
           live region; the queue card's status line announces the turn. */}
-      {turn && (
+      {turn && deadline && (
         <p className="text-xs text-muted-foreground tall:hidden">
-          {turn.until} <span className="font-semibold text-foreground">{turn.time}</span>
+          {deadline.until} <span className="font-semibold text-foreground">{deadline.time}</span>
+          <TurnTimeLeft endsAt={turn.endsAt} before=" · " />
         </p>
       )}
       {/* Always mounted while the list shows, so the change is announced, politely. */}

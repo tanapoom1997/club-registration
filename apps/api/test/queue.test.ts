@@ -52,8 +52,12 @@ const WRITE_URLS = [JOIN_URL, HEARTBEAT_URL, DONE_URL] as const;
 const IDLE = DEFAULT_QUEUE_SETTINGS.idleTimeoutSeconds;
 const TTL = DEFAULT_QUEUE_SETTINGS.admissionTtlSeconds;
 
-// An admission's end, where the test cares that the ticket is admitted, not until when.
-const ANY_TIME = expect.any(String) as string;
+// An admitted ticket, where the test cares that it is admitted, not until when.
+const ADMITTED = Object.freeze({
+  status: 'admitted',
+  admittedUntil: expect.any(String) as string,
+  secondsLeft: expect.any(Number) as number,
+});
 
 const errorOf = (response: InjectResponse) => errorResponseSchema.parse(response.json());
 const queueOf = (response: InjectResponse) => {
@@ -156,6 +160,7 @@ describe('student queue', () => {
         ticket: {
           status: 'admitted',
           admittedUntil: new Date(stored.admitted_at.getTime() + TTL * 1_000).toISOString(),
+          secondsLeft: expect.any(Number) as number,
         },
       });
     });
@@ -166,8 +171,8 @@ describe('student queue', () => {
       const tickets = await Promise.all(students.map(async (id) => ticketOf(await read(id))));
 
       expect(tickets).toEqual([
-        { status: 'admitted', admittedUntil: ANY_TIME },
-        { status: 'admitted', admittedUntil: ANY_TIME },
+        ADMITTED,
+        ADMITTED,
         { status: 'waiting', position: 1 },
         { status: 'waiting', position: 2 },
         { status: 'waiting', position: 3 },
@@ -190,7 +195,7 @@ describe('student queue', () => {
 
       const response = await join(students[0]!);
 
-      expect(ticketOf(response)).toEqual({ status: 'admitted', admittedUntil: ANY_TIME });
+      expect(ticketOf(response)).toEqual(ADMITTED);
       expect(await ticketsOf(pool, students[0]!)).toHaveLength(1);
     });
 
@@ -250,7 +255,7 @@ describe('student queue', () => {
 
       const response = await join(students[0]!);
 
-      expect(ticketOf(response)).toEqual({ status: 'admitted', admittedUntil: ANY_TIME });
+      expect(ticketOf(response)).toEqual(ADMITTED);
       expect((await ticketsOf(pool, students[0]!)).map(({ status }) => status)).toEqual([
         'done',
         'admitted',
@@ -280,7 +285,7 @@ describe('student queue', () => {
 
       const response = await heartbeat(second!);
 
-      expect(ticketOf(response)).toEqual({ status: 'admitted', admittedUntil: ANY_TIME });
+      expect(ticketOf(response)).toEqual(ADMITTED);
       expect((await storedRow(first!)).status).toBe('expired');
       expect(ticketOf(await read(first!))).toEqual({ status: 'expired' });
     });
@@ -295,7 +300,7 @@ describe('student queue', () => {
 
       expect(own.statusCode).toBe(409);
       expect(errorOf(own).code).toBe('not_in_queue');
-      expect(ticketOf(next)).toEqual({ status: 'admitted', admittedUntil: ANY_TIME });
+      expect(ticketOf(next)).toEqual(ADMITTED);
       expect((await storedRow(first!)).status).toBe('expired');
     });
 
@@ -368,7 +373,7 @@ describe('student queue', () => {
 
       await done(c!);
       const response = await heartbeat(d!);
-      expect(ticketOf(response)).toEqual({ status: 'admitted', admittedUntil: ANY_TIME });
+      expect(ticketOf(response)).toEqual(ADMITTED);
       expect(await statusCounts(pool, roundId)).toEqual({ admitted: 1, done: 3, waiting: 1 });
     });
   });
@@ -382,10 +387,7 @@ describe('student queue', () => {
 
       expect(ticketOf(response)).toEqual({ status: 'done' });
       expect(ticketOf(await read(second!))).toEqual({ status: 'waiting', position: 1 });
-      expect(ticketOf(await heartbeat(second!))).toEqual({
-        status: 'admitted',
-        admittedUntil: ANY_TIME,
-      });
+      expect(ticketOf(await heartbeat(second!))).toEqual(ADMITTED);
     });
 
     it('releases a waiting ticket, moving the students behind it up', async () => {
@@ -437,6 +439,20 @@ describe('student queue', () => {
       ]);
       expect(await Promise.all([storedRow(first!), storedRow(second!)])).toEqual(before);
       expect(await ticketsOf(pool, never)).toEqual([]);
+    });
+
+    it('says how long an admitted turn has left by the DB clock, in whole seconds', async () => {
+      const { students } = await queueOfStudents(1, 1);
+      const student = students[0]!;
+      await rewindTickets(container, [student], { admittedSeconds: TTL - 90 });
+
+      const ticket = ticketOf(await read(student));
+
+      expect(ticket?.status).toBe('admitted');
+      const secondsLeft = ticket?.status === 'admitted' ? ticket.secondsLeft : undefined;
+      // 90 s at the rewind, less the few seconds the test takes to read it back.
+      expect(secondsLeft).toBeLessThanOrEqual(90);
+      expect(secondsLeft).toBeGreaterThan(80);
     });
 
     it('shows the round exactly as GET /api/student/round does', async () => {
@@ -517,7 +533,7 @@ describe('student queue', () => {
 
       expect(queueOf(shown)).toEqual({
         round: expect.objectContaining({ id: roundId, hasQueue: false }) as unknown,
-        ticket: { status: 'admitted', admittedUntil: ANY_TIME },
+        ticket: ADMITTED,
       });
       expect(ticketOf(released)).toEqual({ status: 'done' });
       expect(ticketOf(again)).toEqual({ status: 'done' });
@@ -559,10 +575,7 @@ describe('student queue', () => {
 
       // The third's heartbeat fills the slot the first freed, with the one ahead of it.
       expect(ticketOf(thirdBeat)).toEqual({ status: 'waiting', position: 1 });
-      expect(ticketOf(await read(second!))).toEqual({
-        status: 'admitted',
-        admittedUntil: ANY_TIME,
-      });
+      expect(ticketOf(await read(second!))).toEqual(ADMITTED);
       expect(await statusCounts(pool, roundId)).toEqual({ admitted: 1, done: 1, waiting: 1 });
     });
 
@@ -579,7 +592,7 @@ describe('student queue', () => {
       expect(ticketOf(joined)).toEqual({ status: 'waiting', position: 1 });
       expect(errorOf(await heartbeat(second!)).code).toBe('not_in_queue');
       expect(ticketOf(await join(second!))).toEqual({ status: 'waiting', position: 2 });
-      expect(ticketOf(await read(first!))).toEqual({ status: 'admitted', admittedUntil: ANY_TIME });
+      expect(ticketOf(await read(first!))).toEqual(ADMITTED);
     });
   });
 

@@ -358,9 +358,7 @@ export const StudentClubsPage = () => {
                 announcement={announcement}
                 searchRef={searchRef}
                 seatFilter={!roundClosed}
-                admittedUntil={
-                  queue.view.kind === 'admitted' ? queue.view.admittedUntil : undefined
-                }
+                turn={queue.view.kind === 'admitted' ? queue.view : undefined}
               />
             )}
             {/* Not a live region: a poll changes these numbers (the filter's own changes are

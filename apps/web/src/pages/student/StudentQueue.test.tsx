@@ -381,8 +381,51 @@ describe('student queue on the clubs page', () => {
       await openAdmitted();
 
       const search = screen.getByRole('search', { name: 'ค้นหาชุมนุม' });
-      expect(within(search).getByText(/^เลือกชุมนุมได้ถึง/).textContent).toBe('เลือกชุมนุมได้ถึง 08:15 น.');
+      expect(within(search).getByText(/^เลือกชุมนุมได้ถึง/).textContent).toBe(
+        'เลือกชุมนุมได้ถึง 08:15 น. · เหลืออีก 7 นาที',
+      );
       expect(search.dataset.stickyFilter).toBe('deadline');
+    });
+
+    // The device clock may be minutes off the server's, which ends the turn: the minutes come from
+    // the server's own count of what is left.
+    it("says how many minutes the turn has left by the server's count, not the device clock", async () => {
+      vi.useFakeTimers({ shouldAdvanceTime: true });
+      vi.setSystemTime(new Date('2031-06-01T00:00:00Z'));
+      await openAdmitted();
+
+      expect(within(queueCard()).getByText('เหลืออีก 7 นาที')).toBeTruthy();
+      const search = screen.getByRole('search', { name: 'ค้นหาชุมนุม' });
+      expect(within(search).getByText('เหลืออีก 7 นาที')).toBeTruthy();
+      // Not in the live line: a count that moves every minute would be announced every minute.
+      expect(queueStatus().textContent).toBe(ADMITTED_LINE);
+    });
+
+    it('counts the minutes down between answers, to under a minute, then drops them', async () => {
+      vi.useFakeTimers({ shouldAdvanceTime: true });
+      mockStudentApi(
+        { joinTicket: { ...ADMITTED, secondsLeft: 70 } },
+        { [`POST ${QUEUE_HEARTBEAT_PATH}`]: networkFailure },
+      );
+      await openPage();
+      await screen.findByRole('list', { name: CLUB_LIST });
+      expect(within(queueCard()).getByText('เหลืออีก 1 นาที')).toBeTruthy();
+
+      await advance(15_000);
+      expect(within(queueCard()).getByText('เหลือไม่ถึง 1 นาที')).toBeTruthy();
+
+      await advance(60_000);
+      expect(within(queueCard()).queryByText(/^เหลือ/)).toBeNull();
+    });
+
+    it('takes the time left again from each answer', async () => {
+      vi.useFakeTimers({ shouldAdvanceTime: true });
+      const { state } = await openAdmitted();
+
+      state.ticket = { ...ADMITTED, secondsLeft: 200 };
+      await beat();
+
+      expect(within(queueCard()).getByText('เหลืออีก 3 นาที')).toBeTruthy();
     });
 
     it('releases the turn, says so and sends no more heartbeats', async () => {
@@ -436,7 +479,11 @@ describe('student queue on the clubs page', () => {
       state.ticket = { status: 'expired' };
       await beat();
       await screen.findByRole('button', { name: REJOIN_BUTTON });
-      state.joinTicket = { status: 'admitted', admittedUntil: '2026-12-01T01:40:00.000Z' };
+      state.joinTicket = {
+        status: 'admitted',
+        admittedUntil: '2026-12-01T01:40:00.000Z',
+        secondsLeft: 600,
+      };
       fireEvent.click(screen.getByRole('button', { name: REJOIN_BUTTON }));
 
       await screen.findByRole('list', { name: CLUB_LIST });

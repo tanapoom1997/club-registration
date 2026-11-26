@@ -19,12 +19,20 @@ export type QueueWriteRequest = z.infer<typeof queueWriteRequestSchema>;
 //   it; no other student's data, and not max_active or the admitted count, which are the school's
 //   settings and load, not something a student needs to wait.
 // - admitted: may choose clubs until admittedUntil (the admission TTL), provided the page keeps
-//   sending heartbeats; a ticket idle past the timeout expires earlier.
+//   sending heartbeats; a ticket idle past the timeout expires earlier. secondsLeft is the time to
+//   admittedUntil by the DB clock when the answer was made (whole seconds, rounded down): the page
+//   counts down from when the answer arrived, so a device clock that is minutes off still shows
+//   the right minutes. admittedUntil stays the admission's identity (the same for its whole turn)
+//   and the clock time shown beside them.
 // - expired / done: the ticket ended (timed out, or the student released it); joining again
 //   queues at the back. Kept apart so the page can say why.
 export const queueTicketSchema = z.discriminatedUnion('status', [
   z.object({ status: z.literal('waiting'), position: z.number().int().positive() }),
-  z.object({ status: z.literal('admitted'), admittedUntil: z.iso.datetime() }),
+  z.object({
+    status: z.literal('admitted'),
+    admittedUntil: z.iso.datetime(),
+    secondsLeft: z.number().int().nonnegative(),
+  }),
   z.object({ status: z.literal('expired') }),
   z.object({ status: z.literal('done') }),
 ]);

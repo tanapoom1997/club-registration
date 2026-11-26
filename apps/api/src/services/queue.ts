@@ -202,14 +202,19 @@ type TicketRow = {
   status: QueueTicket['status'];
   live: boolean;
   admitted_until: Date | null;
+  seconds_left: number | null;
   position: number | null;
 };
 
 // The one place a ticket row becomes the API shape. A waiting or admitted ticket that is not live
 // any more is expired, written so or not.
 const toTicket = (row: TicketRow): QueueTicket => {
-  if (row.live && row.status === 'admitted' && row.admitted_until) {
-    return { status: 'admitted', admittedUntil: row.admitted_until.toISOString() };
+  if (row.live && row.status === 'admitted' && row.admitted_until && row.seconds_left !== null) {
+    return {
+      status: 'admitted',
+      admittedUntil: row.admitted_until.toISOString(),
+      secondsLeft: row.seconds_left,
+    };
   }
   if (row.live && row.status === 'waiting' && row.position !== null) {
     return { status: 'waiting', position: row.position };
@@ -231,6 +236,10 @@ const findTicket = async (
     `SELECT t.status,
             ${liveTicket('t', '$3', '$4')} AS live,
             t.admitted_at + $4::int * interval '1 second' AS admitted_until,
+            -- By the same clock liveTicket judges by, so the page needs no clock of its own.
+            GREATEST(0, floor(extract(epoch FROM
+              t.admitted_at + $4::int * interval '1 second' - statement_timestamp()
+            )))::int AS seconds_left,
             CASE WHEN t.status = 'waiting' THEN 1 + (
               SELECT count(*)::int FROM queue_tickets a
               WHERE a.round_id = t.round_id AND a.status = 'waiting'

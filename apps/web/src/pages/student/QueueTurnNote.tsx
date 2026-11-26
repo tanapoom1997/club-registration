@@ -2,7 +2,7 @@ import { Link } from 'react-router';
 import { buttonVariants } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 import { QUEUE_MESSAGES } from './queue-ui';
-import { AdmittedHeadline, KeepOpenWarning, queueCardClass } from './QueueText';
+import { AdmittedHeadline, KeepOpenWarning, TurnTimeLeft, queueCardClass } from './QueueText';
 import type { QueueTurn } from './queue-ui';
 
 const CLUBS_PATH = '/student/clubs';
@@ -36,6 +36,11 @@ export const QueueTurnNote = ({ turn }: { turn: QueueTurn }) => {
       <p role="status" className={cn(live && 'text-lg font-semibold')}>
         <Headline turn={turn} />
       </p>
+      {turn.kind === 'admitted' && (
+        <p className="text-base">
+          <TurnTimeLeft endsAt={turn.endsAt} />
+        </p>
+      )}
       {turn.kind === 'waiting' && (
         <>
           <p className="text-sm">

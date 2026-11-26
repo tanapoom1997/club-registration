@@ -301,6 +301,7 @@ describe('student my-registration page', () => {
       expect(within(region).getByRole('status').textContent).toBe(
         'ถึงคิวของคุณแล้ว เลือกชุมนุมได้ถึง 08:15 น.',
       );
+      expect(within(region).getByText('เหลืออีก 7 นาที')).toBeTruthy();
       const link = within(region).getByRole('link', { name: 'ไปเลือกชุมนุม' });
       expect(link.getAttribute('href')).toBe('/student/clubs');
     });

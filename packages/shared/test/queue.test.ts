@@ -39,7 +39,8 @@ describe('queue write requests', () => {
 describe('queue responses', () => {
   it.each([
     { status: 'waiting', position: 1 },
-    { status: 'admitted', admittedUntil: '2026-12-01T01:15:00.000Z' },
+    { status: 'admitted', admittedUntil: '2026-12-01T01:15:00.000Z', secondsLeft: 600 },
+    { status: 'admitted', admittedUntil: '2026-12-01T01:15:00.000Z', secondsLeft: 0 },
     { status: 'expired' },
     { status: 'done' },
   ])('accepts the ticket %j', (ticket) => {
@@ -51,7 +52,22 @@ describe('queue responses', () => {
     ['position 0', { status: 'waiting', position: 0 }],
     ['a fractional position', { status: 'waiting', position: 1.5 }],
     ['an admitted ticket without its end', { status: 'admitted' }],
-    ['an end without a timezone', { status: 'admitted', admittedUntil: '2026-12-01 01:15' }],
+    [
+      'an end without a timezone',
+      { status: 'admitted', admittedUntil: '2026-12-01 01:15', secondsLeft: 600 },
+    ],
+    [
+      'an admitted ticket without the time it has left',
+      { status: 'admitted', admittedUntil: '2026-12-01T01:15:00.000Z' },
+    ],
+    [
+      'negative time left',
+      { status: 'admitted', admittedUntil: '2026-12-01T01:15:00.000Z', secondsLeft: -1 },
+    ],
+    [
+      'fractional seconds left',
+      { status: 'admitted', admittedUntil: '2026-12-01T01:15:00.000Z', secondsLeft: 1.5 },
+    ],
     ['an unknown status', { status: 'paused' }],
   ])('refuses %s', (_case, ticket) => {
     expect(queueTicketSchema.safeParse(ticket).success).toBe(false);
