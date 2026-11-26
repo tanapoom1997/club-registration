@@ -78,12 +78,12 @@ const RoundHint = ({ data: { round, registration } }: { data: StudentRoundRespon
       </p>
     );
   }
+  // A student who holds a club reads how to change, waitlist included, on the held card right
+  // above, so here they get only what the card does not say.
   return (
     <p className="max-w-prose text-sm text-muted-foreground">
-      {registration ? '' : 'กดลงชุมนุมที่ต้องการได้ 1 ชุมนุม '}
-      ชุมนุมที่เต็มหรือมีคนรออยู่เข้ารายชื่อรอได้ 1 ชุมนุม จำนวนที่เหลืออัปเดตอัตโนมัติทุก {CLUBS_POLL_INTERVAL_MS /
-        1000}{' '}
-      วินาที
+      {!registration && 'กดลงชุมนุมที่ต้องการได้ 1 ชุมนุม ชุมนุมที่เต็มหรือมีคนรออยู่เข้ารายชื่อรอได้ 1 ชุมนุม '}
+      จำนวนที่เหลืออัปเดตอัตโนมัติทุก {CLUBS_POLL_INTERVAL_MS / 1000} วินาที
     </p>
   );
 };
@@ -281,14 +281,14 @@ export const StudentClubsPage = () => {
           {data.registration && (
             <HeldClubCard registration={data.registration}>
               <p ref={heldNoteRef} className="text-sm">
-                {/* The rule only matters while the student can still choose. */}
-                {round.status !== 'closed' && 'ลงได้ 1 ชุมนุมต่อรอบ'}
-                {/* The change buttons are on the club list, hidden while the student queues. Kept
-                    short: it sits above the list on a phone, and the change confirmation says that
-                    the old seat is only given up once the new one is taken. */}
-                {round.status === 'open' &&
-                  showsClubs(queue.view) &&
-                  ' ถ้าจะเปลี่ยน กด "ย้ายมาชุมนุมนี้" หรือ "เข้ารายชื่อรอ" ที่ชุมนุมที่ต้องการ'}{' '}
+                {/* How to change says there is one club per round already, so the rule on its own
+                    is only for when the change buttons are not on screen: before the round opens,
+                    or while the student queues. Kept short: it sits above the list on a phone, and
+                    the change confirmation says that the old seat is only given up once the new
+                    one is taken. Neither matters once the round has closed. */}
+                {round.status === 'open' && showsClubs(queue.view)
+                  ? 'ถ้าจะเปลี่ยน กด "ย้ายมาชุมนุมนี้" หรือ "เข้ารายชื่อรอ" ที่ชุมนุมที่ต้องการ'
+                  : round.status !== 'closed' && 'ลงได้ 1 ชุมนุมต่อรอบ'}{' '}
                 <Link
                   className="font-medium text-primary underline underline-offset-4"
                   to={MY_REGISTRATION_PATH}

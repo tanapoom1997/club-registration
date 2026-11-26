@@ -233,6 +233,31 @@ describe('student clubs page', () => {
     expect(screen.queryByRole('button', { name: /^ลงชุมนุม / })).toBeNull();
   });
 
+  describe('the rules above the list of an open round', () => {
+    const POLL_NOTE = `จำนวนที่เหลืออัปเดตอัตโนมัติทุก ${CLUBS_POLL_INTERVAL_MS / 1000} วินาที`;
+
+    it('are told once to a student who holds a club: how to change, in the held card', async () => {
+      mockStudentApi({ registration: registrationFor(ART) });
+
+      await openPage();
+
+      const held = screen.getByRole('heading', { name: 'ชุมนุมของฉัน' }).parentElement as HTMLElement;
+      expect(held.textContent).toContain('ถ้าจะเปลี่ยน กด "ย้ายมาชุมนุมนี้" หรือ "เข้ารายชื่อรอ"');
+      expect(held.textContent).not.toContain('ลงได้ 1 ชุมนุมต่อรอบ');
+      expect(screen.getByText(/อัปเดตอัตโนมัติ/).textContent).toBe(POLL_NOTE);
+    });
+
+    it('are all in the note under the round for a student with no club yet', async () => {
+      mockStudentApi();
+
+      await openPage();
+
+      expect(screen.getByText(/อัปเดตอัตโนมัติ/).textContent).toBe(
+        `กดลงชุมนุมที่ต้องการได้ 1 ชุมนุม ชุมนุมที่เต็มหรือมีคนรออยู่เข้ารายชื่อรอได้ 1 ชุมนุม ${POLL_NOTE}`,
+      );
+    });
+  });
+
   it.each(['upcoming', 'closed'] as const)(
     'offers no register button to a student holding a club while the round is %s',
     async (status) => {
