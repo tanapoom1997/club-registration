@@ -8,7 +8,7 @@ import { Card } from '@/components/ui/card';
 import { cn } from '@/lib/utils';
 import { useFocusRescue } from './focus-rescue';
 import { QUEUE_MESSAGES, queueHeadline, showsClubs } from './queue-ui';
-import { AdmittedHeadline, KeepOpenWarning, queueCardClass } from './QueueText';
+import { AdmittedHeadline, KeepOpenWarning, TurnTimeLeft, queueCardClass } from './QueueText';
 import type { Queue, QueueView } from './queue-ui';
 
 const MY_REGISTRATION_PATH = '/student/my-registration';
@@ -65,6 +65,9 @@ const QueueBody = ({ queue, registration, actionRef }: QueueBodyProps) => {
     case 'admitted':
       return (
         <>
+          <p className="text-base">
+            <TurnTimeLeft endsAt={view.endsAt} />
+          </p>
           <Note>{QUEUE_MESSAGES.admittedHelp}</Note>
           <KeepOpenWarning />
           {lost}

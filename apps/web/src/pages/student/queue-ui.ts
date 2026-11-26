@@ -133,7 +133,7 @@ export type QueueView =
   | { kind: 'joining' }
   | { kind: 'failed'; message: string }
   | { kind: 'waiting'; position: number }
-  | { kind: 'admitted'; admittedUntil: string }
+  | { kind: 'admitted'; admittedUntil: string; endsAt: number }
   | { kind: 'expired' }
   | { kind: 'done' };
 
@@ -196,6 +196,30 @@ export const admittedParts = (admittedUntil: string) =>
     time: `${formatThaiTime(admittedUntil)} น.`,
   }) as const;
 
+// The turn's end on this device's clock: the server's count of what is left (secondsLeft, by the
+// DB clock that ends the turn), from when its answer arrived. A device clock minutes off the
+// server's does not move it, and every heartbeat sets it again.
+const turnEndsAt = (secondsLeft: number, receivedAt: number): number =>
+  receivedAt + secondsLeft * 1_000;
+
+const MINUTE_MS = 60_000;
+
+// The minutes the turn has left, beside its clock time. Rounded down, so the page never promises
+// more than the server gives; soon = the last two minutes. undefined once it is up: the next
+// heartbeat shows the turn expired.
+export const turnTimeLeft = (
+  endsAt: number,
+  now: number,
+): { text: string; soon: boolean } | undefined => {
+  const left = endsAt - now;
+  if (left <= 0) return undefined;
+  const minutes = Math.floor(left / MINUTE_MS);
+  return {
+    text: minutes === 0 ? 'เหลือไม่ถึง 1 นาที' : `เหลืออีก ${minutes} นาที`,
+    soon: left < 2 * MINUTE_MS,
+  };
+};
+
 export const admittedHeadline = (admittedUntil: string): string => {
   const { lead, until, time } = admittedParts(admittedUntil);
   return `${lead} ${until} ${time}`;
@@ -220,6 +244,7 @@ const viewOf = (
   open: boolean,
   data: StudentQueueResponse | undefined,
   error: unknown,
+  receivedAt: number,
 ): QueueView => {
   if (!open) return { kind: 'off' };
   if (data === undefined) {
@@ -240,7 +265,11 @@ const viewOf = (
     case 'waiting':
       return { kind: 'waiting', position: ticket.position };
     case 'admitted':
-      return { kind: 'admitted', admittedUntil: ticket.admittedUntil };
+      return {
+        kind: 'admitted',
+        admittedUntil: ticket.admittedUntil,
+        endsAt: turnEndsAt(ticket.secondsLeft, receivedAt),
+      };
     case 'done':
       return { kind: 'done' };
     // No ticket at all (never queued in this round) is offered the same way back in.
@@ -250,7 +279,7 @@ const viewOf = (
 };
 
 // The admission a club confirmation is opened in: its deadline is fixed when the student is let
-// in, so a later admission has another. undefined outside an admission.
+// in, so a later admission has another (endsAt moves a little with every answer, so never it). undefined outside an admission.
 export const queueTurn = (view: QueueView): string | undefined =>
   view.kind === 'admitted' ? view.admittedUntil : undefined;
 
@@ -307,7 +336,7 @@ export const useQueue = (round: StudentRound | null) => {
   });
   useLogoutOnExpiredSession(release.error);
 
-  const view = viewOf(queued, query.data, query.error);
+  const view = viewOf(queued, query.data, query.error, query.dataUpdatedAt);
   return {
     view,
     // A heartbeat failed after the ticket was shown; the interval keeps trying. A queue_off is no
@@ -372,7 +401,7 @@ export const useBackToQueue = (error: unknown, roundId: number | undefined) => {
 export type QueueTurn =
   | { kind: 'none' }
   | { kind: 'waiting'; position: number }
-  | { kind: 'admitted'; admittedUntil: string };
+  | { kind: 'admitted'; admittedUntil: string; endsAt: number };
 
 // Keeps the student's ticket alive from the result page (README Phase 3, Q2): a student who went
 // there to cancel, or to leave a waitlist, keeps their place in the queue. It never joins: on
@@ -397,7 +426,11 @@ export const useQueueKeepalive = (round: StudentRound | null | undefined): Queue
     case 'waiting':
       return { kind: 'waiting', position: ticket.position };
     case 'admitted':
-      return { kind: 'admitted', admittedUntil: ticket.admittedUntil };
+      return {
+        kind: 'admitted',
+        admittedUntil: ticket.admittedUntil,
+        endsAt: turnEndsAt(ticket.secondsLeft, query.dataUpdatedAt),
+      };
     default:
       return { kind: 'none' };
   }

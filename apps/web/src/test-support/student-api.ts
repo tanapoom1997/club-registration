@@ -32,9 +32,14 @@ export const QUEUE_JOIN_PATH = '/api/student/queue/join';
 export const QUEUE_HEARTBEAT_PATH = '/api/student/queue/heartbeat';
 export const QUEUE_DONE_PATH = '/api/student/queue/done';
 
-// 08:15 Thai time on the fixture round's day.
+// 08:15 Thai time on the fixture round's day. The time left is the server's count, 7½ minutes,
+// whatever the clock of the computer running the tests says.
 export const ADMITTED_UNTIL = '2026-12-01T01:15:00.000Z';
-export const ADMITTED: QueueTicket = { status: 'admitted', admittedUntil: ADMITTED_UNTIL };
+export const ADMITTED: Extract<QueueTicket, { status: 'admitted' }> = {
+  status: 'admitted',
+  admittedUntil: ADMITTED_UNTIL,
+  secondsLeft: 450,
+};
 export const waitingAt = (position: number): QueueTicket => ({ status: 'waiting', position });
 
 export const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
