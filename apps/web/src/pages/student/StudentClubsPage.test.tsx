@@ -224,7 +224,8 @@ describe('student clubs page', () => {
 
     const held = screen.getByRole('heading', { name: 'ชุมนุมของฉัน' }).parentElement as HTMLElement;
     expect(held.textContent).toContain('C300 ชุมนุมวาดภาพสมมติ');
-    expect(held.textContent).toContain('ลงเมื่อ 1 ธ.ค. 2569 08:05 น.');
+    // When it was taken is the record, on my-registration: this page is for choosing.
+    expect(held.textContent).not.toContain('ลงเมื่อ');
     expect(within(held).getByRole('link', { name: 'ดูผลของฉันและยกเลิก' }).getAttribute('href')).toBe(
       '/student/my-registration',
     );

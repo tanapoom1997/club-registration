@@ -117,7 +117,7 @@ describe('student waitlist', () => {
       const dialog = startJoin(MUSIC.clubCode, MUSIC.name);
       expect(dialog.textContent).toContain('เข้ารายชื่อรอชุมนุม B200 ชุมนุมดนตรีสมมติ?');
       expect(dialog.textContent).toContain('ตอนนี้มีคนรอ 0 คน');
-      expect(dialog.textContent).toContain('แจ้งผลที่หน้านี้เท่านั้น');
+      expect(dialog.textContent).toContain('แจ้งผลบนเว็บนี้เท่านั้น');
       expect(dialog.textContent).not.toContain('ลำดับเดิมจะหายไป');
       expect(dialog.textContent).not.toContain('ระบบจะย้ายคุณออกจากชุมนุม');
       expect(callsTo(fetchMock, 'POST', WAITLIST_PATH)).toHaveLength(0);
@@ -133,7 +133,6 @@ describe('student waitlist', () => {
       const card = waitlistCard();
       expect(card.textContent).toContain('B200 ชุมนุมดนตรีสมมติ');
       expect(card.textContent).toContain('ลำดับที่ 1');
-      expect(card.textContent).toContain('เข้ารายชื่อรอเมื่อ 1 ธ.ค. 2569 09:30 น.');
       expect(card.textContent).toContain('ระบบจะลงชุมนุมนี้ให้เองตามลำดับ');
       await waitFor(() => expect(cardOf(MUSIC.name).textContent).toContain('มีคนรอ 1 คน'));
       expect(within(cardOf(MUSIC.name)).getByText('รออยู่ ลำดับที่ 1')).toBeTruthy();
@@ -327,6 +326,20 @@ describe('student waitlist', () => {
   });
 
   describe('the waitlist entry', () => {
+    // The card is on both pages, and a seat off the waitlist shows on both: neither is "this page
+    // only". What holds is that nothing is sent anywhere else.
+    it.each([
+      ['the clubs page', openClubsPage],
+      ['my-registration', openMyRegistration],
+    ])('says on %s that the outcome shows on the website only', async (_page, open) => {
+      mockStudentApi({ waitlist: waitlistFor(MUSIC, 2) });
+      await open();
+
+      const card = waitlistCard();
+      expect(card.textContent).toContain('ผลจะแสดงบนเว็บนี้เท่านั้น ไม่มีแจ้งทางอื่น');
+      expect(card.textContent).not.toContain('หน้านี้เท่านั้น');
+    });
+
     it('shows the entry near the held club with a holder what a seat would do', async () => {
       mockStudentApi({ registration: registrationFor(ART), waitlist: waitlistFor(MUSIC, 2) });
       await openClubsPage();
@@ -334,7 +347,8 @@ describe('student waitlist', () => {
       const card = waitlistCard();
       expect(card.textContent).toContain('B200 ชุมนุมดนตรีสมมติ');
       expect(card.textContent).toContain('ลำดับที่ 2');
-      expect(card.textContent).toContain('เข้ารายชื่อรอเมื่อ 1 ธ.ค. 2569 08:10 น.');
+      // When the student joined is the record, on my-registration: this page is for choosing.
+      expect(card.textContent).not.toContain('เข้ารายชื่อรอเมื่อ');
       expect(card.textContent).toContain(
         'ถ้าได้ที่ ระบบจะย้ายคุณออกจากชุมนุม C300 ชุมนุมวาดภาพสมมติ มาชุมนุมนี้ให้เอง',
       );
@@ -429,6 +443,7 @@ describe('student waitlist', () => {
       });
       await openMyRegistration();
       expect(waitlistCard().textContent).toContain('ลำดับที่ 3');
+      expect(waitlistCard().textContent).toContain('เข้ารายชื่อรอเมื่อ 1 ธ.ค. 2569 08:10 น.');
 
       confirmLeave(MUSIC.clubCode, MUSIC.name);
 

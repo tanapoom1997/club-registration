@@ -63,6 +63,31 @@ describe('student my-registration page', () => {
     expect(screen.getByRole('button', { name: CANCEL_BUTTON })).toBeTruthy();
   });
 
+  // The cards are the same as on the clubs page, so the page says what it is for, and where
+  // choosing happens (UX scan item 14).
+  it('says it is for checking, cancelling and leaving, and that choosing is on the clubs page', async () => {
+    mockStudentApi({ registration: HELD });
+
+    await openPage();
+
+    const lead = screen.getByText(/^หน้านี้ใช้ดูผล/);
+    expect(lead.textContent).toBe(
+      'หน้านี้ใช้ดูผล ยกเลิกชุมนุม และออกจากรายชื่อรอ ส่วนการลงหรือเปลี่ยนชุมนุมทำที่หน้า ชุมนุมในชั้นของฉัน',
+    );
+    expect(within(lead).getByRole('link', { name: 'ชุมนุมในชั้นของฉัน' }).getAttribute('href')).toBe(
+      '/student/clubs',
+    );
+  });
+
+  it('only says what it shows once the round is no longer open', async () => {
+    mockStudentApi({ registration: HELD, round: roundFixture({ status: 'closed' }) });
+
+    await openPage();
+
+    expect(screen.getByText('สรุปชุมนุมและรายชื่อรอของคุณในรอบนี้')).toBeTruthy();
+    expect(screen.queryByText(/^หน้านี้ใช้ดูผล/)).toBeNull();
+  });
+
   it('points a student without a club to the club list', async () => {
     mockStudentApi();
 
