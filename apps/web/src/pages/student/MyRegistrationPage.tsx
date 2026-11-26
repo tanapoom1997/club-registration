@@ -133,6 +133,18 @@ export const MyRegistrationPage = () => {
         <NoRound />
       ) : (
         <>
+          {/* The cards below are the clubs page's too, so the page says what it is for: the
+              record, and the two writes that give something up. Choosing is on the clubs page. */}
+          <p className="max-w-prose text-sm text-muted-foreground">
+            {round.status === 'open' ? (
+              <>
+                หน้านี้ใช้ดูผล ยกเลิกชุมนุม และออกจากรายชื่อรอ ส่วนการลงหรือเปลี่ยนชุมนุมทำที่หน้า{' '}
+                <ClubsLink>ชุมนุมในชั้นของฉัน</ClubsLink>
+              </>
+            ) : (
+              'สรุปชุมนุมและรายชื่อรอของคุณในรอบนี้'
+            )}
+          </p>
           <RoundHeader round={round} />
           <QueueTurnNote turn={turn} />
           <div role="status">
@@ -157,7 +169,7 @@ export const MyRegistrationPage = () => {
           <PromotedNotice ref={promotedRef} registration={registration} />
 
           {registration ? (
-            <HeldClubCard registration={registration}>
+            <HeldClubCard registration={registration} withTime>
               {panel?.kind === 'cancel' ? null : round.status === 'open' ? (
                 <Button
                   ref={cancelButtonRef}
@@ -211,7 +223,12 @@ export const MyRegistrationPage = () => {
           )}
 
           {waitlist && (
-            <WaitlistCard waitlist={waitlist} registration={registration ?? null} round={round}>
+            <WaitlistCard
+              waitlist={waitlist}
+              registration={registration ?? null}
+              round={round}
+              withTime
+            >
               {panel?.kind !== 'leave' && round.status === 'open' && (
                 <Button
                   ref={leaveButtonRef}

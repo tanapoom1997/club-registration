@@ -279,7 +279,7 @@ export const StudentClubsPage = () => {
           <PromotedNotice ref={promotedRef} registration={data.registration} />
           <FormError message={orphanError} />
           {data.registration && (
-            <HeldClubCard registration={data.registration}>
+            <HeldClubCard registration={data.registration} withTime={false}>
               <p ref={heldNoteRef} className="text-sm">
                 {/* How to change says there is one club per round already, so the rule on its own
                     is only for when the change buttons are not on screen: before the round opens,
@@ -300,7 +300,12 @@ export const StudentClubsPage = () => {
             </HeldClubCard>
           )}
           {data.waitlist && (
-            <WaitlistCard waitlist={data.waitlist} registration={data.registration} round={round}>
+            <WaitlistCard
+              waitlist={data.waitlist}
+              registration={data.registration}
+              round={round}
+              withTime={false}
+            >
               {panelTarget?.kind !== 'leave' && round.status === 'open' && (
                 <Button
                   ref={leaveButtonRef}

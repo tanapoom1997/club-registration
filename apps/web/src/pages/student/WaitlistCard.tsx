@@ -10,6 +10,8 @@ type WaitlistCardProps = {
   waitlist: StudentWaitlist;
   registration: StudentRegistration | null;
   round: StudentRound;
+  // When the student joined: the record, shown on my-registration only (as HeldClubCard).
+  withTime: boolean;
   children?: ReactNode;
 };
 
@@ -18,6 +20,7 @@ export const WaitlistCard = ({
   waitlist: { club, position, joinedAt },
   registration,
   round,
+  withTime,
   children,
 }: WaitlistCardProps) => (
   <Card className="space-y-2 border-warning-foreground/40 bg-linear-to-br from-warning to-card p-4 ring-2 ring-warning-foreground/15 sm:p-5">
@@ -28,13 +31,19 @@ export const WaitlistCard = ({
     <p className="text-sm">
       ลำดับที่ <span className="text-2xl font-bold text-warning-foreground">{position}</span>
     </p>
-    <p className="text-sm text-muted-foreground">เข้ารายชื่อรอเมื่อ {formatThaiDateTime(joinedAt)} น.</p>
+    {withTime && (
+      <p className="text-sm text-muted-foreground">
+        เข้ารายชื่อรอเมื่อ {formatThaiDateTime(joinedAt)} น.
+      </p>
+    )}
+    {/* On both pages, and a seat off the waitlist shows on both, so not "this page only": what
+        holds is that nothing is sent anywhere else. */}
     <p className="text-sm">
       {round.status === 'closed'
         ? 'รอบนี้ปิดแล้ว จะไม่มีการให้ที่จากรายชื่อรออีก'
         : registration
-          ? `ถ้าได้ที่ ระบบจะย้ายคุณออกจากชุมนุม ${registration.club.clubCode} ${registration.club.name} มาชุมนุมนี้ให้เอง ผลจะแสดงที่หน้านี้เท่านั้น ไม่มีแจ้งทางอื่น`
-          : 'ถ้ามีที่ว่าง ระบบจะลงชุมนุมนี้ให้เองตามลำดับ ผลจะแสดงที่หน้านี้เท่านั้น ไม่มีแจ้งทางอื่น'}
+          ? `ถ้าได้ที่ ระบบจะย้ายคุณออกจากชุมนุม ${registration.club.clubCode} ${registration.club.name} มาชุมนุมนี้ให้เอง ผลจะแสดงบนเว็บนี้เท่านั้น ไม่มีแจ้งทางอื่น`
+          : 'ถ้ามีที่ว่าง ระบบจะลงชุมนุมนี้ให้เองตามลำดับ ผลจะแสดงบนเว็บนี้เท่านั้น ไม่มีแจ้งทางอื่น'}
     </p>
     {children}
   </Card>
