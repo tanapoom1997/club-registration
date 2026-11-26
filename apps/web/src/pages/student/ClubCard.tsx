@@ -4,6 +4,7 @@ import type { ReactNode } from 'react';
 import { SeatMeter } from '@/components/SeatMeter';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
+import { formatThaiDateTime } from '@/lib/thai-time';
 import { cn } from '@/lib/utils';
 import { WritePanel } from '@/components/WritePanel';
 import type { FollowUp, WriteState } from '@/components/WritePanel';
@@ -24,6 +25,9 @@ type ClubCardProps = {
   closed: boolean;
   // The round is open and no write is on its way.
   enabled: boolean;
+  // Set while the round has not opened: the pale button says beside it when it can be pressed, so
+  // a student far down the list from the round's own note is not left guessing why.
+  opensAt: string | undefined;
   // Set while this club's confirmation is open.
   write: ClubWrite | undefined;
   onStart: (kind: ClubWriteKind) => void;
@@ -120,10 +124,12 @@ export const ClubCard = ({
   offer,
   closed,
   enabled,
+  opensAt,
   write,
   onStart,
 }: ClubCardProps) => {
   const headingId = useId();
+  const opensNoteId = useId();
   // One ref for whichever action the card shows: after a change refused as full, the refetch
   // turns the same button into the waitlist one, and focus still has to come back to it.
   const actionRef = useRef<HTMLButtonElement>(null);
@@ -194,18 +200,26 @@ export const ClubCard = ({
             />
           ) : (
             offer !== 'none' && (
-              <Button
-                ref={actionRef}
-                // Only a first seat is the main action. Once the student holds a club, moving is an
-                // option on every other card, and a wall of solid buttons would push it.
-                variant={offer === 'register' ? 'primary' : 'outline'}
-                className="w-full sm:w-auto"
-                aria-label={`${ACTION_TEXT[offer]} ${clubLabel(club)}`}
-                disabled={!enabled}
-                onClick={() => onStart(offer)}
-              >
-                {ACTION_TEXT[offer]}
-              </Button>
+              <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5">
+                <Button
+                  ref={actionRef}
+                  // Only a first seat is the main action. Once the student holds a club, moving is
+                  // an option on every other card, and a wall of solid buttons would push it.
+                  variant={offer === 'register' ? 'primary' : 'outline'}
+                  className="w-full sm:w-auto"
+                  aria-label={`${ACTION_TEXT[offer]} ${clubLabel(club)}`}
+                  aria-describedby={opensAt === undefined ? undefined : opensNoteId}
+                  disabled={!enabled}
+                  onClick={() => onStart(offer)}
+                >
+                  {ACTION_TEXT[offer]}
+                </Button>
+                {opensAt !== undefined && (
+                  <p id={opensNoteId} className="text-sm text-muted-foreground">
+                    ลงได้ตั้งแต่ {formatThaiDateTime(opensAt)} น.
+                  </p>
+                )}
+              </div>
             )
           )}
         </div>

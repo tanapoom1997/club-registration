@@ -16,6 +16,7 @@ import {
   roundFixture,
   waitlistFor,
 } from '@/test-support/student-api';
+import { formatThaiDateTime } from '@/lib/thai-time';
 import { CLUBS_POLL_INTERVAL_MS } from './student-ui';
 
 const [CHESS, MUSIC, ART] = [CLUBS[0]!, CLUBS[1]!, CLUBS[2]!];
@@ -143,6 +144,32 @@ describe('student clubs page', () => {
     expect(registerButton(CHESS.clubCode, CHESS.name).disabled).toBe(true);
     expect(registerButton(ART.clubCode, ART.name).disabled).toBe(true);
     expect(joinButton(MUSIC.clubCode, MUSIC.name).disabled).toBe(true);
+  });
+
+  it('says beside each pale button of an upcoming round when it can be pressed', async () => {
+    const opensAt = '2026-12-01T01:00:00.000Z';
+    mockStudentApi({ round: roundFixture({ status: 'upcoming', opensAt }) });
+    const reason = `ลงได้ตั้งแต่ ${formatThaiDateTime(opensAt)} น.`;
+
+    await openPage();
+
+    for (const button of [
+      registerButton(CHESS.clubCode, CHESS.name),
+      joinButton(MUSIC.clubCode, MUSIC.name),
+    ]) {
+      const describedBy = button.getAttribute('aria-describedby') ?? '';
+      expect(document.getElementById(describedBy)?.textContent).toBe(reason);
+    }
+    expect(cardOf(ART.name).textContent).toContain(reason);
+  });
+
+  it('drops the opening note once the round is open', async () => {
+    mockStudentApi();
+
+    await openPage();
+
+    expect(registerButton(CHESS.clubCode, CHESS.name).getAttribute('aria-describedby')).toBeNull();
+    expect(cardOf(CHESS.name).textContent).not.toContain('ลงได้ตั้งแต่');
   });
 
   describe('a closed round', () => {
