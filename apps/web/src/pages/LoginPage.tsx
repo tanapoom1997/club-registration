@@ -1,4 +1,5 @@
 import { ERROR_CODES, loginRequestSchema } from '@club-registration/shared';
+import type { LoginRequest } from '@club-registration/shared';
 import { useMutation } from '@tanstack/react-query';
 import { useState } from 'react';
 import type { FormEvent } from 'react';
@@ -23,6 +24,30 @@ const loginErrorMessage = (error: unknown): string => {
   return 'เข้าสู่ระบบไม่สำเร็จ กรุณาลองใหม่อีกครั้ง';
 };
 
+type LoginInput =
+  | { ok: true; request: LoginRequest }
+  | { ok: false; message: string; field: 'username' | 'password' };
+
+// Empty fields are checked before the schema: they are a missing entry, not a wrong one, and the
+// schema gives an empty ID the same issue as a malformed one. The password is not trimmed, since
+// spaces can be part of it.
+const parseLoginInput = (loginId: string, password: string): LoginInput => {
+  const noLoginId = loginId.trim() === '';
+  if (noLoginId && password === '') {
+    return { ok: false, message: 'กรุณากรอกรหัสนักเรียนหรือรหัสผู้ใช้ และรหัสผ่าน', field: 'username' };
+  }
+  if (noLoginId) {
+    return { ok: false, message: 'กรุณากรอกรหัสนักเรียนหรือรหัสผู้ใช้', field: 'username' };
+  }
+  if (password === '') return { ok: false, message: 'กรุณากรอกรหัสผ่าน', field: 'password' };
+  const parsed = loginRequestSchema.safeParse({ loginId, password });
+  if (parsed.success) return { ok: true, request: parsed.data };
+  const loginIdIssue = parsed.error.issues.find(({ path }) => path[0] === 'loginId');
+  if (loginIdIssue) return { ok: false, message: loginIdIssue.message, field: 'username' };
+  // Only an over-long password is left, and no account can have one, so it reads as a wrong one.
+  return { ok: false, message: 'รหัสผู้ใช้หรือรหัสผ่านไม่ถูกต้อง', field: 'password' };
+};
+
 export const LoginPage = () => {
   const navigate = useNavigate();
   // Router state is untyped; returnPathFor checks its shape before using it.
@@ -45,13 +70,15 @@ export const LoginPage = () => {
 
   const handleSubmit = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    const parsed = loginRequestSchema.safeParse({ loginId, password });
-    if (!parsed.success) {
-      setValidationError('กรุณากรอกรหัสผู้ใช้และรหัสผ่านให้ถูกต้อง');
+    const input = parseLoginInput(loginId, password);
+    if (!input.ok) {
+      setValidationError(input.message);
+      const field = event.currentTarget.elements.namedItem(input.field);
+      if (field instanceof HTMLInputElement) field.focus();
       return;
     }
     setValidationError(undefined);
-    mutation.mutate(parsed.data);
+    mutation.mutate(input.request);
   };
 
   const errorMessage =
