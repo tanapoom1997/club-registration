@@ -25,10 +25,12 @@ import { gradeLabel, roundOptionLabel } from '@/lib/round-display';
 import { ROUNDS_QUERY_KEY } from '@/pages/admin-rounds/round-ui';
 import {
   CLASSROOMS_QUERY_KEY,
+  EXPORT_OUTDATED_MESSAGE,
   FORMAT_OPTIONS,
   VIEW_OPTIONS,
   exportErrorMessage,
   exportRound,
+  isExportOutdated,
 } from './export-ui';
 
 const WHOLE_ROUND = '';
@@ -78,6 +80,7 @@ export const AdminExportPage = () => {
       roundId === undefined || view !== 'classroom'
         ? skipToken
         : async () => await fetchRoundClassrooms(roundId),
+    retry: (failures, error) => !isExportOutdated(error) && failures < 3,
   });
   const mutation = useMutation({
     mutationFn: async ({ id, query }: { id: number; query: ExportQuery }) =>
@@ -218,6 +221,8 @@ export const AdminExportPage = () => {
 
             {roundId === undefined ? null : scopeQuery.isPending ? (
               <p className="text-muted-foreground">กำลังโหลดตัวเลือก…</p>
+            ) : isExportOutdated(scopeQuery.error) ? (
+              <EmptyState>{EXPORT_OUTDATED_MESSAGE}</EmptyState>
             ) : scopeQuery.isError || !scopeChoice ? (
               <LoadFailed
                 message={`โหลดรายการ${view === 'club' ? 'ชุมนุม' : 'ห้อง'}ไม่สำเร็จ`}

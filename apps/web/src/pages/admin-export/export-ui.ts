@@ -38,7 +38,16 @@ export const FORMAT_OPTIONS: Readonly<
   },
 });
 
+export const EXPORT_OUTDATED_MESSAGE =
+  'ส่งออกรอบนี้ไม่ได้แล้ว: มีนักเรียนที่ลงในรอบนี้ถูกย้ายไปชั้นอื่นจากการนำเข้าภาคเรียนถัดมา รายชื่อตามชั้นและห้องปัจจุบันจึงไม่ตรงกับตอนลงทะเบียน';
+
+// The round's lists can no longer be made (a later term moved its students up a grade), so asking
+// again cannot help.
+export const isExportOutdated = (error: unknown): boolean =>
+  error instanceof ApiError && error.code === ERROR_CODES.exportOutdated;
+
 const ERROR_MESSAGES: Readonly<Record<string, string>> = Object.freeze({
+  [ERROR_CODES.exportOutdated]: EXPORT_OUTDATED_MESSAGE,
   [ERROR_CODES.notFound]: 'ไม่พบรอบ ชุมนุม หรือห้องที่เลือก (อาจถูกลบหรือนักเรียนถูกย้ายไปแล้ว) กรุณาโหลดหน้านี้ใหม่',
   [ERROR_CODES.nothingToExport]: 'ยังไม่มีข้อมูลให้ส่งออก (รอบนี้ยังไม่มีชุมนุม หรือชั้นนี้ยังไม่มีนักเรียน)',
   [ERROR_CODES.forbidden]: 'บัญชีนี้ไม่มีสิทธิ์ส่งออกรายชื่อ',

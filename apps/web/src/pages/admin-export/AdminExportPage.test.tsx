@@ -332,6 +332,37 @@ describe('admin export page', () => {
     expect(downloads).toEqual([]);
   });
 
+  describe('a round whose registered students moved to another grade', () => {
+    const outdated = () =>
+      Response.json(
+        { code: 'export_outdated', message: 'Students of this round have moved' },
+        { status: 409 },
+      );
+    const OUTDATED_TEXT = /^ส่งออกรอบนี้ไม่ได้แล้ว: มีนักเรียนที่ลงในรอบนี้ถูกย้ายไปชั้นอื่น/;
+
+    it('says why the classroom list cannot be made, with no retry and no download', async () => {
+      const fetchMock = mockApi({ ...baseApi, 'GET /api/admin/rounds/1/classrooms': outdated });
+      await openPageWithRound();
+
+      fireEvent.click(screen.getByRole('radio', { name: /รายห้อง/ }));
+
+      expect(await screen.findByText(OUTDATED_TEXT)).toBeTruthy();
+      expect(screen.queryByRole('button', { name: 'ลองใหม่' })).toBeNull();
+      expect((downloadButton() as HTMLButtonElement).disabled).toBe(true);
+      expect(exportCalls(fetchMock)).toEqual([]);
+    });
+
+    it('shows the same reason when the club list download is refused', async () => {
+      mockApi({ ...baseApi, [`GET ${EXPORT_PREFIX}view=club&format=xlsx`]: outdated });
+      await openPageWithRound();
+
+      fireEvent.click(downloadButton());
+
+      expect((await screen.findByRole('alert')).textContent).toMatch(OUTDATED_TEXT);
+      expect(downloads).toEqual([]);
+    });
+  });
+
   it('says so and offers no download for a round without clubs', async () => {
     const fetchMock = mockApi({
       ...baseApi,

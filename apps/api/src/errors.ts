@@ -24,6 +24,7 @@ const HTTP_STATUS: Readonly<Record<ErrorCode, number>> = Object.freeze({
   [ERROR_CODES.nothingToIssue]: 409,
   [ERROR_CODES.capacityBelowRegistered]: 409,
   [ERROR_CODES.nothingToExport]: 404,
+  [ERROR_CODES.exportOutdated]: 409,
   [ERROR_CODES.clubFull]: 409,
   [ERROR_CODES.clubNotAccepting]: 409,
   [ERROR_CODES.alreadyRegistered]: 409,
@@ -65,6 +66,8 @@ const DEFAULT_MESSAGES: Readonly<Record<ErrorCode, string>> = Object.freeze({
   [ERROR_CODES.capacityBelowRegistered]:
     'Capacity cannot be lower than the number of students already registered',
   [ERROR_CODES.nothingToExport]: 'There is nothing in this round to export',
+  [ERROR_CODES.exportOutdated]:
+    'Students of this round have moved to another grade since, so its lists can no longer be made',
   [ERROR_CODES.clubFull]: 'This club is full',
   [ERROR_CODES.alreadyRegistered]:
     'You are already registered in another club this round; cancel it first',

@@ -24,6 +24,9 @@ export const ERROR_CODES = Object.freeze({
   nothingToIssue: 'nothing_to_issue',
   capacityBelowRegistered: 'capacity_below_registered',
   nothingToExport: 'nothing_to_export',
+  // A round some of whose registered students have since moved to another grade (a later term's
+  // import): the lists read current profiles, so they would no longer describe the round.
+  exportOutdated: 'export_outdated',
   studentProfileMissing: 'student_profile_missing',
   clubFull: 'club_full',
   alreadyRegistered: 'already_registered',

@@ -16,9 +16,13 @@ import { findRound } from './rounds.js';
 // Advisors' contact columns (phone, email, LINE) are never selected here: the per-club list
 // carries advisor names only and the per-classroom list no advisor data at all.
 //
-// A student is listed with their current profile (grade, classroom, seat). The import refuses to
-// move a student who registered in a term to another grade, so the per-club and per-classroom
-// lists of a round agree on who is in it.
+// A student is listed with their current profile (grade, classroom, seat); no profile is kept per
+// round. The import refuses to move a student to another grade while they hold a seat in a round
+// of the import's term or in a round that has not closed, so for those rounds the per-club and
+// per-classroom lists agree on who is in it. A later term's import may move up a student whose
+// seat is in a closed round of an earlier term. From then on the current profiles no longer
+// describe that round (its classroom list would show the new grade, all "not registered"), so
+// every list of it is refused (assertRoundCurrent).
 
 export type ExportRound = { id: number; term: string; grade: number };
 
@@ -74,6 +78,22 @@ const findExportRound = async (db: Queryable, roundId: number): Promise<ExportRo
   return round;
 };
 
+// Checked in the same snapshot as the rows it vouches for, so an import committing mid-export
+// cannot slip in between. A seat holder outside the round's grade can only come from an import of
+// another term after the round closed (see above), so a round in use is never refused unless an
+// admin reopens such a round.
+const assertRoundCurrent = async (db: Queryable, round: { id: number; grade: number }) => {
+  const { rows } = await db.query<{ moved: boolean }>(
+    `SELECT EXISTS (
+       SELECT 1 FROM registrations r
+       JOIN student_profiles sp ON sp.user_id = r.student_id
+       WHERE r.round_id = $1 AND sp.grade <> $2
+     ) AS moved`,
+    [round.id, round.grade],
+  );
+  if (rows[0]?.moved === true) throw new AppError(ERROR_CODES.exportOutdated);
+};
+
 type ClubRow = {
   id: number;
   club_code: string;
@@ -105,6 +125,7 @@ export const readClubLists = async (
 ): Promise<{ round: ExportRound; clubs: ClubList[] }> =>
   await withReadOnlySnapshot(pool, async (client) => {
     const round = await findExportRound(client, roundId);
+    await assertRoundCurrent(client, round);
     const { rows: clubRows } = await client.query<ClubRow>(
       `SELECT c.id, c.club_code, c.name, c.capacity,
               COALESCE(advisor_names.names, '{}') AS advisor_names
@@ -179,6 +200,7 @@ export const readClassroomLists = async (
 ): Promise<{ round: ExportRound; classrooms: ClassroomList[] }> =>
   await withReadOnlySnapshot(pool, async (client) => {
     const round = await findExportRound(client, roundId);
+    await assertRoundCurrent(client, round);
     const { rows } = await client.query<ClassroomStudentRow>(
       `SELECT sp.classroom, sp.seat_no, u.login_id, u.full_name,
               c.club_code, c.name AS club_name
@@ -229,6 +251,7 @@ export const listRoundClassrooms = async (
   await withReadOnlySnapshot(pool, async (client) => {
     const round = await findRound(client, roundId, at);
     if (!round) throw new AppError(ERROR_CODES.notFound, 'Round not found');
+    await assertRoundCurrent(client, round);
     const { rows } = await client.query<ClassroomCountRow>(
       `SELECT sp.classroom,
               count(*)::int AS student_count,
