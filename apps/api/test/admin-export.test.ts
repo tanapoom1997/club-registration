@@ -474,6 +474,89 @@ describe('admin name list export', () => {
     });
   });
 
+  // A later term's import may move a student who registered in a closed round of an earlier term
+  // up a grade (import-plan.ts). Both lists read the current profiles, so they would no longer
+  // describe the round: the classroom list would show this year's grade as "not registered".
+  describe('a round whose registered students moved to another grade', () => {
+    const roundWithMovedStudent = async () => {
+      const roundId = await createRound(pool, uniqueTerm(), SHARED_GRADE, { closedDaysAgo: 30 });
+      const clubId = await createClub(pool, roundId, uniqueCode());
+      const classroom = uniqueClassroom();
+      const [moved, stayed] = await Promise.all([
+        createStudent(pool, { grade: SHARED_GRADE, classroom, seatNo: 1 }),
+        createStudent(pool, { grade: SHARED_GRADE, classroom, seatNo: 2 }),
+      ]);
+      await register(pool, roundId, moved.id, clubId);
+      await register(pool, roundId, stayed.id, clubId);
+      // What the next year's import does: the student moves up out of the round's grade.
+      await pool.query('UPDATE student_profiles SET grade = $2 WHERE user_id = $1', [
+        moved.id,
+        OTHER_GRADE,
+      ]);
+      return { roundId, clubId, classroom };
+    };
+
+    it.each([
+      ['the per-club list', { view: 'club', format: 'xlsx' }],
+      ['the per-classroom list', { view: 'classroom', format: 'xlsx' }],
+      ['the per-classroom PDF', { view: 'classroom', format: 'pdf' }],
+    ])('answers 409 export_outdated for %s', async (_label, query) => {
+      const { roundId } = await roundWithMovedStudent();
+
+      const response = await exportList(roundId, query);
+
+      expect(response.statusCode).toBe(409);
+      expect(errorCodeOf(response)).toBe('export_outdated');
+    });
+
+    it('answers 409 export_outdated for one club or one classroom of it too', async () => {
+      const { roundId, clubId, classroom } = await roundWithMovedStudent();
+
+      const responses = await Promise.all([
+        exportList(roundId, { view: 'club', format: 'xlsx', clubId }),
+        exportList(roundId, { view: 'classroom', format: 'xlsx', classroom }),
+      ]);
+
+      expect(responses.map((response) => [response.statusCode, errorCodeOf(response)])).toEqual([
+        [409, 'export_outdated'],
+        [409, 'export_outdated'],
+      ]);
+    });
+
+    it('answers 409 export_outdated for its classroom choices', async () => {
+      const { roundId } = await roundWithMovedStudent();
+
+      const response = await app.inject({
+        method: 'GET',
+        url: `/api/admin/rounds/${roundId}/classrooms`,
+        cookies: { [SESSION_COOKIE]: adminToken },
+      });
+
+      expect(response.statusCode).toBe(409);
+      expect(errorCodeOf(response)).toBe('export_outdated');
+    });
+
+    it('still exports a closed round whose registered students are all in its grade', async () => {
+      const roundId = await createRound(pool, uniqueTerm(), SHARED_GRADE, { closedDaysAgo: 30 });
+      const clubId = await createClub(pool, roundId, uniqueCode());
+      const classroom = uniqueClassroom();
+      const student = await createStudent(pool, { grade: SHARED_GRADE, classroom });
+      await register(pool, roundId, student.id, clubId);
+
+      const responses = await Promise.all([
+        exportList(roundId, { view: 'club', format: 'xlsx' }),
+        exportList(roundId, { view: 'classroom', format: 'xlsx', classroom }),
+        app.inject({
+          method: 'GET',
+          url: `/api/admin/rounds/${roundId}/classrooms`,
+          cookies: { [SESSION_COOKIE]: adminToken },
+        }),
+      ]);
+
+      expect(responses.map(({ statusCode }) => statusCode)).toEqual([200, 200, 200]);
+    });
+  });
+
   describe('file safety', () => {
     it('escapes text cells that a spreadsheet would read as a formula', async () => {
       const roundId = await newRound();
