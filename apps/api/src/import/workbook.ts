@@ -63,6 +63,28 @@ const cellText = (value: unknown, allowFormula = true): CellText => {
   return { error: UNSUPPORTED_MESSAGE };
 };
 
+// Excel stores 01234 typed into a cell formatted as 00000 (Custom or Special > Zip Code) as the
+// number 1234 and only shows the zeros. Reading the number alone would import the student ID
+// 1234, which differs from the ID the school prints, so a whole number in such a format is read
+// as Excel shows it. A number in any other format is read as stored: Excel shows it that way too.
+const ZERO_PADDED_FORMAT = /^0+$/;
+
+const zeroPadded = (value: unknown, numFmt: string | undefined): unknown => {
+  if (numFmt === undefined || !ZERO_PADDED_FORMAT.test(numFmt)) return value;
+  if (typeof value === 'number') {
+    return Number.isSafeInteger(value) && value >= 0
+      ? String(value).padStart(numFmt.length, '0')
+      : value;
+  }
+  if (isRecord(value) && ('formula' in value || 'sharedFormula' in value)) {
+    return { ...value, result: zeroPadded(value.result, numFmt) };
+  }
+  return value;
+};
+
+const hasNumber = (value: unknown): boolean =>
+  typeof value === 'number' || (isRecord(value) && typeof value.result === 'number');
+
 // Headers match ignoring spaces and case, so "ชื่อ - สกุล" or "Line ID" still map.
 const headerKey = (text: string): string => text.replace(/\s+/g, '').toLowerCase();
 
@@ -115,7 +137,14 @@ const readSheet = (
   values.forEach((rowValues, rowNumber) => {
     if (rowNumber <= 1 || !Array.isArray(rowValues)) return;
     const cells = new Map(
-      [...columns].map(([key, column]): [string, CellText] => [key, cellText(rowValues[column])]),
+      [...columns].map(([key, column]): [string, CellText] => {
+        const value: unknown = rowValues[column];
+        // Only a number can be zero-padded, so text cells skip the per-cell lookup.
+        const numFmt = hasNumber(value)
+          ? worksheet.getRow(rowNumber).getCell(column).numFmt
+          : undefined;
+        return [key, cellText(zeroPadded(value, numFmt))];
+      }),
     );
     // Rows with nothing in the template columns (blank or formatted-only rows) are not data.
     if ([...cells.values()].every((cell) => 'value' in cell && cell.value === undefined)) return;
