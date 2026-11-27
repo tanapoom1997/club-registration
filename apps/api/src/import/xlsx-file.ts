@@ -17,7 +17,8 @@ const END_OF_CENTRAL_DIRECTORY_SIZE = 22;
 const CENTRAL_HEADER_SIZE = 46;
 const LOCAL_HEADER_SIZE = 30;
 const MAX_ZIP_COMMENT = 0xffff;
-// Marks a ZIP64 field; an .xlsx this small never needs ZIP64.
+// Mark a ZIP64 field; an .xlsx this small never needs ZIP64.
+const ZIP64_MARKER_16 = 0xffff;
 const ZIP64_MARKER = 0xffffffff;
 const METHOD_STORED = 0;
 const METHOD_DEFLATED = 8;
@@ -44,14 +45,26 @@ const findEndOfCentralDirectory = (bytes: Buffer): number => {
   throw corrupt();
 };
 
+// Accepts only the layout every zip writer produces: one disk, no ZIP64, and a central directory
+// that ends exactly where the end record starts and holds exactly the entries it counts. The
+// parser (JSZip inside exceljs) reads a looser zip its own way: it keeps reading central headers
+// past the count, shifts every offset by any gap before the end record, and follows a ZIP64
+// record when any end record field is 0xFFFF(FFFF). Each would let it unpack entries this guard
+// never measured.
 const readCentralDirectory = (bytes: Buffer): ZipEntry[] => {
   if (bytes.length < END_OF_CENTRAL_DIRECTORY_SIZE) throw corrupt();
   const eocd = findEndOfCentralDirectory(bytes);
+  const diskNumber = bytes.readUInt16LE(eocd + 4);
+  const directoryDisk = bytes.readUInt16LE(eocd + 6);
+  const entriesOnDisk = bytes.readUInt16LE(eocd + 8);
   const entryCount = bytes.readUInt16LE(eocd + 10);
   const directorySize = bytes.readUInt32LE(eocd + 12);
   const directoryOffset = bytes.readUInt32LE(eocd + 16);
+  if (diskNumber !== 0 || directoryDisk !== 0 || entriesOnDisk !== entryCount) throw corrupt();
+  if (entryCount === ZIP64_MARKER_16) throw corrupt();
   if (entryCount > MAX_ENTRIES) throw tooLarge();
-  if (directoryOffset + directorySize > eocd) throw corrupt();
+  if (directorySize === ZIP64_MARKER || directoryOffset === ZIP64_MARKER) throw corrupt();
+  if (directoryOffset + directorySize !== eocd) throw corrupt();
 
   const entries: ZipEntry[] = [];
   let offset = directoryOffset;
@@ -68,6 +81,7 @@ const readCentralDirectory = (bytes: Buffer): ZipEntry[] => {
     if (entry.compressedSize === ZIP64_MARKER || entry.uncompressedSize === ZIP64_MARKER) {
       throw tooLarge();
     }
+    if (entry.localHeaderOffset === ZIP64_MARKER) throw corrupt();
     entries.push(entry);
     offset +=
       CENTRAL_HEADER_SIZE +
@@ -75,6 +89,8 @@ const readCentralDirectory = (bytes: Buffer): ZipEntry[] => {
       bytes.readUInt16LE(offset + 30) +
       bytes.readUInt16LE(offset + 32);
   }
+  // The counted entries fill the directory exactly, so the parser finds no further header.
+  if (offset !== eocd) throw corrupt();
   return entries;
 };
 

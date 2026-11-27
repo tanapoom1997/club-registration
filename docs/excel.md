@@ -33,7 +33,7 @@
 
 **ข้อควรระวัง**
 
-- ขนาดไฟล์ ≤ 5 MB (เฉพาะ route นี้), ชีตละ ≤ 5,000 แถว, ตรวจ extension `.xlsx` + magic bytes ของ zip ฝั่ง server (ไม่เชื่อ MIME จาก browser), จำกัดขนาดหลังแตก zip (กัน zip bomb), ประมวลผลใน memory ไม่เขียนลง disk, log แค่จำนวนแถวและ sha256
+- ขนาดไฟล์ ≤ 5 MB (เฉพาะ route นี้), ชีตละ ≤ 5,000 แถว, ตรวจ extension `.xlsx` + magic bytes ของ zip ฝั่ง server (ไม่เชื่อ MIME จาก browser), จำกัดขนาดหลังแตก zip (กัน zip bomb: แตกจริงทุก entry ด้วยเพดาน output ไม่เชื่อขนาดที่ zip บอก และรับเฉพาะ zip รูปแบบปกติ คือ disk เดียว ไม่มี ZIP64 central directory จบตรงจุดเริ่ม end record และมี entry เท่าที่นับไว้พอดี เพราะ JSZip ใน exceljs อ่าน zip ที่หลวมกว่านี้ด้วยวิธีของตัวเองจนเจอ entry ที่ด่านไม่ได้วัด `apps/api/src/import/xlsx-file.ts`), ประมวลผลใน memory ไม่เขียนลง disk, log แค่จำนวนแถวและ sha256
 - Export escape ค่าที่ขึ้นต้นด้วย `=`, `+`, `-`, `@` กัน formula injection
 - ขอเฉพาะคอลัมน์ที่จำเป็น (PDPA) ไม่รับเลขบัตรประชาชน/ที่อยู่
 
