@@ -119,8 +119,12 @@ export const rawZipEntry = (name: string, stored: Buffer): ZipEntrySpec => ({
   declaredSize: stored.length,
 });
 
-// A minimal zip writer, so tests can build archives exceljs never would (bombs, broken streams).
-export const buildZip = (entries: readonly ZipEntrySpec[]): Buffer => {
+// The parts of a minimal zip, so tests can build archives exceljs never would (bombs, broken
+// streams) and lay the parts out in ways a real zip writer would not.
+export const zipParts = (
+  entries: readonly ZipEntrySpec[],
+  { localHeaderOffset = 0 }: { localHeaderOffset?: number } = {},
+): { body: Buffer; directory: Buffer } => {
   const locals: Buffer[] = [];
   const centrals: Buffer[] = [];
   let offset = 0;
@@ -144,17 +148,48 @@ export const buildZip = (entries: readonly ZipEntrySpec[]): Buffer => {
     central.writeUInt32LE(stored.length, 20);
     central.writeUInt32LE(declaredSize, 24);
     central.writeUInt16LE(nameBytes.length, 28);
-    central.writeUInt32LE(offset, 42);
+    central.writeUInt32LE(localHeaderOffset + offset, 42);
     locals.push(local, nameBytes, stored);
     centrals.push(central, nameBytes);
     offset += local.length + nameBytes.length + stored.length;
   });
-  const directory = Buffer.concat(centrals);
+  return { body: Buffer.concat(locals), directory: Buffer.concat(centrals) };
+};
+
+export const endOfCentralDirectory = ({
+  entryCount,
+  directorySize,
+  directoryOffset,
+  diskNumber = 0,
+}: {
+  entryCount: number;
+  directorySize: number;
+  directoryOffset: number;
+  diskNumber?: number;
+}): Buffer => {
   const end = Buffer.alloc(22);
   end.writeUInt32LE(0x06054b50, 0);
-  end.writeUInt16LE(entries.length, 8);
-  end.writeUInt16LE(entries.length, 10);
-  end.writeUInt32LE(directory.length, 12);
-  end.writeUInt32LE(offset, 16);
-  return Buffer.concat([...locals, directory, end]);
+  end.writeUInt16LE(diskNumber, 4);
+  end.writeUInt16LE(entryCount, 8);
+  end.writeUInt16LE(entryCount, 10);
+  end.writeUInt32LE(directorySize, 12);
+  end.writeUInt32LE(directoryOffset, 16);
+  return end;
+};
+
+export const buildZip = (
+  entries: readonly ZipEntrySpec[],
+  {
+    declaredCount = entries.length,
+    diskNumber = 0,
+  }: { declaredCount?: number; diskNumber?: number } = {},
+): Buffer => {
+  const { body, directory } = zipParts(entries);
+  const end = endOfCentralDirectory({
+    entryCount: declaredCount,
+    directorySize: directory.length,
+    directoryOffset: body.length,
+    diskNumber,
+  });
+  return Buffer.concat([body, directory, end]);
 };
