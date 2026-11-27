@@ -1,4 +1,4 @@
-import { createHash } from 'node:crypto';
+import { createHash, randomInt } from 'node:crypto';
 import { readFile } from 'node:fs/promises';
 import type { StartedPostgreSqlContainer } from '@testcontainers/postgresql';
 import {
@@ -690,6 +690,51 @@ describe('admin import preview', () => {
         expect.objectContaining({ sheet: 'students', row: 3, column: COL.students.fullName }),
       ]);
       expect(result.students.create).toBe(1);
+    });
+
+    // Excel keeps 0123456 typed into a 0000000 cell as the number 123456 and only shows the zero.
+    const zeroPaddedCases: [string, (stored: number) => ExcelJS.CellValue][] = [
+      ['a number', (stored) => stored],
+      ['a formula result', (stored) => ({ formula: `VALUE("${stored}")`, result: stored })],
+    ];
+
+    it.each(zeroPaddedCases)(
+      'reads %s in a zero-padded format as Excel shows it',
+      async (_label, cell) => {
+        const digits = String(randomInt(100_000, 1_000_000));
+        const workbook = await buildWorkbook({
+          students: {
+            header: templateHeader('students'),
+            rows: [
+              studentRow({ loginId: `0${digits}` }),
+              studentRow({ loginId: cell(Number(digits)) }),
+            ],
+            numFmts: { 1: '0000000' },
+          },
+        });
+
+        const result = await previewOk(uniqueTerm(), workbook);
+
+        expect(result.errors).toEqual([
+          expect.objectContaining({
+            row: 3,
+            column: COL.students.loginId,
+            message: expect.stringContaining('ซ้ำกับแถว 2') as string,
+          }),
+        ]);
+      },
+    );
+
+    it('reads a number in the General format as it is stored', async () => {
+      const digits = String(randomInt(100_000, 1_000_000));
+      const workbook = await buildImportWorkbook({
+        students: [studentRow({ loginId: `0${digits}` }), studentRow({ loginId: Number(digits) })],
+      });
+
+      const result = await previewOk(uniqueTerm(), workbook);
+
+      expect(result.errors).toEqual([]);
+      expect(result.students.create).toBe(2);
     });
 
     it('refuses a cell Excel turned into a date', async () => {

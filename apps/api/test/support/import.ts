@@ -5,14 +5,22 @@ import ExcelJS from 'exceljs';
 
 // Workbooks are built in code at test time: no .xlsx fixture is ever committed, and every value
 // in them is made up.
-export type SheetSpec = { header: readonly string[]; rows: readonly ExcelJS.CellValue[][] };
+export type SheetSpec = {
+  header: readonly string[];
+  rows: readonly ExcelJS.CellValue[][];
+  // Number formats by 1-based column, applied to the whole column.
+  numFmts?: Readonly<Record<number, string>>;
+};
 
 export const buildWorkbook = async (sheets: Record<string, SheetSpec>): Promise<Buffer> => {
   const workbook = new ExcelJS.Workbook();
-  Object.entries(sheets).forEach(([name, { header, rows }]) => {
+  Object.entries(sheets).forEach(([name, { header, rows, numFmts = {} }]) => {
     const worksheet = workbook.addWorksheet(name);
     worksheet.addRow([...header]);
     rows.forEach((row) => worksheet.addRow([...row]));
+    Object.entries(numFmts).forEach(([column, numFmt]) => {
+      worksheet.getColumn(Number(column)).numFmt = numFmt;
+    });
   });
   return Buffer.from(await workbook.xlsx.writeBuffer());
 };
